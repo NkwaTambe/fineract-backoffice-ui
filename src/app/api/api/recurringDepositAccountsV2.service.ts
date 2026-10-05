@@ -33,7 +33,7 @@ import { Observable }                                        from 'rxjs';
 import { OpenApiHttpParams, QueryParamStyle } from '../query.params';
 
 // @ts-ignore
-import { CashierData } from '../model/cashierData';
+import { PageDepositAccountData } from '../model/pageDepositAccountData';
 
 // @ts-ignore
 import { BASE_PATH, COLLECTION_FORMATS }                     from '../variables';
@@ -45,34 +45,35 @@ import { BaseService } from '../api.base.service';
 @Injectable({
   providedIn: 'root'
 })
-export class CashiersService extends BaseService {
+export class RecurringDepositAccountsV2Service extends BaseService {
 
     constructor(protected httpClient: HttpClient, @Optional() @Inject(BASE_PATH) basePath: string|string[], @Optional() configuration?: Configuration) {
         super(basePath, configuration);
     }
 
     /**
-     * List Cashiers
-     * @endpoint get /v1/cashiers
-     * @param officeId 
-     * @param tellerId 
-     * @param staffId 
-     * @param date 
+     * List Recurring deposit applications/accounts
+     * Get a paged list of recurring deposit accounts. Unlike the v1 endpoint, this endpoint always returns a paged response containing totalFilteredRecords and pageItems.  Example Requests:  recurringdepositaccounts  recurringdepositaccounts?fields&#x3D;name
+     * @endpoint get /v2/recurringdepositaccounts
+     * @param offset offset
+     * @param limit limit
+     * @param orderBy orderBy
+     * @param sortOrder sortOrder
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      * @param options additional options
      */
-    public getCashiers(officeId?: number, tellerId?: number, staffId?: number, date?: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<Array<CashierData>>;
-    public getCashiers(officeId?: number, tellerId?: number, staffId?: number, date?: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<Array<CashierData>>>;
-    public getCashiers(officeId?: number, tellerId?: number, staffId?: number, date?: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<Array<CashierData>>>;
-    public getCashiers(officeId?: number, tellerId?: number, staffId?: number, date?: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
+    public getRecurringdepositaccountsXed1b1b(offset?: number, limit?: number, orderBy?: string, sortOrder?: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<PageDepositAccountData>;
+    public getRecurringdepositaccountsXed1b1b(offset?: number, limit?: number, orderBy?: string, sortOrder?: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<PageDepositAccountData>>;
+    public getRecurringdepositaccountsXed1b1b(offset?: number, limit?: number, orderBy?: string, sortOrder?: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<PageDepositAccountData>>;
+    public getRecurringdepositaccountsXed1b1b(offset?: number, limit?: number, orderBy?: string, sortOrder?: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
 
         let localVarQueryParameters = new OpenApiHttpParams(this.encoder);
 
         localVarQueryParameters = this.addToHttpParams(
             localVarQueryParameters,
-            'officeId',
-            <any>officeId,
+            'offset',
+            <any>offset,
             QueryParamStyle.Form,
             true,
         );
@@ -80,8 +81,8 @@ export class CashiersService extends BaseService {
 
         localVarQueryParameters = this.addToHttpParams(
             localVarQueryParameters,
-            'tellerId',
-            <any>tellerId,
+            'limit',
+            <any>limit,
             QueryParamStyle.Form,
             true,
         );
@@ -89,8 +90,8 @@ export class CashiersService extends BaseService {
 
         localVarQueryParameters = this.addToHttpParams(
             localVarQueryParameters,
-            'staffId',
-            <any>staffId,
+            'orderBy',
+            <any>orderBy,
             QueryParamStyle.Form,
             true,
         );
@@ -98,8 +99,8 @@ export class CashiersService extends BaseService {
 
         localVarQueryParameters = this.addToHttpParams(
             localVarQueryParameters,
-            'date',
-            <any>date,
+            'sortOrder',
+            <any>sortOrder,
             QueryParamStyle.Form,
             true,
         );
@@ -136,9 +137,9 @@ export class CashiersService extends BaseService {
             }
         }
 
-        let localVarPath = `/v1/cashiers`;
+        let localVarPath = `/v2/recurringdepositaccounts`;
         const { basePath, withCredentials } = this.configuration;
-        return this.httpClient.request<Array<CashierData>>('get', `${basePath}${localVarPath}`,
+        return this.httpClient.request<PageDepositAccountData>('get', `${basePath}${localVarPath}`,
             {
                 context: localVarHttpContext,
                 params: localVarQueryParameters.toHttpParams(),

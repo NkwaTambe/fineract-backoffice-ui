@@ -25,7 +25,12 @@
 
 
 
-export interface MixTaxonomyMappingUpdateResponse { 
-    entityId?: number;
+/**
+ * Installments added to the schedule
+ */
+export interface PostLoansLoanIdScheduleNewInstallment { 
+    dueDate?: string;
+    installmentAmount?: number;
+    principal?: number;
 }
 

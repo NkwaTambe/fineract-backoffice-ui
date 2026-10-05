@@ -25,17 +25,10 @@
 
 
 
-/**
- * GetFloatingRatesResponse
- */
-export interface GetFloatingRatesResponse { 
-    createdBy?: string;
-    createdOn?: string;
-    id?: number;
-    isActive?: boolean;
-    isBaseLendingRate?: boolean;
-    modifiedBy?: string;
-    modifiedOn?: string;
-    name?: string;
+export interface PostCentersCenterIdChanges { 
+    /**
+     * Ids of the groups associated or disassociated by the command
+     */
+    groupMembers?: Array<string>;
 }
 

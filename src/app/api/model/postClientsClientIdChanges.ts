@@ -25,10 +25,7 @@
 
 
 
-export interface MixTaxonomyMappingUpdateRequest { 
-    config?: string;
-    currency?: string;
-    id?: number;
-    identifier?: string;
+export interface PostClientsClientIdChanges { 
+    staffId?: number;
 }
 

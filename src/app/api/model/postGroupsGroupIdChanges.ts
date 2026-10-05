@@ -25,10 +25,11 @@
 
 
 
-export interface PostFloatingRatesRatePeriods { 
-    dateFormat?: string;
-    fromDate?: string;
-    interestRate?: number;
-    locale?: string;
+export interface PostGroupsGroupIdChanges { 
+    /**
+     * Ids of the clients associated or disassociated by the command
+     */
+    clientMembers?: Array<string>;
+    staffId?: number;
 }
 

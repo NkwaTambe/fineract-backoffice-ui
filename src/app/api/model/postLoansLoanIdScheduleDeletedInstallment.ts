@@ -26,9 +26,9 @@
 
 
 /**
- * PostFloatingRatesResponse
+ * Installments removed from the schedule
  */
-export interface PostFloatingRatesResponse { 
-    resourceId?: number;
+export interface PostLoansLoanIdScheduleDeletedInstallment { 
+    dueDate?: string;
 }
 

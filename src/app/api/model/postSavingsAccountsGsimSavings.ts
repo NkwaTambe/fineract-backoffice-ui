@@ -25,9 +25,12 @@
 
 
 
-export interface MixTaxonomyMappingData { 
-    config?: string;
-    currency?: string;
-    identifier?: string;
+export interface PostSavingsAccountsGsimSavings { 
+    childAccountId?: number;
+    dateFormat?: string;
+    locale?: string;
+    paymentTypeId?: number;
+    transactionAmount?: number;
+    transactionDate?: string;
 }
 

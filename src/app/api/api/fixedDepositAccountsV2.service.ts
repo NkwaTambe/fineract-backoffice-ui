@@ -33,7 +33,7 @@ import { Observable }                                        from 'rxjs';
 import { OpenApiHttpParams, QueryParamStyle } from '../query.params';
 
 // @ts-ignore
-import { MixTaxonomyData } from '../model/mixTaxonomyData';
+import { PageDepositAccountData } from '../model/pageDepositAccountData';
 
 // @ts-ignore
 import { BASE_PATH, COLLECTION_FORMATS }                     from '../variables';
@@ -45,23 +45,66 @@ import { BaseService } from '../api.base.service';
 @Injectable({
   providedIn: 'root'
 })
-export class MixTaxonomyService extends BaseService {
+export class FixedDepositAccountsV2Service extends BaseService {
 
     constructor(protected httpClient: HttpClient, @Optional() @Inject(BASE_PATH) basePath: string|string[], @Optional() configuration?: Configuration) {
         super(basePath, configuration);
     }
 
     /**
-     * List Mix Taxonomies
-     * @endpoint get /v1/mixtaxonomy
+     * List Fixed deposit applications/accounts
+     * Get a paged list of fixed deposit accounts. Unlike the v1 endpoint, this endpoint always returns a paged response containing totalFilteredRecords and pageItems.  Example Requests:  fixeddepositaccounts  fixeddepositaccounts?fields&#x3D;name
+     * @endpoint get /v2/fixeddepositaccounts
+     * @param offset offset
+     * @param limit limit
+     * @param orderBy orderBy
+     * @param sortOrder sortOrder
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      * @param options additional options
      */
-    public getMixtaxonomy(observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<Array<MixTaxonomyData>>;
-    public getMixtaxonomy(observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<Array<MixTaxonomyData>>>;
-    public getMixtaxonomy(observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<Array<MixTaxonomyData>>>;
-    public getMixtaxonomy(observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
+    public getFixeddepositaccountsX1445c6(offset?: number, limit?: number, orderBy?: string, sortOrder?: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<PageDepositAccountData>;
+    public getFixeddepositaccountsX1445c6(offset?: number, limit?: number, orderBy?: string, sortOrder?: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<PageDepositAccountData>>;
+    public getFixeddepositaccountsX1445c6(offset?: number, limit?: number, orderBy?: string, sortOrder?: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<PageDepositAccountData>>;
+    public getFixeddepositaccountsX1445c6(offset?: number, limit?: number, orderBy?: string, sortOrder?: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
+
+        let localVarQueryParameters = new OpenApiHttpParams(this.encoder);
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'offset',
+            <any>offset,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'limit',
+            <any>limit,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'orderBy',
+            <any>orderBy,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'sortOrder',
+            <any>sortOrder,
+            QueryParamStyle.Form,
+            true,
+        );
+
 
         let localVarHeaders = this.defaultHeaders;
 
@@ -94,11 +137,12 @@ export class MixTaxonomyService extends BaseService {
             }
         }
 
-        let localVarPath = `/v1/mixtaxonomy`;
+        let localVarPath = `/v2/fixeddepositaccounts`;
         const { basePath, withCredentials } = this.configuration;
-        return this.httpClient.request<Array<MixTaxonomyData>>('get', `${basePath}${localVarPath}`,
+        return this.httpClient.request<PageDepositAccountData>('get', `${basePath}${localVarPath}`,
             {
                 context: localVarHttpContext,
+                params: localVarQueryParameters.toHttpParams(),
                 responseType: <any>responseType_,
                 ...(withCredentials ? { withCredentials } : {}),
                 headers: localVarHeaders,

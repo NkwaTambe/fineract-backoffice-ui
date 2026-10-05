@@ -25,12 +25,14 @@
 
 
 
-export interface MixTaxonomyData { 
-    description?: string;
-    dimension?: string;
-    id?: number;
+/**
+ * Post dated check backing one repayment installment
+ */
+export interface PostLoansLoanIdPostDatedCheckData { 
+    accountNo?: number;
+    amount?: number;
+    checkNo?: number;
+    installmentId?: number;
     name?: string;
-    namespace?: string;
-    type?: number;
 }
 

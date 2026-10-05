@@ -23,17 +23,20 @@
  * Do not edit the class manually.
  */
 
-import { EnumOptionData } from './enumOptionData';
 
 
-export interface TellerTransactionData { 
-    amount?: number;
-    cashierId?: number;
-    clientId?: number;
-    id?: number;
-    officeId?: number;
-    postingDate?: string;
-    tellerId?: number;
-    type?: EnumOptionData;
+/**
+ * A period of the schedule the calculateLoanSchedule command returns
+ */
+export interface PostLoansLoanIdSchedulePeriod { 
+    dueDate?: string;
+    fromDate?: string;
+    interestOriginalDue?: number;
+    period?: number;
+    principalDue?: number;
+    principalOriginalDue?: number;
+    totalDueForPeriod?: number;
+    totalOriginalDueForPeriod?: number;
+    totalOutstandingForPeriod?: number;
 }
 

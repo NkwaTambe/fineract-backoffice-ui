@@ -23,16 +23,15 @@
  * Do not edit the class manually.
  */
 
+import { PostSavingsAccountsGsimSavings } from './postSavingsAccountsGsimSavings';
+import { PostSavingsAccountsGsimClient } from './postSavingsAccountsGsimClient';
 
 
-export interface TellerJournalData { 
-    closingBalance?: number;
-    day?: string;
-    officeId?: number;
-    openingBalance?: number;
-    settledBalance?: number;
-    sumPayments?: number;
-    sumReceipts?: number;
-    tellerId?: number;
+/**
+ * PostSavingsAccountsGsimRequest
+ */
+export interface PostSavingsAccountsGsimRequest { 
+    clientArray?: Array<PostSavingsAccountsGsimClient>;
+    savingsArray?: Array<PostSavingsAccountsGsimSavings>;
 }
 

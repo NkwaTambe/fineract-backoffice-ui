@@ -33,7 +33,7 @@ import { Observable }                                        from 'rxjs';
 import { OpenApiHttpParams, QueryParamStyle } from '../query.params';
 
 // @ts-ignore
-import { TellerJournalData } from '../model/tellerJournalData';
+import { PageGroupGeneralData } from '../model/pageGroupGeneralData';
 
 // @ts-ignore
 import { BASE_PATH, COLLECTION_FORMATS }                     from '../variables';
@@ -45,27 +45,34 @@ import { BaseService } from '../api.base.service';
 @Injectable({
   providedIn: 'root'
 })
-export class CashierJournalsService extends BaseService {
+export class GroupsV2Service extends BaseService {
 
     constructor(protected httpClient: HttpClient, @Optional() @Inject(BASE_PATH) basePath: string|string[], @Optional() configuration?: Configuration) {
         super(basePath, configuration);
     }
 
     /**
-     * List Cashier Journals
-     * @endpoint get /v1/cashiersjournal
-     * @param officeId 
-     * @param tellerId 
-     * @param cashierId 
-     * @param dateRange 
+     * List Groups
+     * Get a paged list of groups that match the criteria supplied and sorted by hierarchy. Unlike the v1 endpoint, this endpoint always returns a paged response containing totalFilteredRecords and pageItems.  Example Requests:  groups  groups?fields&#x3D;name,officeName,joinedDate  groups?offset&#x3D;10&amp;limit&#x3D;50  groups?orderBy&#x3D;name&amp;sortOrder&#x3D;DESC
+     * @endpoint get /v2/groups
+     * @param officeId officeId
+     * @param staffId staffId
+     * @param externalId externalId
+     * @param name name
+     * @param underHierarchy underHierarchy
+     * @param offset offset
+     * @param limit limit
+     * @param orderBy orderBy
+     * @param sortOrder sortOrder
+     * @param orphansOnly orphansOnly
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      * @param options additional options
      */
-    public getCashiersjournal(officeId?: number, tellerId?: number, cashierId?: number, dateRange?: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<Array<TellerJournalData>>;
-    public getCashiersjournal(officeId?: number, tellerId?: number, cashierId?: number, dateRange?: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<Array<TellerJournalData>>>;
-    public getCashiersjournal(officeId?: number, tellerId?: number, cashierId?: number, dateRange?: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<Array<TellerJournalData>>>;
-    public getCashiersjournal(officeId?: number, tellerId?: number, cashierId?: number, dateRange?: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
+    public getGroupsX882b36(officeId?: number, staffId?: number, externalId?: string, name?: string, underHierarchy?: string, offset?: number, limit?: number, orderBy?: string, sortOrder?: string, orphansOnly?: boolean, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<PageGroupGeneralData>;
+    public getGroupsX882b36(officeId?: number, staffId?: number, externalId?: string, name?: string, underHierarchy?: string, offset?: number, limit?: number, orderBy?: string, sortOrder?: string, orphansOnly?: boolean, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<PageGroupGeneralData>>;
+    public getGroupsX882b36(officeId?: number, staffId?: number, externalId?: string, name?: string, underHierarchy?: string, offset?: number, limit?: number, orderBy?: string, sortOrder?: string, orphansOnly?: boolean, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<PageGroupGeneralData>>;
+    public getGroupsX882b36(officeId?: number, staffId?: number, externalId?: string, name?: string, underHierarchy?: string, offset?: number, limit?: number, orderBy?: string, sortOrder?: string, orphansOnly?: boolean, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
 
         let localVarQueryParameters = new OpenApiHttpParams(this.encoder);
 
@@ -80,8 +87,8 @@ export class CashierJournalsService extends BaseService {
 
         localVarQueryParameters = this.addToHttpParams(
             localVarQueryParameters,
-            'tellerId',
-            <any>tellerId,
+            'staffId',
+            <any>staffId,
             QueryParamStyle.Form,
             true,
         );
@@ -89,8 +96,8 @@ export class CashierJournalsService extends BaseService {
 
         localVarQueryParameters = this.addToHttpParams(
             localVarQueryParameters,
-            'cashierId',
-            <any>cashierId,
+            'externalId',
+            <any>externalId,
             QueryParamStyle.Form,
             true,
         );
@@ -98,8 +105,62 @@ export class CashierJournalsService extends BaseService {
 
         localVarQueryParameters = this.addToHttpParams(
             localVarQueryParameters,
-            'dateRange',
-            <any>dateRange,
+            'name',
+            <any>name,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'underHierarchy',
+            <any>underHierarchy,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'offset',
+            <any>offset,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'limit',
+            <any>limit,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'orderBy',
+            <any>orderBy,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'sortOrder',
+            <any>sortOrder,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'orphansOnly',
+            <any>orphansOnly,
             QueryParamStyle.Form,
             true,
         );
@@ -136,9 +197,9 @@ export class CashierJournalsService extends BaseService {
             }
         }
 
-        let localVarPath = `/v1/cashiersjournal`;
+        let localVarPath = `/v2/groups`;
         const { basePath, withCredentials } = this.configuration;
-        return this.httpClient.request<Array<TellerJournalData>>('get', `${basePath}${localVarPath}`,
+        return this.httpClient.request<PageGroupGeneralData>('get', `${basePath}${localVarPath}`,
             {
                 context: localVarHttpContext,
                 params: localVarQueryParameters.toHttpParams(),

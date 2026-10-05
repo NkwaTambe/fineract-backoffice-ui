@@ -32,6 +32,8 @@ import { HttpClient, HttpHeaders, HttpParams,
 import { Observable }                                        from 'rxjs';
 import { OpenApiHttpParams, QueryParamStyle } from '../query.params';
 
+// @ts-ignore
+import { PageCenterData } from '../model/pageCenterData';
 
 // @ts-ignore
 import { BASE_PATH, COLLECTION_FORMATS }                     from '../variables';
@@ -43,33 +45,40 @@ import { BaseService } from '../api.base.service';
 @Injectable({
   providedIn: 'root'
 })
-export class MixReportService extends BaseService {
+export class CentersV2Service extends BaseService {
 
     constructor(protected httpClient: HttpClient, @Optional() @Inject(BASE_PATH) basePath: string|string[], @Optional() configuration?: Configuration) {
         super(basePath, configuration);
     }
 
     /**
-     * Retrieve Mix XBRL report
-     * @endpoint get /v1/mixreport
-     * @param startDate 
-     * @param endDate 
-     * @param currency 
+     * List Centers
+     * Get a paged list of centers that match the criteria supplied and sorted by hierarchy. Unlike the v1 endpoint, this endpoint always returns a paged response containing totalFilteredRecords and pageItems.  Example Requests:  centers  centers?fields&#x3D;name,officeName,joinedDate  centers?offset&#x3D;10&amp;limit&#x3D;50  centers?orderBy&#x3D;name&amp;sortOrder&#x3D;DESC
+     * @endpoint get /v2/centers
+     * @param officeId officeId
+     * @param staffId staffId
+     * @param externalId externalId
+     * @param name name
+     * @param underHierarchy underHierarchy
+     * @param offset offset
+     * @param limit limit
+     * @param orderBy orderBy
+     * @param sortOrder sortOrder
      * @param observe set whether or not to return the data Observable as the body, response or events. defaults to returning the body.
      * @param reportProgress flag to report request and response progress.
      * @param options additional options
      */
-    public getMixreport(startDate?: string, endDate?: string, currency?: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/xml', context?: HttpContext, transferCache?: boolean}): Observable<string>;
-    public getMixreport(startDate?: string, endDate?: string, currency?: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/xml', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<string>>;
-    public getMixreport(startDate?: string, endDate?: string, currency?: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/xml', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<string>>;
-    public getMixreport(startDate?: string, endDate?: string, currency?: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/xml', context?: HttpContext, transferCache?: boolean}): Observable<any> {
+    public getCentersXa01c56(officeId?: number, staffId?: number, externalId?: string, name?: string, underHierarchy?: string, offset?: number, limit?: number, orderBy?: string, sortOrder?: string, observe?: 'body', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<PageCenterData>;
+    public getCentersXa01c56(officeId?: number, staffId?: number, externalId?: string, name?: string, underHierarchy?: string, offset?: number, limit?: number, orderBy?: string, sortOrder?: string, observe?: 'response', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpResponse<PageCenterData>>;
+    public getCentersXa01c56(officeId?: number, staffId?: number, externalId?: string, name?: string, underHierarchy?: string, offset?: number, limit?: number, orderBy?: string, sortOrder?: string, observe?: 'events', reportProgress?: boolean, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<HttpEvent<PageCenterData>>;
+    public getCentersXa01c56(officeId?: number, staffId?: number, externalId?: string, name?: string, underHierarchy?: string, offset?: number, limit?: number, orderBy?: string, sortOrder?: string, observe: any = 'body', reportProgress: boolean = false, options?: {httpHeaderAccept?: 'application/json', context?: HttpContext, transferCache?: boolean}): Observable<any> {
 
         let localVarQueryParameters = new OpenApiHttpParams(this.encoder);
 
         localVarQueryParameters = this.addToHttpParams(
             localVarQueryParameters,
-            'startDate',
-            <any>startDate,
+            'officeId',
+            <any>officeId,
             QueryParamStyle.Form,
             true,
         );
@@ -77,8 +86,8 @@ export class MixReportService extends BaseService {
 
         localVarQueryParameters = this.addToHttpParams(
             localVarQueryParameters,
-            'endDate',
-            <any>endDate,
+            'staffId',
+            <any>staffId,
             QueryParamStyle.Form,
             true,
         );
@@ -86,8 +95,62 @@ export class MixReportService extends BaseService {
 
         localVarQueryParameters = this.addToHttpParams(
             localVarQueryParameters,
-            'currency',
-            <any>currency,
+            'externalId',
+            <any>externalId,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'name',
+            <any>name,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'underHierarchy',
+            <any>underHierarchy,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'offset',
+            <any>offset,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'limit',
+            <any>limit,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'orderBy',
+            <any>orderBy,
+            QueryParamStyle.Form,
+            true,
+        );
+
+
+        localVarQueryParameters = this.addToHttpParams(
+            localVarQueryParameters,
+            'sortOrder',
+            <any>sortOrder,
             QueryParamStyle.Form,
             true,
         );
@@ -102,7 +165,7 @@ export class MixReportService extends BaseService {
         localVarHeaders = this.configuration.addCredentialToHeaders('tenantid', 'fineract-platform-tenantid', localVarHeaders);
 
         const localVarHttpHeaderAcceptSelected: string | undefined = options?.httpHeaderAccept ?? this.configuration.selectHeaderAccept([
-            'application/xml'
+            'application/json'
         ]);
         if (localVarHttpHeaderAcceptSelected !== undefined) {
             localVarHeaders = localVarHeaders.set('Accept', localVarHttpHeaderAcceptSelected);
@@ -124,9 +187,9 @@ export class MixReportService extends BaseService {
             }
         }
 
-        let localVarPath = `/v1/mixreport`;
+        let localVarPath = `/v2/centers`;
         const { basePath, withCredentials } = this.configuration;
-        return this.httpClient.request<string>('get', `${basePath}${localVarPath}`,
+        return this.httpClient.request<PageCenterData>('get', `${basePath}${localVarPath}`,
             {
                 context: localVarHttpContext,
                 params: localVarQueryParameters.toHttpParams(),

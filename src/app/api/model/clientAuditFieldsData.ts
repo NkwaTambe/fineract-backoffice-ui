@@ -23,13 +23,12 @@
  * Do not edit the class manually.
  */
 
-import { GetObligeeData } from './getObligeeData';
 
 
-/**
- * GetClientObligeeDetailsResponse
- */
-export interface GetClientObligeeDetailsResponse { 
-    obligees?: Set<GetObligeeData>;
+export interface ClientAuditFieldsData { 
+    createdBy?: number;
+    createdDate?: string;
+    lastModifiedBy?: number;
+    lastModifiedDate?: string;
 }
 
