@@ -20,11 +20,11 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 
 import { ActivatedRoute, Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import { DataTableComponent, ColumnDef, CellTemplateDirective } from '../../../shared';
 import { LoanCollateralService, CollateralData, LoansService } from '../../../api';
 import { LoanSummary } from '../loan-summary.model';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 /**
  * Component for listing collateral associated with a specific loan.
@@ -32,19 +32,20 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
 @Component({
   selector: 'app-collateral-list',
   standalone: true,
-  imports: [TranslateModule, DataTableComponent, CellTemplateDirective, IonIcon, IonButton],
+  imports: [TranslatePipe, DataTableComponent, CellTemplateDirective, ButtonComponent],
   template: `
     @if (loanSummary(); as summary) {
       <div class="loan-context">
-        {{ 'LOANS.ACCOUNT_NO' | translate }}: {{ summary.accountNo }} &middot;
-        {{ 'COMMON.CLIENT' | translate }}: {{ summary.clientName }} &middot;
-        {{ 'LOANS.PRODUCT_NAME' | translate }}: {{ summary.loanProductName }}
+        {{ 'LOANS.ACCOUNT_NO' | appTranslate }}: {{ summary.accountNo }} &middot;
+        {{ 'COMMON.CLIENT' | appTranslate }}: {{ summary.clientName }} &middot;
+        {{ 'LOANS.PRODUCT_NAME' | appTranslate }}: {{ summary.loanProductName }}
       </div>
     }
     <app-data-table
       title="LOANS.COLLATERAL"
       helpTextKey="HELP.COLLATERAL_DESC"
       createButtonLabel="LOANS.ADD_COLLATERAL"
+      createPermission="CREATE_COLLATERAL"
       [columns]="columns"
       [data]="collaterals()"
       [totalRecords]="collaterals().length"
@@ -57,24 +58,22 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
       </ng-template>
 
       <ng-template appCellTemplate="actions" let-collateral>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'COMMON.EDIT' | translate"
-          title="Edit Collateral"
+        <app-button
+          type="button"
+          emphasis="quiet"
+          intent="primary"
+          icon="create-outline"
+          [label]="'COMMON.EDIT' | appTranslate"
           (click)="onEditCollateral(collateral)"
-        >
-          <ion-icon name="create-outline"></ion-icon>
-        </ion-button>
-        <ion-button
-          fill="clear"
-          color="danger"
-          [attr.aria-label]="'COMMON.DELETE' | translate"
-          title="Delete Collateral"
+        />
+        <app-button
+          type="button"
+          emphasis="quiet"
+          intent="danger"
+          icon="trash-outline"
+          [label]="'COMMON.DELETE' | appTranslate"
           (click)="onDeleteCollateral(collateral)"
-        >
-          <ion-icon name="trash-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,

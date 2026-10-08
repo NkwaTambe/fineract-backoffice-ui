@@ -19,13 +19,14 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { I18N, TranslatePipe } from '../../../core/adapters';
 import { ColumnDef, CellTemplateDirective } from '../../../shared';
 import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 import { ClientChargesService, GetClientsChargesPageItems } from '../../../api';
+import { DialogService } from '../../../core/services/dialog.service';
 import { formatArrayDate } from '../../../core/utils/date-formatter';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 /**
  * Lists the charges attached to a single client. The client id is read from the route
@@ -35,11 +36,10 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
   selector: 'app-client-charges-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
@@ -47,11 +47,14 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       title="CLIENT_CHARGES.TITLE"
       helpTextKey="HELP.CLIENT_CHARGES_DESC"
       createButtonLabel="CLIENT_CHARGES.CREATE"
+      createPermission="CREATE_CLIENTCHARGE"
       [columns]="columns"
       [data]="charges()"
       [totalRecords]="charges().length"
+      [hasError]="hasError()"
       [localLogic]="true"
       (create)="onCreate()"
+      (retry)="onRetry()"
     >
       <ng-template appCellTemplate="dueDate" let-row>
         {{ formatDate(row.dueDate) }}
@@ -63,15 +66,15 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
         {{ row.amountOutstanding ?? 0 }}
       </ng-template>
       <ng-template appCellTemplate="actions" let-row>
-        <ion-button
-          fill="clear"
-          color="danger"
-          [attr.aria-label]="'COMMON.DELETE' | translate"
-          [appTooltip]="'COMMON.DELETE' | translate"
+        <app-button
+          type="button"
+          intent="danger"
+          emphasis="quiet"
+          [label]="'COMMON.DELETE' | appTranslate"
+          icon="trash-outline"
+          [appTooltip]="'COMMON.DELETE' | appTranslate"
           (click)="onDelete(row)"
-        >
-          <ion-icon name="trash-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,
@@ -80,6 +83,8 @@ export class ClientChargesListComponent implements OnInit {
   private readonly clientChargesService = inject(ClientChargesService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly dialogService = inject(DialogService);
+  private readonly i18n = inject(I18N);
 
   readonly columns: ColumnDef[] = [
     { key: 'name', label: 'CLIENT_CHARGES.NAME', sortable: true },
@@ -92,6 +97,7 @@ export class ClientChargesListComponent implements OnInit {
 
   clientId!: number;
   readonly charges = signal<GetClientsChargesPageItems[]>([]);
+  readonly hasError = signal(false);
 
   ngOnInit(): void {
     this.clientId = Number(this.route.snapshot.paramMap.get('clientId'));
@@ -102,11 +108,17 @@ export class ClientChargesListComponent implements OnInit {
     this.clientChargesService.getClientsClientIdCharges(this.clientId).subscribe({
       next: (data) => {
         this.charges.set(data?.pageItems ? Array.from(data.pageItems) : []);
+        this.hasError.set(false);
       },
       error: (err: unknown) => {
         console.error('Failed to load client charges', err);
+        this.hasError.set(true);
       },
     });
+  }
+
+  onRetry(): void {
+    this.load();
   }
 
   formatDate(value: unknown): string {
@@ -117,8 +129,18 @@ export class ClientChargesListComponent implements OnInit {
     this.router.navigate(['/clients', this.clientId, 'charges', 'create']);
   }
 
-  onDelete(row: GetClientsChargesPageItems): void {
-    if (!row.id || !window.confirm('Delete this charge?')) return;
+  async onDelete(row: GetClientsChargesPageItems): Promise<void> {
+    if (!row.id) return;
+    const confirmed = await this.dialogService.confirm({
+      title: this.i18n.translate('COMMON.DELETE'),
+      message: this.i18n.translate('CLIENT_CHARGES.CONFIRM_DELETE', {
+        name: row.name ?? '',
+        amount: row.amount ?? '',
+        dueDate: this.formatDate(row.dueDate),
+      }),
+      destructive: true,
+    });
+    if (!confirmed) return;
     this.clientChargesService
       .deleteClientsClientIdChargesChargeId(this.clientId, row.id)
       .subscribe({

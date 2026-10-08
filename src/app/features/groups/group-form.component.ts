@@ -21,7 +21,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../core/adapters';
 import {
   IonButton,
   IonCard,
@@ -50,6 +50,7 @@ import {
   PutGroupsGroupIdRequest,
   GetOfficesResponse,
 } from '../../api';
+import { createPickersReady } from '../../shared/utils/pickers-ready';
 
 /**
  * Component for creating and editing self-help groups.
@@ -62,7 +63,7 @@ import {
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonSpinner,
     IonInput,
@@ -87,7 +88,9 @@ import {
         <ion-card-header>
           <ion-card-title>
             {{
-              isEditMode() ? ('GROUPS.EDIT_GROUP' | translate) : ('GROUPS.CREATE_GROUP' | translate)
+              isEditMode()
+                ? ('GROUPS.EDIT_GROUP' | appTranslate)
+                : ('GROUPS.CREATE_GROUP' | appTranslate)
             }}
           </ion-card-title>
         </ion-card-header>
@@ -96,10 +99,10 @@ import {
           <form #groupForm="ngForm" (ngSubmit)="onSubmit()" class="group-form">
             <div class="form-grid">
               <!-- Name -->
-              <ion-item fill="outline" [appTooltip]="'HELP.GROUP_NAME_DESC' | translate">
-                <ion-label position="stacked">{{ 'GROUPS.NAME' | translate }}</ion-label>
+              <ion-item fill="outline" [appTooltip]="'HELP.GROUP_NAME_DESC' | appTranslate">
+                <ion-label position="stacked">{{ 'GROUPS.NAME' | appTranslate }}</ion-label>
                 <ion-input
-                  [attr.aria-label]="'GROUPS.NAME' | translate"
+                  [attr.aria-label]="'GROUPS.NAME' | appTranslate"
                   name="name"
                   [(ngModel)]="group().name"
                   required
@@ -107,10 +110,10 @@ import {
               </ion-item>
 
               <!-- Office -->
-              <ion-item fill="outline" [appTooltip]="'HELP.OFFICE_DESC' | translate">
-                <ion-label position="stacked">{{ 'COMMON.OFFICE' | translate }}</ion-label>
+              <ion-item fill="outline" [appTooltip]="'HELP.OFFICE_DESC' | appTranslate">
+                <ion-label position="stacked">{{ 'COMMON.OFFICE' | appTranslate }}</ion-label>
                 <ion-select
-                  [attr.aria-label]="'COMMON.OFFICE' | translate"
+                  [attr.aria-label]="'COMMON.OFFICE' | appTranslate"
                   interface="popover"
                   name="officeId"
                   [(ngModel)]="group().officeId"
@@ -125,11 +128,13 @@ import {
 
               <!-- Activation Date -->
               @if (!isEditMode()) {
-                <ion-item fill="outline" [appTooltip]="'HELP.ACTIVATION_DATE_DESC' | translate">
+                <ion-item fill="outline" [appTooltip]="'HELP.ACTIVATION_DATE_DESC' | appTranslate">
                   <ion-label position="stacked">{{
-                    'COMMON.ACTIVATION_DATE' | translate
+                    'COMMON.ACTIVATION_DATE' | appTranslate
                   }}</ion-label>
-                  <ion-datetime-button datetime="activationDate-picker"></ion-datetime-button>
+                  @if (pickersReady()) {
+                    <ion-datetime-button datetime="activationDate-picker"></ion-datetime-button>
+                  }
                   <ion-modal [keepContentsMounted]="true">
                     <ng-template>
                       <ion-datetime
@@ -148,10 +153,10 @@ import {
               <!-- Active -->
               <div class="checkbox-container">
                 <ion-checkbox name="active" [(ngModel)]="group().active" [disabled]="isEditMode()">
-                  {{ 'COMMON.ACTIVE' | translate }}
+                  {{ 'COMMON.ACTIVE' | appTranslate }}
                 </ion-checkbox>
                 <ion-icon
-                  [appTooltip]="'HELP.ACTIVE_DESC' | translate"
+                  [appTooltip]="'HELP.ACTIVE_DESC' | appTranslate"
                   class="help-icon"
                   name="help-circle-outline"
                 ></ion-icon>
@@ -160,7 +165,7 @@ import {
 
             <div class="form-actions">
               <ion-button fill="clear" type="button" (click)="onCancel()" [disabled]="isSaving()">
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               @if (isEditMode() && !originalActive()) {
                 <ion-button
@@ -171,7 +176,7 @@ import {
                 >
                   @if (isSaving()) {
                     <ion-spinner name="crescent"></ion-spinner>
-                    {{ 'COMMON.SAVING' | translate }}
+                    {{ 'COMMON.SAVING' | appTranslate }}
                   } @else {
                     Activate Group
                   }
@@ -184,9 +189,9 @@ import {
               >
                 @if (isSaving()) {
                   <ion-spinner name="crescent"></ion-spinner>
-                  {{ 'COMMON.SAVING' | translate }}
+                  {{ 'COMMON.SAVING' | appTranslate }}
                 } @else {
-                  {{ 'COMMON.SAVE' | translate }}
+                  {{ 'COMMON.SAVE' | appTranslate }}
                 }
               </ion-button>
             </div>
@@ -209,7 +214,7 @@ import {
       }
       .form-grid {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
         gap: 16px;
       }
       .checkbox-container {
@@ -222,13 +227,16 @@ import {
         font-size: 18px;
         width: 18px;
         height: 18px;
-        color: #7f8c8d;
+        color: var(--text-muted);
         cursor: help;
       }
     `,
   ],
 })
 export class GroupFormComponent implements OnInit {
+  /** See `createPickersReady` — the date buttons must not outrun their pickers. */
+  readonly pickersReady = createPickersReady();
+
   private readonly groupsService = inject(GroupsService);
   private readonly officesService = inject(OfficesService);
   private readonly router = inject(Router);

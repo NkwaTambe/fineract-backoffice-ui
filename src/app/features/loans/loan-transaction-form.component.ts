@@ -20,14 +20,18 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 
 import { ActivatedRoute, Router } from '@angular/router';
+import { DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { I18N, TranslatePipe } from '../../core/adapters';
 import {
   LoanTransactionsService,
   LoansService,
+  GetLoansLoanIdTransactions,
   PostLoansLoanIdTransactionsRequest,
   GetLoansLoanIdTransactionsTemplateResponse,
   GetPaymentTypeOptions,
+  GetLoansLoanIdLoanChargeData,
+  PaymentTypeService,
 } from '../../api';
 import { LoanSummary } from './loan-summary.model';
 import { DialogService } from '../../core/services/dialog.service';
@@ -52,6 +56,9 @@ import {
 } from '@ionic/angular/standalone';
 import { toIsoDate } from '../../core/utils/date-formatter';
 import { TooltipDirective } from '../../shared/directives/tooltip.directive';
+import { createPickersReady } from '../../shared/utils/pickers-ready';
+import { loanContractTerminationPayload } from './loan-contract-termination';
+import { isRefundableLoanCharge, refundableChargeAmount } from './loan-charge-refund';
 
 const TRANSACTION_TITLE_KEYS: Record<string, string> = {
   repayment: 'LOANS.REPAYMENT',
@@ -68,6 +75,10 @@ const TRANSACTION_TITLE_KEYS: Record<string, string> = {
   'charge-off': 'LOANS.ACTIONS.CHARGE_OFF',
   merchantIssuedRefund: 'LOANS.ACTIONS.MERCHANT_ISSUED_REFUND',
   payoutRefund: 'LOANS.ACTIONS.PAYOUT_REFUND',
+  refundByCash: 'LOANS.ACTIONS.REFUND_BY_CASH',
+  contractTermination: 'LOANS.ACTIONS.CONTRACT_TERMINATION',
+  undoContractTermination: 'LOANS.ACTIONS.UNDO_CONTRACT_TERMINATION',
+  chargeRefund: 'LOANS.ACTIONS.CHARGE_REFUND',
   goodwillCredit: 'LOANS.ACTIONS.GOODWILL_CREDIT',
   downPayment: 'LOANS.ACTIONS.DOWN_PAYMENT',
   interestPaymentWaiver: 'LOANS.ACTIONS.INTEREST_PAYMENT_WAIVER',
@@ -80,7 +91,15 @@ const TRANSACTION_TITLE_KEYS: Record<string, string> = {
 };
 
 /** Commands the template endpoint rejects; verified against a running Fineract. */
-const NO_TEMPLATE_TYPES = new Set(['approve', 'undoDisbursal', 'reAmortize', 'undowriteoff']);
+const NO_TEMPLATE_TYPES = new Set([
+  'approve',
+  'undoDisbursal',
+  'reAmortize',
+  'undowriteoff',
+  'contractTermination',
+  'undoContractTermination',
+  'chargeRefund',
+]);
 
 const DESTRUCTIVE_TYPES = new Set([
   'writeoff',
@@ -91,6 +110,8 @@ const DESTRUCTIVE_TYPES = new Set([
   'undowriteoff',
   'reAge',
   'reAmortize',
+  'contractTermination',
+  'undoContractTermination',
 ]);
 
 // Only these commands accept a transaction amount / payment type — the
@@ -102,6 +123,8 @@ const AMOUNT_VISIBLE_TYPES = new Set([
   'prepayLoan',
   'merchantIssuedRefund',
   'payoutRefund',
+  'refundByCash',
+  'chargeRefund',
   'goodwillCredit',
   'downPayment',
   'interestPaymentWaiver',
@@ -119,6 +142,8 @@ const CONFIRM_MESSAGE_KEYS: Record<string, string> = {
   reAge: 'LOANS.CONFIRM_RE_AGE',
   reAmortize: 'LOANS.CONFIRM_RE_AMORTIZE',
   'close-rescheduled': 'LOANS.CONFIRM_CLOSE_AS_RESCHEDULED',
+  contractTermination: 'LOANS.CONFIRM_CONTRACT_TERMINATION',
+  undoContractTermination: 'LOANS.CONFIRM_UNDO_CONTRACT_TERMINATION',
 };
 
 @Component({
@@ -126,7 +151,8 @@ const CONFIRM_MESSAGE_KEYS: Record<string, string> = {
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    DecimalPipe,
+    TranslatePipe,
     IonButton,
     IonSpinner,
     IonInput,
@@ -150,13 +176,13 @@ const CONFIRM_MESSAGE_KEYS: Record<string, string> = {
       <ion-card>
         <ion-card-header>
           <ion-card-title>
-            {{ transactionTitleKey | translate }}
+            {{ transactionTitleKey | appTranslate }}
           </ion-card-title>
           @if (loanSummary(); as summary) {
             <ion-card-subtitle>
-              {{ 'LOANS.ACCOUNT_NO' | translate }}: {{ summary.accountNo }} &middot;
-              {{ 'COMMON.CLIENT' | translate }}: {{ summary.clientName }} &middot;
-              {{ 'LOANS.PRODUCT_NAME' | translate }}: {{ summary.loanProductName }}
+              {{ 'LOANS.ACCOUNT_NO' | appTranslate }}: {{ summary.accountNo }} &middot;
+              {{ 'COMMON.CLIENT' | appTranslate }}: {{ summary.clientName }} &middot;
+              {{ 'LOANS.PRODUCT_NAME' | appTranslate }}: {{ summary.loanProductName }}
             </ion-card-subtitle>
           }
         </ion-card-header>
@@ -164,17 +190,19 @@ const CONFIRM_MESSAGE_KEYS: Record<string, string> = {
         <ion-card-content>
           <form #transactionForm="ngForm" (ngSubmit)="onSubmit()" class="transaction-form">
             <div class="form-grid">
-              @if (transactionType() !== 'undoDisbursal') {
+              @if (dateVisible) {
                 <!-- Transaction Date -->
-                <ion-item fill="outline" [appTooltip]="'HELP.TRANSACTION_DATE_DESC' | translate">
+                <ion-item fill="outline" [appTooltip]="'HELP.TRANSACTION_DATE_DESC' | appTranslate">
                   <ion-label position="stacked">
                     {{
                       transactionType() === 'approve'
-                        ? ('COMMON.ACTIVATION_DATE' | translate)
-                        : ('COMMON.TRANSACTION_DATE' | translate)
+                        ? ('COMMON.ACTIVATION_DATE' | appTranslate)
+                        : ('COMMON.TRANSACTION_DATE' | appTranslate)
                     }}
                   </ion-label>
-                  <ion-datetime-button datetime="transactionDate-picker"></ion-datetime-button>
+                  @if (pickersReady()) {
+                    <ion-datetime-button datetime="transactionDate-picker"></ion-datetime-button>
+                  }
                   <ion-modal [keepContentsMounted]="true">
                     <ng-template>
                       <ion-datetime
@@ -193,12 +221,15 @@ const CONFIRM_MESSAGE_KEYS: Record<string, string> = {
 
               @if (amountVisible) {
                 <!-- Transaction Amount -->
-                <ion-item fill="outline" [appTooltip]="'HELP.TRANSACTION_AMOUNT_DESC' | translate">
+                <ion-item
+                  fill="outline"
+                  [appTooltip]="'HELP.TRANSACTION_AMOUNT_DESC' | appTranslate"
+                >
                   <ion-label position="stacked">{{
-                    'COMMON.TRANSACTION_AMOUNT' | translate
+                    'COMMON.TRANSACTION_AMOUNT' | appTranslate
                   }}</ion-label>
                   <ion-input
-                    [attr.aria-label]="'COMMON.TRANSACTION_AMOUNT' | translate"
+                    [attr.aria-label]="'COMMON.TRANSACTION_AMOUNT' | appTranslate"
                     type="number"
                     name="transactionAmount"
                     [(ngModel)]="transaction.transactionAmount"
@@ -207,10 +238,12 @@ const CONFIRM_MESSAGE_KEYS: Record<string, string> = {
                 </ion-item>
 
                 <!-- Payment Type -->
-                <ion-item fill="outline" [appTooltip]="'HELP.PAYMENT_TYPE_DESC' | translate">
-                  <ion-label position="stacked">{{ 'COMMON.PAYMENT_TYPE' | translate }}</ion-label>
+                <ion-item fill="outline" [appTooltip]="'HELP.PAYMENT_TYPE_DESC' | appTranslate">
+                  <ion-label position="stacked">{{
+                    'COMMON.PAYMENT_TYPE' | appTranslate
+                  }}</ion-label>
                   <ion-select
-                    [attr.aria-label]="'COMMON.PAYMENT_TYPE' | translate"
+                    [attr.aria-label]="'COMMON.PAYMENT_TYPE' | appTranslate"
                     interface="popover"
                     name="paymentTypeId"
                     [(ngModel)]="transaction.paymentTypeId"
@@ -222,12 +255,38 @@ const CONFIRM_MESSAGE_KEYS: Record<string, string> = {
                 </ion-item>
               }
 
+              @if (transactionType() === 'chargeRefund') {
+                <ion-item fill="outline" class="full-width">
+                  <ion-label position="stacked">{{
+                    'LOANS.CHARGE_REFUND_CHARGE' | appTranslate
+                  }}</ion-label>
+                  <ion-select
+                    [attr.aria-label]="'LOANS.CHARGE_REFUND_CHARGE' | appTranslate"
+                    interface="popover"
+                    name="loanChargeId"
+                    data-testid="charge-refund-charge"
+                    [ngModel]="chargeId()"
+                    (ngModelChange)="onChargeSelected($event)"
+                    required
+                  >
+                    @for (charge of chargeOptions(); track charge.id) {
+                      <ion-select-option [value]="charge.id">
+                        {{ charge.name }} &mdash;
+                        {{ remainingRefundAmount(charge) | number: '1.2-2' }}
+                      </ion-select-option>
+                    }
+                  </ion-select>
+                </ion-item>
+              }
+
               @if (transactionType() === 'repayment') {
                 <!-- Receipt Number -->
                 <ion-item fill="outline">
-                  <ion-label position="stacked">{{ 'LOANS.RECEIPT_NUMBER' | translate }}</ion-label>
+                  <ion-label position="stacked">{{
+                    'LOANS.RECEIPT_NUMBER' | appTranslate
+                  }}</ion-label>
                   <ion-input
-                    [attr.aria-label]="'LOANS.RECEIPT_NUMBER' | translate"
+                    [attr.aria-label]="'LOANS.RECEIPT_NUMBER' | appTranslate"
                     name="receiptNumber"
                     [(ngModel)]="transaction.receiptNumber"
                   ></ion-input>
@@ -235,9 +294,9 @@ const CONFIRM_MESSAGE_KEYS: Record<string, string> = {
 
                 <!-- Bank Number -->
                 <ion-item fill="outline">
-                  <ion-label position="stacked">{{ 'LOANS.BANK_NUMBER' | translate }}</ion-label>
+                  <ion-label position="stacked">{{ 'LOANS.BANK_NUMBER' | appTranslate }}</ion-label>
                   <ion-input
-                    [attr.aria-label]="'LOANS.BANK_NUMBER' | translate"
+                    [attr.aria-label]="'LOANS.BANK_NUMBER' | appTranslate"
                     name="bankNumber"
                     [(ngModel)]="transaction.bankNumber"
                   ></ion-input>
@@ -245,9 +304,11 @@ const CONFIRM_MESSAGE_KEYS: Record<string, string> = {
 
                 <!-- Check Number -->
                 <ion-item fill="outline">
-                  <ion-label position="stacked">{{ 'LOANS.CHECK_NUMBER' | translate }}</ion-label>
+                  <ion-label position="stacked">{{
+                    'LOANS.CHECK_NUMBER' | appTranslate
+                  }}</ion-label>
                   <ion-input
-                    [attr.aria-label]="'LOANS.CHECK_NUMBER' | translate"
+                    [attr.aria-label]="'LOANS.CHECK_NUMBER' | appTranslate"
                     name="checkNumber"
                     [(ngModel)]="transaction.checkNumber"
                   ></ion-input>
@@ -255,9 +316,11 @@ const CONFIRM_MESSAGE_KEYS: Record<string, string> = {
 
                 <!-- Routing Code -->
                 <ion-item fill="outline">
-                  <ion-label position="stacked">{{ 'LOANS.ROUTING_CODE' | translate }}</ion-label>
+                  <ion-label position="stacked">{{
+                    'LOANS.ROUTING_CODE' | appTranslate
+                  }}</ion-label>
                   <ion-input
-                    [attr.aria-label]="'LOANS.ROUTING_CODE' | translate"
+                    [attr.aria-label]="'LOANS.ROUTING_CODE' | appTranslate"
                     name="routingCode"
                     [(ngModel)]="transaction.routingCode"
                   ></ion-input>
@@ -269,14 +332,14 @@ const CONFIRM_MESSAGE_KEYS: Record<string, string> = {
               @if (chargeOffReasonOptions().length) {
                 <ion-item
                   fill="outline"
-                  [appTooltip]="'HELP.CHARGE_OFF_REASON_DESC' | translate"
+                  [appTooltip]="'HELP.CHARGE_OFF_REASON_DESC' | appTranslate"
                   class="full-width"
                 >
                   <ion-label position="stacked">{{
-                    'LOANS.CHARGE_OFF_REASON' | translate
+                    'LOANS.CHARGE_OFF_REASON' | appTranslate
                   }}</ion-label>
                   <ion-select
-                    [attr.aria-label]="'LOANS.CHARGE_OFF_REASON' | translate"
+                    [attr.aria-label]="'LOANS.CHARGE_OFF_REASON' | appTranslate"
                     interface="popover"
                     data-testid="charge-off-reason"
                     name="chargeOffReasonId"
@@ -292,12 +355,12 @@ const CONFIRM_MESSAGE_KEYS: Record<string, string> = {
               <!-- Note -->
               <ion-item
                 fill="outline"
-                [appTooltip]="'HELP.NOTE_DESC' | translate"
+                [appTooltip]="'HELP.NOTE_DESC' | appTranslate"
                 class="full-width"
               >
-                <ion-label position="stacked">{{ 'COMMON.NOTE' | translate }}</ion-label>
+                <ion-label position="stacked">{{ 'COMMON.NOTE' | appTranslate }}</ion-label>
                 <ion-textarea
-                  [attr.aria-label]="'COMMON.NOTE' | translate"
+                  [attr.aria-label]="'COMMON.NOTE' | appTranslate"
                   name="note"
                   [(ngModel)]="transaction.note"
                   rows="3"
@@ -307,7 +370,7 @@ const CONFIRM_MESSAGE_KEYS: Record<string, string> = {
 
             <div class="form-actions">
               <ion-button fill="clear" type="button" (click)="onCancel()" [disabled]="isSaving()">
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               <ion-button
                 color="primary"
@@ -316,9 +379,9 @@ const CONFIRM_MESSAGE_KEYS: Record<string, string> = {
               >
                 @if (isSaving()) {
                   <ion-spinner name="crescent"></ion-spinner>
-                  {{ 'COMMON.SAVING' | translate }}
+                  {{ 'COMMON.SAVING' | appTranslate }}
                 } @else {
-                  {{ 'COMMON.SAVE' | translate }}
+                  {{ 'COMMON.SAVE' | appTranslate }}
                 }
               </ion-button>
             </div>
@@ -341,20 +404,24 @@ const CONFIRM_MESSAGE_KEYS: Record<string, string> = {
       }
       .form-grid {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
         gap: 16px;
       }
     `,
   ],
 })
 export class LoanTransactionFormComponent implements OnInit {
+  /** See `createPickersReady` — the date buttons must not outrun their pickers. */
+  readonly pickersReady = createPickersReady();
+
   private readonly transactionService = inject(LoanTransactionsService);
   private readonly loansService = inject(LoansService);
+  private readonly paymentTypeService = inject(PaymentTypeService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly notifications = inject(NotificationService);
   private readonly dialogService = inject(DialogService);
-  private readonly translate = inject(TranslateService);
+  private readonly i18n = inject(I18N);
 
   private readonly DATE_FORMAT = 'yyyy-MM-dd';
 
@@ -367,6 +434,9 @@ export class LoanTransactionFormComponent implements OnInit {
   readonly paymentTypeOptions = signal<GetPaymentTypeOptions[]>([]);
   readonly loanSummary = signal<LoanSummary | null>(null);
   readonly chargeOffReasonOptions = signal<{ id?: number; name?: string }[]>([]);
+  readonly chargeOptions = signal<GetLoansLoanIdLoanChargeData[]>([]);
+  private readonly loanTransactions = signal<GetLoansLoanIdTransactions[]>([]);
+  readonly chargeId = signal<number | null>(null);
   chargeOffReasonId: number | null = null;
 
   get transactionTitleKey(): string {
@@ -377,28 +447,78 @@ export class LoanTransactionFormComponent implements OnInit {
     return AMOUNT_VISIBLE_TYPES.has(this.transactionType());
   }
 
+  /** These commands use Fineract's business date, not a client-supplied date field. */
+  get dateVisible(): boolean {
+    return ![
+      'undoDisbursal',
+      'contractTermination',
+      'undoContractTermination',
+      'chargeRefund',
+    ].includes(this.transactionType());
+  }
+
   ngOnInit(): void {
     this.route.params.subscribe((params) => {
       this.loanId = +params['loanId'];
-      this.transactionType.set(params['type']);
+      this.transactionType.set(params['type'] ?? this.route.snapshot.data['transactionType']);
       this.loadTemplate();
       this.loadLoanSummary();
     });
   }
 
   private loadLoanSummary(): void {
-    this.loansService.getLoansLoanId(this.loanId).subscribe({
+    const chargeRefund = this.transactionType() === 'chargeRefund';
+    const request = chargeRefund
+      ? this.loansService.getLoansLoanId(this.loanId, false, 'all')
+      : this.loansService.getLoansLoanId(this.loanId);
+
+    if (chargeRefund) this.loadPaymentTypes();
+
+    request.subscribe({
       next: (data) => {
         this.loanSummary.set({
           accountNo: data.accountNo,
           clientName: data.clientName,
           loanProductName: data.loanProductName,
         });
+        if (chargeRefund) {
+          const transactions = data.transactions ?? [];
+          this.loanTransactions.set(transactions);
+          const options = (data.charges ?? []).filter((charge) =>
+            isRefundableLoanCharge(charge, transactions),
+          );
+          this.chargeOptions.set(options);
+          if (options.length === 1) this.onChargeSelected(options[0].id ?? null);
+        }
       },
       error: () => {
         // Non-critical context display; the form still works without it.
+        if (chargeRefund) this.notifications.error('Operation failed. Please try again.');
       },
     });
+  }
+
+  private loadPaymentTypes(): void {
+    this.paymentTypeService.getPaymenttypes().subscribe({
+      next: (options) =>
+        this.paymentTypeOptions.set(
+          options.map(({ id, name, position }) => ({ id, name, position })),
+        ),
+      error: () => this.paymentTypeOptions.set([]),
+    });
+  }
+
+  onChargeSelected(chargeId: number | null): void {
+    this.chargeId.set(chargeId);
+    const charge = this.chargeOptions().find((option) => option.id === chargeId);
+    this.transaction.loanChargeId = charge?.id;
+    this.transaction.transactionAmount = charge
+      ? refundableChargeAmount(charge, this.loanTransactions())
+      : undefined;
+  }
+
+  remainingRefundAmount(charge: GetLoansLoanIdLoanChargeData): number {
+    return refundableChargeAmount(charge, this.loanTransactions());
   }
 
   private loadTemplate(): void {
@@ -441,8 +561,8 @@ export class LoanTransactionFormComponent implements OnInit {
     if (DESTRUCTIVE_TYPES.has(this.transactionType())) {
       this.dialogService
         .confirm({
-          title: this.translate.instant(this.transactionTitleKey),
-          message: this.translate.instant(
+          title: this.i18n.translate(this.transactionTitleKey),
+          message: this.i18n.translate(
             CONFIRM_MESSAGE_KEYS[this.transactionType()] || 'COMMON.CONFIRM',
           ),
           destructive: true,
@@ -456,6 +576,7 @@ export class LoanTransactionFormComponent implements OnInit {
   }
 
   private performSubmit(): void {
+    if (this.transactionType() === 'chargeRefund' && !this.transaction.loanChargeId) return;
     this.isSaving.set(true);
 
     const formattedDate = toIsoDate(this.transactionDate());
@@ -496,10 +617,25 @@ export class LoanTransactionFormComponent implements OnInit {
         next: () => this.router.navigate(['/loans']),
         error: () => this.isSaving.set(false),
       });
+    } else if (
+      ['contractTermination', 'undoContractTermination'].includes(this.transactionType())
+    ) {
+      this.loansService
+        .postLoansLoanId(
+          this.loanId,
+          loanContractTerminationPayload(this.transaction.note),
+          this.transactionType(),
+        )
+        .subscribe({
+          next: () => this.router.navigate(['/loans']),
+          error: () => this.isSaving.set(false),
+        });
     } else {
-      this.transaction.transactionDate = formattedDate;
-      this.transaction.dateFormat = this.DATE_FORMAT;
-      this.transaction.locale = 'en';
+      if (this.dateVisible) {
+        this.transaction.transactionDate = formattedDate;
+        this.transaction.dateFormat = this.DATE_FORMAT;
+        this.transaction.locale = 'en';
+      }
       if (!this.amountVisible) {
         // writeoff/foreclosure/close/waiveinterest compute their amount
         // server-side from the outstanding balance and reject an explicit

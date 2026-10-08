@@ -17,10 +17,18 @@
  * under the License.
  */
 
-import { computed, inject, signal, Component, OnInit } from '@angular/core';
+import {
+  computed,
+  inject,
+  signal,
+  Component,
+  OnInit,
+  OnDestroy,
+  viewChildren,
+} from '@angular/core';
 import { from } from 'rxjs';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { I18N, TranslatePipe } from '../../core/adapters';
 import { DecimalPipe, NgClass } from '@angular/common';
 import {
   SavingsAccountService,
@@ -29,7 +37,11 @@ import {
   SavingsAccountTransactionData,
   SavingsAccountChargeData,
 } from '../../api';
-import { StatusBadgeComponent, HasPermissionDirective } from '../../shared';
+import { StatusBadgeComponent, RequiresPermissionDirective } from '../../shared';
+import { EntityNotesComponent } from '../../shared/components/entity-notes/entity-notes.component';
+import { EntityDocumentsComponent } from '../../shared/components/entity-documents/entity-documents.component';
+import { EntityDatatablesComponent } from '../../shared/components/entity-datatables/entity-datatables.component';
+import { SavingsStandingInstructionsTabComponent } from './savings/savings-standing-instructions-tab.component';
 import { NotificationService } from '../../core/services/notification.service';
 import { DialogService } from '../../core/services/dialog.service';
 import {
@@ -42,8 +54,11 @@ import {
   SavingsOfficerResult,
 } from './savings-officer-dialog.component';
 import {
+  SavingsUndoApprovalDialogComponent,
+  SavingsUndoApprovalResult,
+} from './savings-undo-approval-dialog.component';
+import {
   formatDateToFineract,
-  toIsoDate,
   FINERACT_DATE_FORMAT,
   FINERACT_LOCALE,
 } from '../../core/utils/date-formatter';
@@ -69,15 +84,38 @@ import {
   resolveAccountRoutePrefix,
 } from '../../core/utils/account-type-resolver';
 
+/**
+ * The tabs on this screen, named.
+ *
+ * They were positional strings — '0', '7' — which say nothing at the point of use and shift
+ * meaning whenever a tab is inserted in the middle. The values are still strings because
+ * `ion-segment` compares them as such.
+ */
+export const SAVINGS_TAB = {
+  overview: 'overview',
+  transactions: 'transactions',
+  charges: 'charges',
+  notes: 'notes',
+  documents: 'documents',
+  standingInstructions: 'standingInstructions',
+  customFields: 'customFields',
+} as const;
+
+export type SavingsTab = (typeof SAVINGS_TAB)[keyof typeof SAVINGS_TAB];
+
 @Component({
   selector: 'app-savings-account-view',
   standalone: true,
   imports: [
+    EntityNotesComponent,
+    EntityDocumentsComponent,
+    EntityDatatablesComponent,
+    SavingsStandingInstructionsTabComponent,
     RouterModule,
-    TranslateModule,
+    TranslatePipe,
     CdkTableModule,
     StatusBadgeComponent,
-    HasPermissionDirective,
+    RequiresPermissionDirective,
     DecimalPipe,
     NgClass,
     IonIcon,
@@ -117,7 +155,7 @@ import {
                   ></app-status-badge>
                   @if (blockLabelKey(); as blockKey) {
                     <ion-chip color="warning" highlighted data-testid="savings-blocked-chip">
-                      {{ blockKey | translate }}
+                      {{ blockKey | appTranslate }}
                     </ion-chip>
                   }
                 </div>
@@ -127,12 +165,13 @@ import {
               @if (account()?.status?.submittedAndPendingApproval) {
                 <ion-button
                   color="secondary"
-                  *appHasPermission="'APPROVE_SAVINGSACCOUNT'"
+                  data-testid="savings-approve-action"
+                  appRequiresPermission="APPROVE_SAVINGSACCOUNT"
                   (click)="onSavingsAction('approve')"
-                  [appTooltip]="'SAVINGS.APPROVE' | translate"
+                  [appTooltip]="'SAVINGS.APPROVE' | appTranslate"
                 >
                   <ion-icon name="checkmark-circle-outline"></ion-icon>
-                  {{ 'SAVINGS.APPROVE' | translate }}
+                  {{ 'SAVINGS.APPROVE' | appTranslate }}
                 </ion-button>
               }
               @if (account()?.status?.submittedAndPendingApproval) {
@@ -140,67 +179,100 @@ import {
                   color="danger"
                   fill="outline"
                   data-testid="savings-reject"
-                  *appHasPermission="'REJECT_SAVINGSACCOUNT'"
+                  appRequiresPermission="REJECT_SAVINGSACCOUNT"
                   (click)="onDatedCommand('reject', 'rejectedOnDate')"
                 >
                   <ion-icon name="close-circle-outline"></ion-icon>
-                  {{ 'SAVINGS.REJECT' | translate }}
+                  {{ 'SAVINGS.REJECT' | appTranslate }}
                 </ion-button>
                 <ion-button
                   color="medium"
                   fill="outline"
                   data-testid="savings-withdrawn"
-                  *appHasPermission="'WITHDRAW_SAVINGSACCOUNT'"
+                  appRequiresPermission="WITHDRAW_SAVINGSACCOUNT"
                   (click)="onDatedCommand('withdrawnByApplicant', 'withdrawnOnDate')"
                 >
                   <ion-icon name="arrow-undo-outline"></ion-icon>
-                  {{ 'SAVINGS.WITHDRAWN_BY_APPLICANT' | translate }}
+                  {{ 'SAVINGS.WITHDRAWN_BY_APPLICANT' | appTranslate }}
                 </ion-button>
               }
               @if (account()?.status?.approved) {
                 <ion-button
                   color="primary"
-                  *appHasPermission="'ACTIVATE_SAVINGSACCOUNT'"
+                  data-testid="savings-activate-action"
+                  appRequiresPermission="ACTIVATE_SAVINGSACCOUNT"
                   (click)="onSavingsAction('activate')"
-                  [appTooltip]="'SAVINGS.ACTIVATE' | translate"
+                  [appTooltip]="'SAVINGS.ACTIVATE' | appTranslate"
                 >
                   <ion-icon name="play-circle-outline"></ion-icon>
-                  {{ 'SAVINGS.ACTIVATE' | translate }}
+                  {{ 'SAVINGS.ACTIVATE' | appTranslate }}
+                </ion-button>
+                <ion-button
+                  color="medium"
+                  fill="outline"
+                  data-testid="savings-undo-approval"
+                  appRequiresPermission="APPROVALUNDO_SAVINGSACCOUNT"
+                  (click)="onUndoApproval()"
+                  [appTooltip]="'SAVINGS.UNDOAPPROVAL' | appTranslate"
+                >
+                  <ion-icon name="arrow-undo-outline"></ion-icon>
+                  {{ 'SAVINGS.UNDOAPPROVAL' | appTranslate }}
                 </ion-button>
               }
               @if (account()?.status?.active) {
                 <ion-button
                   color="danger"
-                  *appHasPermission="'CLOSE_SAVINGSACCOUNT'"
+                  appRequiresPermission="CLOSE_SAVINGSACCOUNT"
                   (click)="onSavingsAction('close')"
-                  [appTooltip]="'SAVINGS.CLOSE' | translate"
+                  [appTooltip]="'SAVINGS.CLOSE' | appTranslate"
                 >
                   <ion-icon name="power-outline"></ion-icon>
-                  {{ 'SAVINGS.CLOSE' | translate }}
+                  {{ 'SAVINGS.CLOSE' | appTranslate }}
                 </ion-button>
               }
-              <ion-button
-                color="primary"
-                *appHasPermission="'DEPOSIT_SAVINGSACCOUNT'"
-                (click)="onTransaction('deposit')"
-                [appTooltip]="'SAVINGS.DEPOSIT_CASH' | translate"
-              >
-                <ion-icon name="add-circle-outline"></ion-icon>
-                {{ 'SAVINGS.DEPOSIT' | translate }}
-              </ion-button>
-              <ion-button
-                color="danger"
-                *appHasPermission="'WITHDRAW_SAVINGSACCOUNT'"
-                (click)="onTransaction('withdrawal')"
-                [appTooltip]="'SAVINGS.WITHDRAW_CASH' | translate"
-              >
-                <ion-icon name="remove-circle-outline"></ion-icon>
-                {{ 'SAVINGS.WITHDRAW' | translate }}
-              </ion-button>
+              <!--
+                Behind the same status check as Close and the Actions menu below. The platform
+                refuses a deposit or a withdrawal on anything but an active account
+                (error.msg.savingsaccount.transaction.account.is.not.active), so on an account
+                still awaiting approval these two offered a transaction form that could only end
+                in a rejection.
+              -->
               @if (isActive()) {
+                <ion-button
+                  color="primary"
+                  data-testid="savings-deposit-action"
+                  appRequiresPermission="DEPOSIT_SAVINGSACCOUNT"
+                  (click)="onTransaction('deposit')"
+                  [appTooltip]="'SAVINGS.DEPOSIT_CASH' | appTranslate"
+                >
+                  <ion-icon name="add-circle-outline"></ion-icon>
+                  {{ 'SAVINGS.DEPOSIT' | appTranslate }}
+                </ion-button>
+                <!--
+                  WITHDRAWAL_SAVINGSACCOUNT, not WITHDRAW_SAVINGSACCOUNT. Both codes exist and
+                  they are not interchangeable — one letter apart, two different operations.
+                  Measured against a running Fineract with an empty body, which separates
+                  authorisation from validation:
+
+                    transactions?command=withdrawal  WITHDRAWAL_ 400   WITHDRAW_ 403
+                    ?command=withdrawnByApplicant    WITHDRAWAL_ 403   WITHDRAW_ 400
+
+                  WITHDRAW_SAVINGSACCOUNT is what the Withdrawn-by-applicant button above uses,
+                  correctly: it withdraws the *application*. This button withdraws *cash*.
+                -->
+                <ion-button
+                  color="danger"
+                  data-testid="savings-withdraw-action"
+                  appRequiresPermission="WITHDRAWAL_SAVINGSACCOUNT"
+                  (click)="onTransaction('withdrawal')"
+                  [appTooltip]="'SAVINGS.WITHDRAW_CASH' | appTranslate"
+                >
+                  <ion-icon name="remove-circle-outline"></ion-icon>
+                  {{ 'SAVINGS.WITHDRAW' | appTranslate }}
+                </ion-button>
                 <ion-button color="primary" id="savingsMenu-trigger" data-testid="savings-actions">
                   <ion-icon name="caret-down-outline"></ion-icon>
-                  {{ 'COMMON.ACTIONS' | translate }}
+                  {{ 'COMMON.ACTIONS' | appTranslate }}
                 </ion-button>
                 <ion-popover trigger="savingsMenu-trigger" [dismissOnSelect]="true">
                   <ng-template>
@@ -211,7 +283,7 @@ import {
                         (click)="onSimpleCommand('calculateInterest')"
                       >
                         <ion-icon slot="start" name="calculator-outline"></ion-icon>
-                        <ion-label>{{ 'SAVINGS.CALCULATE_INTEREST' | translate }}</ion-label>
+                        <ion-label>{{ 'SAVINGS.CALCULATE_INTEREST' | appTranslate }}</ion-label>
                       </ion-item>
 
                       <ion-item
@@ -220,7 +292,16 @@ import {
                         (click)="onSimpleCommand('postInterest')"
                       >
                         <ion-icon slot="start" name="trending-up-outline"></ion-icon>
-                        <ion-label>{{ 'SAVINGS.POST_INTEREST' | translate }}</ion-label>
+                        <ion-label>{{ 'SAVINGS.POST_INTEREST' | appTranslate }}</ion-label>
+                      </ion-item>
+
+                      <ion-item
+                        button
+                        data-testid="savings-post-interest-as-on"
+                        (click)="onTransaction('postInterestAsOn')"
+                      >
+                        <ion-icon slot="start" name="calendar-outline"></ion-icon>
+                        <ion-label>{{ 'SAVINGS.POST_INTEREST_AS_ON' | appTranslate }}</ion-label>
                       </ion-item>
 
                       <ion-item
@@ -229,7 +310,7 @@ import {
                         (click)="onSimpleCommand('applyAnnualFees')"
                       >
                         <ion-icon slot="start" name="pricetag-outline"></ion-icon>
-                        <ion-label>{{ 'SAVINGS.APPLY_ANNUAL_FEES' | translate }}</ion-label>
+                        <ion-label>{{ 'SAVINGS.APPLY_ANNUAL_FEES' | appTranslate }}</ion-label>
                       </ion-item>
 
                       <ion-item
@@ -238,7 +319,7 @@ import {
                         (click)="onAssignOfficer()"
                       >
                         <ion-icon slot="start" name="person-add-outline"></ion-icon>
-                        <ion-label>{{ 'SAVINGS.ASSIGN_OFFICER' | translate }}</ion-label>
+                        <ion-label>{{ 'SAVINGS.ASSIGN_OFFICER' | appTranslate }}</ion-label>
                       </ion-item>
 
                       @if (hasOfficer()) {
@@ -248,13 +329,13 @@ import {
                           (click)="onDatedCommand('unassignSavingsOfficer', 'unassignedDate')"
                         >
                           <ion-icon slot="start" name="person-remove-outline"></ion-icon>
-                          <ion-label>{{ 'SAVINGS.UNASSIGN_OFFICER' | translate }}</ion-label>
+                          <ion-label>{{ 'SAVINGS.UNASSIGN_OFFICER' | appTranslate }}</ion-label>
                         </ion-item>
                       }
 
                       <ion-item button data-testid="savings-hold-amount" (click)="onHoldAmount()">
                         <ion-icon slot="start" name="pause-circle-outline"></ion-icon>
-                        <ion-label>{{ 'SAVINGS.HOLD_AMOUNT' | translate }}</ion-label>
+                        <ion-label>{{ 'SAVINGS.HOLD_AMOUNT' | appTranslate }}</ion-label>
                       </ion-item>
 
                       @if (!isBlocked()) {
@@ -266,7 +347,7 @@ import {
                         >
                           <ion-icon slot="start" color="danger" name="lock-closed-outline">
                           </ion-icon>
-                          <ion-label>{{ 'SAVINGS.BLOCK' | translate }}</ion-label>
+                          <ion-label>{{ 'SAVINGS.BLOCK' | appTranslate }}</ion-label>
                         </ion-item>
 
                         @if (!isDebitBlocked()) {
@@ -276,7 +357,7 @@ import {
                             (click)="onBlockCommand('blockDebit')"
                           >
                             <ion-icon slot="start" name="arrow-up-circle-outline"></ion-icon>
-                            <ion-label>{{ 'SAVINGS.BLOCK_DEBIT' | translate }}</ion-label>
+                            <ion-label>{{ 'SAVINGS.BLOCK_DEBIT' | appTranslate }}</ion-label>
                           </ion-item>
                         }
                         @if (!isCreditBlocked()) {
@@ -286,7 +367,7 @@ import {
                             (click)="onBlockCommand('blockCredit')"
                           >
                             <ion-icon slot="start" name="arrow-down-circle-outline"></ion-icon>
-                            <ion-label>{{ 'SAVINGS.BLOCK_CREDIT' | translate }}</ion-label>
+                            <ion-label>{{ 'SAVINGS.BLOCK_CREDIT' | appTranslate }}</ion-label>
                           </ion-item>
                         }
                       }
@@ -300,7 +381,7 @@ import {
                           (click)="onSimpleCommand('unblock')"
                         >
                           <ion-icon slot="start" name="lock-open-outline"></ion-icon>
-                          <ion-label>{{ 'SAVINGS.UNBLOCK' | translate }}</ion-label>
+                          <ion-label>{{ 'SAVINGS.UNBLOCK' | appTranslate }}</ion-label>
                         </ion-item>
                       }
                       @if (isDebitBlocked()) {
@@ -310,7 +391,7 @@ import {
                           (click)="onSimpleCommand('unblockDebit')"
                         >
                           <ion-icon slot="start" name="lock-open-outline"></ion-icon>
-                          <ion-label>{{ 'SAVINGS.UNBLOCK_DEBIT' | translate }}</ion-label>
+                          <ion-label>{{ 'SAVINGS.UNBLOCK_DEBIT' | appTranslate }}</ion-label>
                         </ion-item>
                       }
                       @if (isCreditBlocked()) {
@@ -320,7 +401,7 @@ import {
                           (click)="onSimpleCommand('unblockCredit')"
                         >
                           <ion-icon slot="start" name="lock-open-outline"></ion-icon>
-                          <ion-label>{{ 'SAVINGS.UNBLOCK_CREDIT' | translate }}</ion-label>
+                          <ion-label>{{ 'SAVINGS.UNBLOCK_CREDIT' | appTranslate }}</ion-label>
                         </ion-item>
                       }
                     </ion-list>
@@ -329,7 +410,7 @@ import {
               }
               <ion-button fill="clear" (click)="onBack()">
                 <ion-icon name="arrow-back-outline"></ion-icon>
-                {{ 'COMMON.BACK' | translate }}
+                {{ 'COMMON.BACK' | appTranslate }}
               </ion-button>
             </div>
           </ion-card-content>
@@ -337,42 +418,61 @@ import {
 
         <!-- Tabs Section -->
         <ion-segment [value]="activeTab()" (ionChange)="activeTab.set($any($event).detail.value)">
-          <ion-segment-button value="0">
+          <ion-segment-button [value]="TAB.overview">
             <ion-label>Overview</ion-label>
           </ion-segment-button>
-          <ion-segment-button value="1">
-            <ion-label>{{ 'COMMON.TRANSACTIONS' | translate }}</ion-label>
+          <ion-segment-button [value]="TAB.transactions" data-testid="savings-tab-transactions">
+            <ion-label>{{ 'COMMON.TRANSACTIONS' | appTranslate }}</ion-label>
           </ion-segment-button>
-          <ion-segment-button value="2">
-            <ion-label>{{ 'LOANS.CHARGES' | translate }}</ion-label>
+          <ion-segment-button [value]="TAB.charges">
+            <ion-label>{{ 'LOANS.CHARGES' | appTranslate }}</ion-label>
+          </ion-segment-button>
+          <ion-segment-button [value]="TAB.notes" data-testid="savings-tab-notes">
+            <ion-label>{{ 'SAVINGS.NOTES' | appTranslate }}</ion-label>
+          </ion-segment-button>
+          <ion-segment-button [value]="TAB.documents" data-testid="savings-tab-documents">
+            <ion-label>{{ 'SAVINGS.DOCUMENTS' | appTranslate }}</ion-label>
+          </ion-segment-button>
+          <ion-segment-button
+            [value]="TAB.standingInstructions"
+            data-testid="savings-tab-standing-instructions"
+          >
+            <ion-label>{{ 'SAVINGS.STANDING_INSTRUCTIONS' | appTranslate }}</ion-label>
+          </ion-segment-button>
+          <ion-segment-button [value]="TAB.customFields" data-testid="savings-tab-custom-fields">
+            <ion-label>{{ 'SYSTEM.CUSTOM_FIELDS' | appTranslate }}</ion-label>
           </ion-segment-button>
         </ion-segment>
 
-        @if (activeTab() === '0') {
+        @if (activeTab() === TAB.overview) {
           <div class="tab-content">
             <div class="info-grid">
               <ion-card class="info-card">
                 <ion-card-header>
                   <ion-card-title>
                     <ion-icon name="information-circle-outline"></ion-icon>
-                    Interest Settings
+                    {{ 'SAVINGS.INTEREST_SETTINGS' | appTranslate }}
                   </ion-card-title>
                 </ion-card-header>
                 <ion-card-content class="details-list">
                   <div class="detail-item">
-                    <span class="label">Nominal Annual Interest Rate</span>
+                    <span class="label">{{
+                      'SAVINGS.NOMINAL_ANNUAL_INTEREST_RATE' | appTranslate
+                    }}</span>
                     <span class="value">{{ account()?.nominalAnnualInterestRate }}%</span>
                   </div>
                   <div class="detail-item">
-                    <span class="label">Compounding Period</span>
+                    <span class="label">{{ 'SAVINGS.COMPOUNDING_PERIOD' | appTranslate }}</span>
                     <span class="value">{{ account()?.interestCompoundingPeriodType?.value }}</span>
                   </div>
                   <div class="detail-item">
-                    <span class="label">Posting Period</span>
+                    <span class="label">{{ 'SAVINGS.POSTING_PERIOD' | appTranslate }}</span>
                     <span class="value">{{ account()?.interestPostingPeriodType?.value }}</span>
                   </div>
                   <div class="detail-item">
-                    <span class="label">Interest Calculation Day-in-Year</span>
+                    <span class="label">{{
+                      'SAVINGS.INTEREST_CALC_DAYS_IN_YEAR' | appTranslate
+                    }}</span>
                     <span class="value">{{
                       account()?.interestCalculationDaysInYearType?.value
                     }}</span>
@@ -384,24 +484,24 @@ import {
                 <ion-card-header>
                   <ion-card-title>
                     <ion-icon name="pulse-outline"></ion-icon>
-                    Timeline & Balance
+                    {{ 'SAVINGS.TIMELINE_AND_BALANCE' | appTranslate }}
                   </ion-card-title>
                 </ion-card-header>
                 <ion-card-content class="details-list">
                   <div class="detail-item">
-                    <span class="label">Submitted On Date</span>
+                    <span class="label">{{ 'COMMON.SUBMITTED_ON_DATE' | appTranslate }}</span>
                     <span class="value">{{ formattedSubmittedDate }}</span>
                   </div>
                   <div class="detail-item">
-                    <span class="label">Activated On Date</span>
+                    <span class="label">{{ 'SAVINGS.ACTIVATED_ON_DATE' | appTranslate }}</span>
                     <span class="value">{{ formattedActivatedDate }}</span>
                   </div>
                   <div class="detail-item">
-                    <span class="label">Field Officer</span>
+                    <span class="label">{{ 'SAVINGS.FIELD_OFFICER' | appTranslate }}</span>
                     <span class="value">{{ account()?.fieldOfficerName || '-' }}</span>
                   </div>
                   <div class="detail-item">
-                    <span class="label">Account Balance</span>
+                    <span class="label">{{ 'SAVINGS.BALANCE' | appTranslate }}</span>
                     <span class="value">
                       {{ account()?.currency?.displaySymbol }}
                       {{ account()?.summary?.accountBalance || 0 | number: '1.2-2' }}
@@ -412,29 +512,31 @@ import {
             </div>
           </div>
         }
-        @if (activeTab() === '1') {
+        @if (activeTab() === TAB.transactions) {
           <div class="tab-content">
             <ion-card class="table-card">
               <ion-card-content>
                 @if (transactions().length > 0) {
                   <table cdk-table [dataSource]="transactions()" class="full-width-table">
                     <ng-container cdkColumnDef="id">
-                      <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.ID' | translate }}</th>
+                      <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.ID' | appTranslate }}</th>
                       <td cdk-cell *cdkCellDef="let tx">{{ tx.id }}</td>
                     </ng-container>
 
                     <ng-container cdkColumnDef="date">
-                      <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.DATE' | translate }}</th>
+                      <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.DATE' | appTranslate }}</th>
                       <td cdk-cell *cdkCellDef="let tx">{{ formatDate(tx.date) }}</td>
                     </ng-container>
 
                     <ng-container cdkColumnDef="type">
-                      <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.TYPE' | translate }}</th>
+                      <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.TYPE' | appTranslate }}</th>
                       <td cdk-cell *cdkCellDef="let tx">{{ tx.transactionType?.value }}</td>
                     </ng-container>
 
                     <ng-container cdkColumnDef="amount">
-                      <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.AMOUNT' | translate }}</th>
+                      <th cdk-header-cell *cdkHeaderCellDef>
+                        {{ 'COMMON.AMOUNT' | appTranslate }}
+                      </th>
                       <td cdk-cell *cdkCellDef="let tx">
                         <span
                           [ngClass]="{
@@ -451,11 +553,45 @@ import {
 
                     <ng-container cdkColumnDef="runningBalance">
                       <th cdk-header-cell *cdkHeaderCellDef>
-                        {{ 'COMMON.RUNNING_BALANCE' | translate }}
+                        {{ 'COMMON.RUNNING_BALANCE' | appTranslate }}
                       </th>
                       <td cdk-cell *cdkCellDef="let tx">
                         {{ account()?.currency?.displaySymbol }}
                         {{ tx.runningBalance || 0 | number: '1.2-2' }}
+                      </td>
+                    </ng-container>
+
+                    <ng-container cdkColumnDef="actions">
+                      <th cdk-header-cell *cdkHeaderCellDef>
+                        {{ 'COMMON.ACTIONS' | appTranslate }}
+                      </th>
+                      <td cdk-cell *cdkCellDef="let tx">
+                        @if (canRelease(tx)) {
+                          <ion-button
+                            fill="clear"
+                            size="small"
+                            [attr.data-testid]="'savings-tx-release-' + tx.id"
+                            [attr.aria-label]="'ACTIONS.RELEASE_AMOUNT' | appTranslate"
+                            (click)="onReleaseAmount(tx)"
+                          >
+                            <ion-icon name="lock-open-outline"></ion-icon>
+                          </ion-button>
+                        } @else if (canUndo(tx)) {
+                          <ion-button
+                            fill="clear"
+                            color="danger"
+                            size="small"
+                            [attr.data-testid]="'savings-tx-undo-' + tx.id"
+                            [attr.aria-label]="'ACTIONS.UNDO_TRANSACTION' | appTranslate"
+                            (click)="onUndoTransaction(tx)"
+                          >
+                            <ion-icon name="arrow-undo-outline"></ion-icon>
+                          </ion-button>
+                        } @else if (tx.reversed) {
+                          <span class="reversed-marker" data-testid="savings-tx-reversed">
+                            {{ 'COMMON.REVERSED' | appTranslate }}
+                          </span>
+                        }
                       </td>
                     </ng-container>
 
@@ -465,26 +601,28 @@ import {
                 } @else {
                   <div class="empty-state">
                     <ion-icon name="receipt-outline"></ion-icon>
-                    <p>{{ 'LOANS.NO_TRANSACTIONS' | translate }}</p>
+                    <p>{{ 'LOANS.NO_TRANSACTIONS' | appTranslate }}</p>
                   </div>
                 }
               </ion-card-content>
             </ion-card>
           </div>
         }
-        @if (activeTab() === '2') {
+        @if (activeTab() === TAB.charges) {
           <div class="tab-content">
             <ion-card class="table-card">
               <ion-card-content>
                 @if (charges().length > 0) {
                   <table cdk-table [dataSource]="charges()" class="full-width-table">
                     <ng-container cdkColumnDef="name">
-                      <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.NAME' | translate }}</th>
+                      <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.NAME' | appTranslate }}</th>
                       <td cdk-cell *cdkCellDef="let c">{{ c.name }}</td>
                     </ng-container>
 
                     <ng-container cdkColumnDef="amount">
-                      <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.AMOUNT' | translate }}</th>
+                      <th cdk-header-cell *cdkHeaderCellDef>
+                        {{ 'COMMON.AMOUNT' | appTranslate }}
+                      </th>
                       <td cdk-cell *cdkCellDef="let c">
                         {{ account()?.currency?.displaySymbol }} {{ c.amount | number: '1.2-2' }}
                       </td>
@@ -492,7 +630,7 @@ import {
 
                     <ng-container cdkColumnDef="outstanding">
                       <th cdk-header-cell *cdkHeaderCellDef>
-                        {{ 'LOANS.REPAYMENT_SCHEDULE_HEADERS.OUTSTANDING' | translate }}
+                        {{ 'LOANS.REPAYMENT_SCHEDULE_HEADERS.OUTSTANDING' | appTranslate }}
                       </th>
                       <td cdk-cell *cdkCellDef="let c">
                         {{ account()?.currency?.displaySymbol }}
@@ -506,11 +644,44 @@ import {
                 } @else {
                   <div class="empty-state">
                     <ion-icon name="cash-outline"></ion-icon>
-                    <p>{{ 'SAVINGS.NO_CHARGES' | translate }}</p>
+                    <p>{{ 'SAVINGS.NO_CHARGES' | appTranslate }}</p>
                   </div>
                 }
               </ion-card-content>
             </ion-card>
+          </div>
+        }
+
+        @if (activeTab() === TAB.notes) {
+          <div class="tab-content">
+            <app-entity-notes resourceType="savings" [resourceId]="accountId"></app-entity-notes>
+          </div>
+        }
+
+        @if (activeTab() === TAB.documents) {
+          <div class="tab-content">
+            <app-entity-documents
+              entityType="savings"
+              [entityId]="accountId"
+            ></app-entity-documents>
+          </div>
+        }
+
+        @if (activeTab() === TAB.standingInstructions) {
+          <div class="tab-content">
+            <app-savings-standing-instructions-tab
+              [savingsAccountId]="accountId"
+              [clientId]="account()?.clientId"
+            ></app-savings-standing-instructions-tab>
+          </div>
+        }
+
+        @if (activeTab() === TAB.customFields) {
+          <div class="tab-content">
+            <app-entity-datatables
+              apptableName="m_savings_account"
+              [entityId]="accountId"
+            ></app-entity-datatables>
           </div>
         }
       </div>
@@ -561,17 +732,17 @@ import {
         margin: 0 0 4px 0;
         font-size: 24px;
         font-weight: 600;
-        color: #2c3e50;
+        color: var(--secondary-color);
       }
       .subtitle-row {
         display: flex;
         align-items: center;
         gap: 8px;
-        color: #7f8c8d;
+        color: var(--text-muted);
         font-size: 14px;
       }
       .divider {
-        color: #bdc3c7;
+        color: var(--border-color);
       }
       .actions-area {
         display: flex;
@@ -618,12 +789,12 @@ import {
         border-bottom: 1px solid #f5f7fa;
       }
       .detail-item .label {
-        color: #7f8c8d;
+        color: var(--text-muted);
         font-size: 14px;
         font-weight: 500;
       }
       .detail-item .value {
-        color: #2c3e50;
+        color: var(--secondary-color);
         font-size: 14px;
         font-weight: 600;
       }
@@ -639,7 +810,7 @@ import {
         flex-direction: column;
         align-items: center;
         padding: 48px;
-        color: #95a5a6;
+        color: var(--text-muted);
       }
       .empty-state mat-icon {
         font-size: 48px;
@@ -662,28 +833,37 @@ import {
       .reversed-amount {
         text-decoration: line-through;
         opacity: 0.6;
-        color: #7f8c8d;
+        color: var(--text-muted);
+      }
+      .reversed-marker {
+        color: var(--text-muted);
+        font-style: italic;
       }
     `,
   ],
 })
-export class SavingsAccountViewComponent implements OnInit {
+export class SavingsAccountViewComponent implements OnInit, OnDestroy {
   /** Selected tab; mat-tab-group tracked this internally, ion-segment does not. */
-  readonly activeTab = signal('0');
+  /** Exposed so the template names its tabs instead of numbering them. */
+  protected readonly TAB = SAVINGS_TAB;
+
+  private readonly popovers = viewChildren(IonPopover);
+
+  readonly activeTab = signal<SavingsTab>(SAVINGS_TAB.overview);
   private readonly savingsService = inject(SavingsAccountService);
   private readonly savingsTransactionsService = inject(SavingsAccountTransactionsService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly notifications = inject(NotificationService);
   private readonly dialogService = inject(DialogService);
-  private readonly translate = inject(TranslateService);
+  private readonly i18n = inject(I18N);
 
   accountId = 0;
   readonly account = signal<SavingsAccountData | null>(null);
   readonly transactions = signal<SavingsAccountTransactionData[]>([]);
   readonly charges = signal<SavingsAccountChargeData[]>([]);
 
-  transactionColumns = ['id', 'date', 'type', 'amount', 'runningBalance'];
+  transactionColumns = ['id', 'date', 'type', 'amount', 'runningBalance', 'actions'];
   chargeColumns = ['name', 'amount', 'outstanding'];
 
   get formattedSubmittedDate(): string {
@@ -717,6 +897,12 @@ export class SavingsAccountViewComponent implements OnInit {
         this.loadAccountData();
       }
     });
+  }
+
+  ngOnDestroy(): void {
+    for (const popover of this.popovers()) {
+      void popover.dismiss().catch(() => false);
+    }
   }
 
   loadAccountData() {
@@ -768,12 +954,12 @@ export class SavingsAccountViewComponent implements OnInit {
    * `reasonForBlock` drawn from a different code list per block type, which needs its own picker.
    */
   onSimpleCommand(command: string): void {
-    const titleKey = `SAVINGS.${command.replace(/([A-Z])/g, '_$1').toUpperCase()}`;
+    const titleKey = `SAVINGS.${command.replaceAll(/([A-Z])/g, '_$1').toUpperCase()}`;
     from(
       this.dialogService.confirm({
-        title: this.translate.instant(titleKey),
-        message: this.translate.instant(
-          `SAVINGS.CONFIRM_${command.replace(/([A-Z])/g, '_$1').toUpperCase()}`,
+        title: this.i18n.translate(titleKey),
+        message: this.i18n.translate(
+          `SAVINGS.CONFIRM_${command.replaceAll(/([A-Z])/g, '_$1').toUpperCase()}`,
         ),
       }),
     ).subscribe((confirmed) => {
@@ -810,20 +996,36 @@ export class SavingsAccountViewComponent implements OnInit {
    * is passed in rather than guessed.
    */
   onDatedCommand(command: string, dateField: string): void {
-    const key = command.replace(/([A-Z])/g, '_$1').toUpperCase();
+    const key = command.replaceAll(/([A-Z])/g, '_$1').toUpperCase();
     from(
       this.dialogService.confirm({
-        title: this.translate.instant(`SAVINGS.${key}`),
-        message: this.translate.instant(`SAVINGS.CONFIRM_${key}`),
+        title: this.i18n.translate(`SAVINGS.${key}`),
+        message: this.i18n.translate(`SAVINGS.CONFIRM_${key}`),
         destructive: command === 'reject',
       }),
     ).subscribe((confirmed) => {
       if (!confirmed) return;
       this.runCommand(command, {
-        [dateField]: formatDateToFineract(toIsoDate(new Date())),
+        [dateField]: formatDateToFineract(new Date()),
         dateFormat: FINERACT_DATE_FORMAT,
         locale: FINERACT_LOCALE,
       });
+    });
+  }
+
+  /**
+   * Returns an approved savings account to `Submitted and pending approval`.
+   *
+   * Not sent through {@link runCommand} with the usual `dateFormat`/`locale` — like the loan
+   * equivalent, `undoapproval` rejects both, answering 400 for parameters it does not expect.
+   * It accepts an empty body, or one carrying only `note`.
+   */
+  onUndoApproval(): void {
+    from(
+      this.dialogService.open<SavingsUndoApprovalResult>(SavingsUndoApprovalDialogComponent),
+    ).subscribe((result) => {
+      if (!result) return;
+      this.runCommand('undoapproval', result as Record<string, unknown>);
     });
   }
 
@@ -833,7 +1035,7 @@ export class SavingsAccountViewComponent implements OnInit {
         if (!result) return;
         this.runCommand('assignSavingsOfficer', {
           toSavingsOfficerId: result.toSavingsOfficerId,
-          assignmentDate: formatDateToFineract(toIsoDate(new Date())),
+          assignmentDate: formatDateToFineract(new Date()),
           dateFormat: FINERACT_DATE_FORMAT,
           locale: FINERACT_LOCALE,
         });
@@ -867,7 +1069,7 @@ export class SavingsAccountViewComponent implements OnInit {
           {
             transactionAmount: result.transactionAmount,
             reasonForBlock: result.reasonForBlock,
-            transactionDate: formatDateToFineract(toIsoDate(new Date())),
+            transactionDate: formatDateToFineract(new Date()),
             dateFormat: FINERACT_DATE_FORMAT,
             locale: FINERACT_LOCALE,
           } as never,
@@ -880,6 +1082,85 @@ export class SavingsAccountViewComponent implements OnInit {
     });
   }
 
+  /**
+   * Whether this row is a hold that still ties up money.
+   *
+   * A hold is `transactionType.amountHold`; once released, Fineract records the id of the
+   * releasing transaction on it. `releaseTransactionId` is `0` — not absent — while the hold
+   * stands, so the check is for a truthy id rather than for the key. Releasing twice is refused
+   * with `validation.msg.amount.is.not.on.hold`, and offering the button anyway would turn a
+   * settled claim into an error toast.
+   */
+  canRelease(transaction: SavingsAccountTransactionData): boolean {
+    const raw = transaction as unknown as Record<string, unknown>;
+    const type = raw['transactionType'] as Record<string, unknown> | undefined;
+    return Boolean(type?.['amountHold']) && !raw['releaseTransactionId'];
+  }
+
+  /**
+   * Whether this row can still be reversed.
+   *
+   * Holds and releases are excluded even though the platform accepts `undo` against them and
+   * answers `200`: a hold is unwound by releasing it, and an undo there reports success without
+   * freeing the money. Already-reversed rows are excluded for the same reason.
+   */
+  canUndo(transaction: SavingsAccountTransactionData): boolean {
+    const raw = transaction as unknown as Record<string, unknown>;
+    const type = raw['transactionType'] as Record<string, unknown> | undefined;
+    return !raw['reversed'] && !type?.['amountHold'] && !type?.['amountRelease'];
+  }
+
+  /**
+   * Frees a held amount.
+   *
+   * `releaseAmount` is addressed to the hold transaction itself, not to the account, and takes no
+   * body — the platform derives the amount from the transaction being released.
+   */
+  onReleaseAmount(transaction: SavingsAccountTransactionData): void {
+    void this.dialogService
+      .confirm({
+        title: this.i18n.translate('ACTIONS.RELEASE_AMOUNT'),
+        message: this.i18n.translate('ACTIONS.CONFIRM_RELEASE_AMOUNT'),
+      })
+      .then((confirmed) => {
+        if (!confirmed) return;
+        this.runTransactionCommand(Number(transaction.id), 'releaseAmount');
+      });
+  }
+
+  /**
+   * Reverses a transaction.
+   *
+   * The row stays in the list, struck through — Fineract marks it `reversed` rather than deleting
+   * it, and the ledger depends on that entry still being there.
+   */
+  onUndoTransaction(transaction: SavingsAccountTransactionData): void {
+    void this.dialogService
+      .confirm({
+        title: this.i18n.translate('ACTIONS.UNDO_TRANSACTION'),
+        message: this.i18n.translate('ACTIONS.CONFIRM_UNDO_TRANSACTION'),
+        destructive: true,
+      })
+      .then((confirmed) => {
+        if (!confirmed) return;
+        this.runTransactionCommand(Number(transaction.id), 'undo');
+      });
+  }
+
+  private runTransactionCommand(transactionId: number, command: string): void {
+    this.savingsTransactionsService
+      .postSavingsaccountsSavingsIdTransactionsTransactionId(
+        this.accountId,
+        transactionId,
+        {},
+        command,
+      )
+      .subscribe({
+        next: () => this.afterCommand(),
+        error: () => this.commandFailed(),
+      });
+  }
+
   private runCommand(command: string, payload: Record<string, unknown>): void {
     this.savingsService
       .postSavingsaccountsAccountId(this.accountId, payload as never, command)
@@ -890,12 +1171,12 @@ export class SavingsAccountViewComponent implements OnInit {
   }
 
   private afterCommand(): void {
-    this.notifications.success(this.translate.instant('COMMON.SUCCESS'));
+    this.notifications.success(this.i18n.translate('COMMON.SUCCESS'));
     this.loadAccountData();
   }
 
   private commandFailed(): void {
-    this.notifications.error(this.translate.instant('COMMON.ERRORS.UNEXPECTED'));
+    this.notifications.error(this.i18n.translate('COMMON.ERRORS.UNEXPECTED'));
   }
 
   onBlockCommand(command: 'block' | 'blockDebit' | 'blockCredit'): void {

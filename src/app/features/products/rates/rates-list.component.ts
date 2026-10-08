@@ -19,12 +19,12 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import { ColumnDef, CellTemplateDirective } from '../../../shared';
 import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 import { RateService, RateData } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 /**
  * Lists interest rates (name + percentage master data). Rates are small master-data
@@ -34,11 +34,10 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
   selector: 'app-rates-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
@@ -46,6 +45,7 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       title="nav.rates"
       helpTextKey="HELP.RATES_DESC"
       createButtonLabel="RATES.CREATE"
+      createPermission="CREATE_RATE"
       [columns]="columns"
       [data]="rates()"
       [totalRecords]="rates().length"
@@ -53,18 +53,18 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       (create)="onCreate()"
     >
       <ng-template appCellTemplate="active" let-row>
-        {{ (row.active ? 'COMMON.YES' : 'COMMON.NO') | translate }}
+        {{ (row.active ? 'COMMON.YES' : 'COMMON.NO') | appTranslate }}
       </ng-template>
       <ng-template appCellTemplate="actions" let-row>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'COMMON.EDIT' | translate"
-          [appTooltip]="'COMMON.EDIT' | translate"
+        <app-button
+          type="button"
+          intent="primary"
+          emphasis="quiet"
+          [label]="'COMMON.EDIT' | appTranslate"
+          icon="create-outline"
+          [appTooltip]="'COMMON.EDIT' | appTranslate"
           (click)="onEdit(row)"
-        >
-          <ion-icon name="create-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,

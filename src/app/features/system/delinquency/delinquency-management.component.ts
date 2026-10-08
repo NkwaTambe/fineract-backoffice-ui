@@ -19,8 +19,9 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { RouterModule } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { I18N, TranslatePipe } from '../../../core/adapters';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { DialogService } from '../../../core/services/dialog.service';
 import {
   IonButton,
   IonIcon,
@@ -40,12 +41,26 @@ import {
   DelinquencyBucketResponse,
 } from '../../../api';
 
+/**
+ * The tabs on this screen, named.
+ *
+ * They were positional strings — '0', '7' — which say nothing at the point of use and shift
+ * meaning whenever a tab is inserted in the middle. The values are still strings because
+ * `ion-segment` compares them as such.
+ */
+export const DELINQUENCY_TAB = {
+  ranges: 'ranges',
+  buckets: 'buckets',
+} as const;
+
+export type DelinquencyTab = (typeof DELINQUENCY_TAB)[keyof typeof DELINQUENCY_TAB];
+
 @Component({
   selector: 'app-delinquency-management',
   standalone: true,
   imports: [
     RouterModule,
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     HasPermissionDirective,
     CellTemplateDirective,
@@ -59,15 +74,15 @@ import {
   template: `
     <div class="management-container">
       <ion-segment [value]="activeTab()" (ionChange)="activeTab.set($any($event).detail.value)">
-        <ion-segment-button value="0">
-          <ion-label>{{ 'SYSTEM.DELINQUENCY_RANGES' | translate }}</ion-label>
+        <ion-segment-button [value]="TAB.ranges">
+          <ion-label>{{ 'SYSTEM.DELINQUENCY_RANGES' | appTranslate }}</ion-label>
         </ion-segment-button>
-        <ion-segment-button value="1">
-          <ion-label>{{ 'SYSTEM.DELINQUENCY_BUCKETS' | translate }}</ion-label>
+        <ion-segment-button [value]="TAB.buckets">
+          <ion-label>{{ 'SYSTEM.DELINQUENCY_BUCKETS' | appTranslate }}</ion-label>
         </ion-segment-button>
       </ion-segment>
 
-      @if (activeTab() === '0') {
+      @if (activeTab() === TAB.ranges) {
         <div class="tab-content">
           <app-data-table
             title="SYSTEM.DELINQUENCY_RANGES"
@@ -80,10 +95,10 @@ import {
               headerActions
               color="primary"
               [routerLink]="['ranges', 'create']"
-              *appHasPermission="'CREATE_DELINQUENCYRANGE'"
+              *appHasPermission="'CREATE_DELINQUENCY_RANGE'"
             >
               <ion-icon name="add-outline"></ion-icon>
-              {{ 'SYSTEM.CREATE_RANGE' | translate }}
+              {{ 'SYSTEM.CREATE_RANGE' | appTranslate }}
             </ion-button>
 
             <ng-template appCellTemplate="actions" let-row>
@@ -92,17 +107,19 @@ import {
                   fill="clear"
                   color="primary"
                   [routerLink]="['ranges', 'edit', row.id]"
-                  *appHasPermission="'UPDATE_DELINQUENCYRANGE'"
-                  [appTooltip]="'COMMON.EDIT' | translate"
+                  *appHasPermission="'UPDATE_DELINQUENCY_RANGE'"
+                  [attr.aria-label]="'COMMON.EDIT' | appTranslate"
+                  [appTooltip]="'COMMON.EDIT' | appTranslate"
                 >
                   <ion-icon name="create-outline"></ion-icon>
                 </ion-button>
                 <ion-button
                   fill="clear"
                   color="danger"
-                  (click)="onDeleteRange(row.id)"
-                  *appHasPermission="'DELETE_DELINQUENCYRANGE'"
-                  [appTooltip]="'COMMON.DELETE' | translate"
+                  (click)="onDeleteRange(row)"
+                  *appHasPermission="'DELETE_DELINQUENCY_RANGE'"
+                  [attr.aria-label]="'COMMON.DELETE' | appTranslate"
+                  [appTooltip]="'COMMON.DELETE' | appTranslate"
                 >
                   <ion-icon name="trash-outline"></ion-icon>
                 </ion-button>
@@ -111,7 +128,7 @@ import {
           </app-data-table>
         </div>
       }
-      @if (activeTab() === '1') {
+      @if (activeTab() === TAB.buckets) {
         <div class="tab-content">
           <app-data-table
             title="SYSTEM.DELINQUENCY_BUCKETS"
@@ -124,10 +141,10 @@ import {
               headerActions
               color="primary"
               [routerLink]="['buckets', 'create']"
-              *appHasPermission="'CREATE_DELINQUENCYBUCKET'"
+              *appHasPermission="'CREATE_DELINQUENCY_BUCKET'"
             >
               <ion-icon name="add-outline"></ion-icon>
-              {{ 'SYSTEM.CREATE_BUCKET' | translate }}
+              {{ 'SYSTEM.CREATE_BUCKET' | appTranslate }}
             </ion-button>
 
             <ng-template appCellTemplate="ranges" let-row>
@@ -142,17 +159,19 @@ import {
                   fill="clear"
                   color="primary"
                   [routerLink]="['buckets', 'edit', row.id]"
-                  *appHasPermission="'UPDATE_DELINQUENCYBUCKET'"
-                  [appTooltip]="'COMMON.EDIT' | translate"
+                  *appHasPermission="'UPDATE_DELINQUENCY_BUCKET'"
+                  [attr.aria-label]="'COMMON.EDIT' | appTranslate"
+                  [appTooltip]="'COMMON.EDIT' | appTranslate"
                 >
                   <ion-icon name="create-outline"></ion-icon>
                 </ion-button>
                 <ion-button
                   fill="clear"
                   color="danger"
-                  (click)="onDeleteBucket(row.id)"
-                  *appHasPermission="'DELETE_DELINQUENCYBUCKET'"
-                  [appTooltip]="'COMMON.DELETE' | translate"
+                  (click)="onDeleteBucket(row)"
+                  *appHasPermission="'DELETE_DELINQUENCY_BUCKET'"
+                  [attr.aria-label]="'COMMON.DELETE' | appTranslate"
+                  [appTooltip]="'COMMON.DELETE' | appTranslate"
                 >
                   <ion-icon name="trash-outline"></ion-icon>
                 </ion-button>
@@ -180,8 +199,13 @@ import {
 })
 export class DelinquencyManagementComponent implements OnInit {
   /** Selected tab; mat-tab-group tracked this internally, ion-segment does not. */
-  readonly activeTab = signal('0');
+  /** Exposed so the template names its tabs instead of numbering them. */
+  protected readonly TAB = DELINQUENCY_TAB;
+
+  readonly activeTab = signal<DelinquencyTab>(DELINQUENCY_TAB.ranges);
   private readonly delinquencyService = inject(DelinquencyRangeAndBucketsManagementService);
+  private readonly dialogService = inject(DialogService);
+  private readonly i18n = inject(I18N);
 
   readonly ranges = signal<DelinquencyRangeData[]>([]);
   readonly buckets = signal<DelinquencyBucketResponse[]>([]);
@@ -234,21 +258,35 @@ export class DelinquencyManagementComponent implements OnInit {
     });
   }
 
-  onDeleteRange(id: number): void {
-    if (confirm('Are you sure you want to delete this delinquency range?')) {
-      this.delinquencyService.deleteDelinquencyRangesDelinquencyRangeId(id).subscribe({
-        next: () => this.loadRanges(),
-        error: (err) => console.error('Delete range failed', err),
-      });
-    }
+  async onDeleteRange(row: DelinquencyRangeData): Promise<void> {
+    if (row.id === undefined) return;
+    const confirmed = await this.dialogService.confirm({
+      title: this.i18n.translate('SYSTEM.DELETE_DELINQUENCY_RANGE'),
+      message: this.i18n.translate('SYSTEM.CONFIRM_DELETE_DELINQUENCY_RANGE', {
+        classification: row.classification ?? '',
+      }),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    this.delinquencyService.deleteDelinquencyRangesDelinquencyRangeId(row.id).subscribe({
+      next: () => this.loadRanges(),
+      error: (err) => console.error('Delete range failed', err),
+    });
   }
 
-  onDeleteBucket(id: number): void {
-    if (confirm('Are you sure you want to delete this delinquency bucket?')) {
-      this.delinquencyService.deleteDelinquencyBucketsDelinquencyBucketId(id).subscribe({
-        next: () => this.loadBuckets(),
-        error: (err) => console.error('Delete bucket failed', err),
-      });
-    }
+  async onDeleteBucket(row: DelinquencyBucketResponse): Promise<void> {
+    if (row.id === undefined) return;
+    const confirmed = await this.dialogService.confirm({
+      title: this.i18n.translate('SYSTEM.DELETE_DELINQUENCY_BUCKET'),
+      message: this.i18n.translate('SYSTEM.CONFIRM_DELETE_DELINQUENCY_BUCKET', {
+        name: row.name ?? '',
+      }),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    this.delinquencyService.deleteDelinquencyBucketsDelinquencyBucketId(row.id).subscribe({
+      next: () => this.loadBuckets(),
+      error: (err) => console.error('Delete bucket failed', err),
+    });
   }
 }

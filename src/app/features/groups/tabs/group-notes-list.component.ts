@@ -20,7 +20,7 @@
 import { Component, OnInit, inject, input, signal } from '@angular/core';
 import { RouterModule } from '@angular/router';
 import { DatePipe } from '@angular/common';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 import {
   CellTemplateDirective,
@@ -29,8 +29,8 @@ import {
   HasPermissionDirective,
 } from '../../../shared';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
-import { NotesService, NoteData } from '../../../api';
-import { I18N, TranslatePipe } from '../../../core/adapters';
+import { ENTITY_NOTES_API, I18N, TranslatePipe } from '../../../core/adapters';
+import type { EntityNote } from '../../../core/adapters';
 import { DialogService } from '../../../core/services/dialog.service';
 import { NotificationService } from '../../../core/services/notification.service';
 
@@ -56,20 +56,20 @@ import { NotificationService } from '../../../core/services/notification.service
     CellTemplateDirective,
     HasPermissionDirective,
     TooltipDirective,
-    IonButton,
-    IonIcon,
+    ButtonComponent,
   ],
   template: `
     <div class="tab-actions">
-      <ion-button
-        color="primary"
+      <app-button
+        type="button"
+        intent="primary"
         data-testid="group-add-note"
-        [routerLink]="['/groups', groupId(), 'notes', 'create']"
+        icon="add-outline"
+        [link]="[basePath(), groupId(), 'notes', 'create']"
         *appHasPermission="'CREATE_GROUPNOTE'"
       >
-        <ion-icon name="add-outline"></ion-icon>
         {{ 'GROUPS.ADD_NOTE' | appTranslate }}
-      </ion-button>
+      </app-button>
     </div>
 
     <app-data-table
@@ -86,26 +86,26 @@ import { NotificationService } from '../../../core/services/notification.service
 
       <ng-template appCellTemplate="actions" let-row>
         <div class="action-buttons">
-          <ion-button
-            fill="clear"
-            color="primary"
-            [routerLink]="['/groups', groupId(), 'notes', 'edit', row.id]"
+          <app-button
+            type="button"
+            emphasis="quiet"
+            intent="primary"
+            icon="create-outline"
+            [link]="[basePath(), groupId(), 'notes', 'edit', row.id]"
             *appHasPermission="'UPDATE_GROUPNOTE'"
             [appTooltip]="'COMMON.EDIT' | appTranslate"
-            [attr.aria-label]="'COMMON.EDIT' | appTranslate"
-          >
-            <ion-icon name="create-outline"></ion-icon>
-          </ion-button>
-          <ion-button
-            fill="clear"
-            color="danger"
+            [label]="'COMMON.EDIT' | appTranslate"
+          />
+          <app-button
+            type="button"
+            emphasis="quiet"
+            intent="danger"
+            icon="trash-outline"
             (click)="onDelete(row.id)"
             *appHasPermission="'DELETE_GROUPNOTE'"
             [appTooltip]="'COMMON.DELETE' | appTranslate"
-            [attr.aria-label]="'COMMON.DELETE' | appTranslate"
-          >
-            <ion-icon name="trash-outline"></ion-icon>
-          </ion-button>
+            [label]="'COMMON.DELETE' | appTranslate"
+          />
         </div>
       </ng-template>
     </app-data-table>
@@ -126,13 +126,21 @@ import { NotificationService } from '../../../core/services/notification.service
 })
 export class GroupNotesListComponent implements OnInit {
   readonly groupId = input.required<number>();
+  /**
+   * Where the add and edit links point.
+   *
+   * A center's notes live under the *groups* resource — `/centers/{id}/notes` answers 404
+   * "Note does not support resource centers" — so the center view reuses this component with the
+   * center's id, and only the links need to stay inside `/centers`.
+   */
+  readonly basePath = input<string>('/groups');
 
-  private readonly noteService = inject(NotesService);
+  private readonly notesApi = inject(ENTITY_NOTES_API);
   private readonly dialogService = inject(DialogService);
   private readonly notifications = inject(NotificationService);
   private readonly i18n = inject(I18N);
 
-  readonly notes = signal<NoteData[]>([]);
+  readonly notes = signal<EntityNote[]>([]);
   readonly isLoading = signal(false);
   readonly hasError = signal(false);
 
@@ -149,9 +157,9 @@ export class GroupNotesListComponent implements OnInit {
 
   loadNotes(): void {
     this.isLoading.set(true);
-    this.noteService.getResourceTypeResourceIdNotes('groups', this.groupId()).subscribe({
+    this.notesApi.list('groups', this.groupId()).subscribe({
       next: (data) => {
-        this.notes.set(data ?? []);
+        this.notes.set(data);
         this.hasError.set(false);
         this.isLoading.set(false);
       },
@@ -170,15 +178,13 @@ export class GroupNotesListComponent implements OnInit {
     });
     if (!confirmed) return;
 
-    this.noteService
-      .deleteResourceTypeResourceIdNotesNoteId('groups', this.groupId(), noteId)
-      .subscribe({
-        next: () => {
-          void this.notifications.success(this.i18n.translate('GROUPS.NOTE_DELETED'));
-          this.loadNotes();
-        },
-        // No toast: errorInterceptor already raises one with the platform's message.
-        error: () => undefined,
-      });
+    this.notesApi.remove('groups', this.groupId(), noteId).subscribe({
+      next: () => {
+        void this.notifications.success(this.i18n.translate('GROUPS.NOTE_DELETED'));
+        this.loadNotes();
+      },
+      // No toast: errorInterceptor already raises one with the platform's message.
+      error: () => undefined,
+    });
   }
 }

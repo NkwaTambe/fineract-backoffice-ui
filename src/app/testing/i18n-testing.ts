@@ -17,8 +17,8 @@
  * under the License.
  */
 
-import { EnvironmentProviders, Provider, importProvidersFrom } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { EnvironmentProviders, Injector, Provider } from '@angular/core';
+import { TranslateService, TranslationObject, provideTranslateService } from '@ngx-translate/core';
 
 /**
  * Provides the translation library itself for specs that render shared components.
@@ -37,5 +37,16 @@ import { TranslateModule } from '@ngx-translate/core';
  * See DOCS/adr/0003-adapter-boundary.md.
  */
 export function provideTranslateTesting(): (Provider | EnvironmentProviders)[] {
-  return [importProvidersFrom(TranslateModule.forRoot())];
+  return provideTranslateService();
+}
+
+/** Loads translations without exposing the vendor service in individual specs. */
+export function setTranslateTestingTranslations(
+  injector: Injector,
+  language: string,
+  translations: TranslationObject,
+): void {
+  const translateService = injector.get(TranslateService);
+  translateService.setTranslation(language, translations);
+  translateService.use(language);
 }

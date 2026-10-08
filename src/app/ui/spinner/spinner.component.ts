@@ -1,0 +1,55 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+import { Component, input } from '@angular/core';
+import { IonSpinner } from '@ionic/angular/standalone';
+
+/**
+ * A busy indicator. `label` names the vendor's `progressbar`; without one the spinner is
+ * `aria-hidden`, for the case where visible text already says what is loading.
+ *
+ * The animation is not configurable — the application has one busy indicator, and `crescent`
+ * is what all 124 existing call sites pass.
+ */
+@Component({
+  selector: 'app-spinner',
+  standalone: true,
+  imports: [IonSpinner],
+  template: `
+    <ion-spinner
+      name="crescent"
+      data-testid="ui-spinner"
+      [attr.aria-label]="label() ?? null"
+      [attr.aria-hidden]="label() ? null : 'true'"
+    />
+  `,
+  styles: [
+    `
+      :host {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+    `,
+  ],
+})
+export class SpinnerComponent {
+  /** Already-translated announcement. Omit when adjacent text already says what is loading. */
+  readonly label = input<string>();
+}

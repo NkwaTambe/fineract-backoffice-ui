@@ -21,7 +21,8 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { OFFICE_API, TranslatePipe } from '../../../core/adapters';
+import type { Office } from '../../../core/adapters';
 import {
   IonButton,
   IonCard,
@@ -40,19 +41,14 @@ import {
 } from '@ionic/angular/standalone';
 import { toIsoDate } from '../../../core/utils/date-formatter';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
-import {
-  OfficesService,
-  PostOfficesRequest,
-  PutOfficesOfficeIdRequest,
-  GetOfficesResponse,
-} from '../../../api';
+import { createPickersReady } from '../../../shared/utils/pickers-ready';
 
 @Component({
   selector: 'app-office-form',
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonSpinner,
     IonInput,
@@ -76,8 +72,8 @@ import {
           <ion-card-title>
             {{
               isEditMode()
-                ? ('OFFICES.EDIT_OFFICE' | translate)
-                : ('OFFICES.CREATE_OFFICE' | translate)
+                ? ('OFFICES.EDIT_OFFICE' | appTranslate)
+                : ('OFFICES.CREATE_OFFICE' | appTranslate)
             }}
           </ion-card-title>
         </ion-card-header>
@@ -85,20 +81,20 @@ import {
         <ion-card-content>
           <form #officeForm="ngForm" (ngSubmit)="onSubmit()" class="office-form">
             <div class="form-grid">
-              <ion-item fill="outline" [appTooltip]="'HELP.OFFICE_NAME_DESC' | translate">
-                <ion-label position="stacked">{{ 'OFFICES.NAME' | translate }}</ion-label>
+              <ion-item fill="outline" [appTooltip]="'HELP.OFFICE_NAME_DESC' | appTranslate">
+                <ion-label position="stacked">{{ 'OFFICES.NAME' | appTranslate }}</ion-label>
                 <ion-input
-                  [attr.aria-label]="'OFFICES.NAME' | translate"
+                  [attr.aria-label]="'OFFICES.NAME' | appTranslate"
                   name="name"
                   [(ngModel)]="office().name"
                   required
                 ></ion-input>
               </ion-item>
 
-              <ion-item fill="outline" [appTooltip]="'HELP.PARENT_OFFICE_DESC' | translate">
-                <ion-label position="stacked">{{ 'OFFICES.PARENT' | translate }}</ion-label>
+              <ion-item fill="outline" [appTooltip]="'HELP.PARENT_OFFICE_DESC' | appTranslate">
+                <ion-label position="stacked">{{ 'OFFICES.PARENT' | appTranslate }}</ion-label>
                 <ion-select
-                  [attr.aria-label]="'OFFICES.PARENT' | translate"
+                  [attr.aria-label]="'OFFICES.PARENT' | appTranslate"
                   interface="popover"
                   name="parentId"
                   [(ngModel)]="office().parentId"
@@ -111,18 +107,22 @@ import {
                 </ion-select>
               </ion-item>
 
-              <ion-item fill="outline" [appTooltip]="'HELP.EXTERNAL_ID_DESC' | translate">
-                <ion-label position="stacked">{{ 'OFFICES.EXTERNAL_ID' | translate }}</ion-label>
+              <ion-item fill="outline" [appTooltip]="'HELP.EXTERNAL_ID_DESC' | appTranslate">
+                <ion-label position="stacked">{{ 'OFFICES.EXTERNAL_ID' | appTranslate }}</ion-label>
                 <ion-input
-                  [attr.aria-label]="'OFFICES.EXTERNAL_ID' | translate"
+                  [attr.aria-label]="'OFFICES.EXTERNAL_ID' | appTranslate"
                   name="externalId"
                   [(ngModel)]="office().externalId"
                 ></ion-input>
               </ion-item>
 
-              <ion-item fill="outline" [appTooltip]="'HELP.OPENING_DATE_DESC' | translate">
-                <ion-label position="stacked">{{ 'OFFICES.OPENING_DATE' | translate }}</ion-label>
-                <ion-datetime-button datetime="openingDate-picker"></ion-datetime-button>
+              <ion-item fill="outline" [appTooltip]="'HELP.OPENING_DATE_DESC' | appTranslate">
+                <ion-label position="stacked">{{
+                  'OFFICES.OPENING_DATE' | appTranslate
+                }}</ion-label>
+                @if (pickersReady()) {
+                  <ion-datetime-button datetime="openingDate-picker"></ion-datetime-button>
+                }
                 <ion-modal [keepContentsMounted]="true">
                   <ng-template>
                     <ion-datetime
@@ -141,7 +141,7 @@ import {
 
             <div class="form-actions">
               <ion-button fill="clear" type="button" (click)="onCancel()" [disabled]="isSaving()">
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               <ion-button
                 color="primary"
@@ -150,9 +150,9 @@ import {
               >
                 @if (isSaving()) {
                   <ion-spinner name="crescent"></ion-spinner>
-                  {{ 'COMMON.SAVING' | translate }}
+                  {{ 'COMMON.SAVING' | appTranslate }}
                 } @else {
-                  {{ 'COMMON.SAVE' | translate }}
+                  {{ 'COMMON.SAVE' | appTranslate }}
                 }
               </ion-button>
             </div>
@@ -175,14 +175,17 @@ import {
       }
       .form-grid {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
         gap: 16px;
       }
     `,
   ],
 })
 export class OfficeFormComponent implements OnInit {
-  private readonly officesService = inject(OfficesService);
+  /** See `createPickersReady` — the date buttons must not outrun their pickers. */
+  readonly pickersReady = createPickersReady();
+
+  private readonly officeApi = inject(OFFICE_API);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
@@ -192,9 +195,11 @@ export class OfficeFormComponent implements OnInit {
   readonly isEditMode = signal(false);
   readonly isSaving = signal(false);
 
-  readonly office = signal<PostOfficesRequest>({});
+  readonly office = signal<{ name?: string; externalId?: string | null; parentId?: number | null }>(
+    {},
+  );
   readonly openingDate = signal(toIsoDate(new Date()));
-  readonly offices = signal<GetOfficesResponse[]>([]);
+  readonly offices = signal<readonly Office[]>([]);
 
   ngOnInit() {
     this.loadOffices();
@@ -209,22 +214,21 @@ export class OfficeFormComponent implements OnInit {
   }
 
   loadOffices() {
-    this.officesService.getOffices(true).subscribe((offices) => {
+    this.officeApi.list(true).subscribe((offices) => {
       this.offices.set(offices);
     });
   }
 
   loadOfficeData() {
     if (!this.officeId) return;
-    this.officesService.getOfficesOfficeId(this.officeId).subscribe((data) => {
-      const dateArray = data.openingDate as unknown as number[];
-      if (dateArray) {
-        this.openingDate.set(toIsoDate(new Date(dateArray[0], dateArray[1] - 1, dateArray[2])));
-      }
+    this.officeApi.get(this.officeId).subscribe((office) => {
+      // Already `YYYY-MM-DD`, which is what the picker binds to. `parentId` needs no cast: the
+      // model declares it, where the generated response type does not.
+      if (office.openingDate) this.openingDate.set(office.openingDate);
       this.office.set({
-        name: data.name,
-        externalId: data.externalId,
-        parentId: (data as Record<string, unknown>)['parentId'] as number,
+        name: office.name,
+        externalId: office.externalId,
+        parentId: office.parentId,
       });
     });
   }
@@ -233,26 +237,33 @@ export class OfficeFormComponent implements OnInit {
     this.isSaving.set(true);
     const formattedDate = toIsoDate(this.openingDate());
 
+    // The date format and locale Fineract parses `openingDate` against are the adapter's
+    // business now. The create path used to mutate the signal's value in place to attach them.
+    // Subscribed per branch rather than through one shared observable: `create` answers the new
+    // office's id and `update` answers nothing, and a union of two differently-typed Observables
+    // has no single callable `subscribe`.
+    const done = {
+      next: () => void this.router.navigate([this.LIST_PATH]),
+      error: () => this.isSaving.set(false),
+    };
+
     if (this.isEditMode() && this.officeId) {
-      const payload: PutOfficesOfficeIdRequest = {
-        name: this.office().name,
-        externalId: this.office().externalId,
-        openingDate: formattedDate,
-        dateFormat: 'yyyy-MM-dd',
-        locale: 'en',
-      };
-      this.officesService.putOfficesOfficeId(this.officeId, payload).subscribe({
-        next: () => this.router.navigate([this.LIST_PATH]),
-        error: () => this.isSaving.set(false),
-      });
+      this.officeApi
+        .update(this.officeId, {
+          name: this.office().name ?? '',
+          externalId: this.office().externalId,
+          openingDate: formattedDate,
+        })
+        .subscribe(done);
     } else {
-      this.office().openingDate = formattedDate;
-      this.office().dateFormat = 'yyyy-MM-dd';
-      this.office().locale = 'en';
-      this.officesService.postOffices(this.office()).subscribe({
-        next: () => this.router.navigate([this.LIST_PATH]),
-        error: () => this.isSaving.set(false),
-      });
+      this.officeApi
+        .create({
+          name: this.office().name ?? '',
+          externalId: this.office().externalId,
+          openingDate: formattedDate,
+          parentId: this.office().parentId,
+        })
+        .subscribe(done);
     }
   }
 

@@ -19,15 +19,16 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
 import { of } from 'rxjs';
 import { catchError, tap } from 'rxjs/operators';
 import { ColumnDef, CellTemplateDirective } from '../../shared';
 import { DataTableComponent } from '../../shared/components/data-table/data-table.component';
 import { CalendarService, CalendarData } from '../../api';
+import { I18N, TranslatePipe } from '../../core/adapters';
 import { formatArrayDate } from '../../core/utils/date-formatter';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
 import { TooltipDirective } from '../../shared/directives/tooltip.directive';
+import { DialogService } from '../../core/services/dialog.service';
+import { ButtonComponent } from '../../ui/button/button.component';
 
 /**
  * Lists the calendars (meeting schedules) attached to a single group or center.
@@ -38,11 +39,10 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
   selector: 'app-calendars-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
@@ -52,6 +52,7 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
       title="CALENDARS.TITLE"
       helpTextKey="HELP.CALENDARS_DESC"
       createButtonLabel="CALENDARS.CREATE"
+      createPermission="CREATE_CALENDAR"
       [columns]="columns"
       [data]="calendars()"
       [totalRecords]="calendars().length"
@@ -62,24 +63,24 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
         {{ formatDate(row.startDate) }}
       </ng-template>
       <ng-template appCellTemplate="actions" let-row>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'COMMON.EDIT' | translate"
-          [appTooltip]="'COMMON.EDIT' | translate"
+        <app-button
+          type="button"
+          intent="primary"
+          emphasis="quiet"
+          [label]="'COMMON.EDIT' | appTranslate"
+          icon="create-outline"
+          [appTooltip]="'COMMON.EDIT' | appTranslate"
           (click)="onEdit(row)"
-        >
-          <ion-icon name="create-outline"></ion-icon>
-        </ion-button>
-        <ion-button
-          fill="clear"
-          color="danger"
-          [attr.aria-label]="'COMMON.DELETE' | translate"
-          [appTooltip]="'COMMON.DELETE' | translate"
+        />
+        <app-button
+          type="button"
+          intent="danger"
+          emphasis="quiet"
+          [label]="'COMMON.DELETE' | appTranslate"
+          icon="trash-outline"
+          [appTooltip]="'COMMON.DELETE' | appTranslate"
           (click)="onDelete(row)"
-        >
-          <ion-icon name="trash-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,
@@ -88,6 +89,8 @@ export class CalendarsListComponent implements OnInit {
   private readonly calendarService = inject(CalendarService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly dialogService = inject(DialogService);
+  private readonly i18n = inject(I18N);
 
   readonly columns: ColumnDef[] = [
     { key: 'title', label: 'CALENDARS.TITLE_FIELD', sortable: true },
@@ -139,12 +142,21 @@ export class CalendarsListComponent implements OnInit {
   }
 
   onDelete(row: CalendarData): void {
-    if (!row.id || !window.confirm('Delete this calendar?')) return;
-    this.calendarService
-      .deleteEntityTypeEntityIdCalendarsCalendarId(this.entityType, this.entityId, row.id)
-      .subscribe({
-        next: () => this.load(),
-        error: (err: unknown) => console.error('Failed to delete calendar', err),
+    if (!row.id) return;
+
+    void this.dialogService
+      .confirm({
+        title: this.i18n.translate('CALENDARS.DELETE'),
+        message: this.i18n.translate('CALENDARS.CONFIRM_DELETE', { name: row.title }),
+        destructive: true,
+      })
+      .then((confirmed) => {
+        if (!confirmed) return;
+        this.calendarService
+          .deleteEntityTypeEntityIdCalendarsCalendarId(this.entityType, this.entityId, row.id!)
+          .subscribe({
+            next: () => this.load(),
+          });
       });
   }
 }

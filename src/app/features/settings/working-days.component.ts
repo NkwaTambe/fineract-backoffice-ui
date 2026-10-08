@@ -20,8 +20,8 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
 import { WorkingDaysService, WorkingDaysData, WorkingDaysUpdateRequest } from '../../api';
+import { TranslatePipe } from '../../core/adapters';
 import { NotificationService } from '../../core/services/notification.service';
 import {
   IonButton,
@@ -44,7 +44,7 @@ import {
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonItem,
     IonLabel,
@@ -60,7 +60,7 @@ import {
     <div class="form-container">
       <ion-card>
         <ion-card-header>
-          <ion-card-title>Working Days & Reschedule Rules</ion-card-title>
+          <ion-card-title>{{ 'WORKING_DAYS.TITLE' | appTranslate }}</ion-card-title>
         </ion-card-header>
 
         <ion-card-content>
@@ -71,16 +71,18 @@ import {
                   [name]="day.name"
                   [ngModel]="recurrence()[day.code]"
                   (ngModelChange)="setDay(day.code, $event)"
-                  >{{ day.label }}</ion-checkbox
+                  >{{ day.label | appTranslate }}</ion-checkbox
                 >
               }
             </div>
 
             <div class="reschedule-rules mt-4">
               <ion-item fill="outline" class="full-width">
-                <ion-label position="stacked">Repayments Rescheduling Rule</ion-label>
+                <ion-label position="stacked">{{
+                  'WORKING_DAYS.REPAYMENTS_RESCHEDULING_RULE' | appTranslate
+                }}</ion-label>
                 <ion-select
-                  aria-label="Repayments Rescheduling Rule"
+                  [attr.aria-label]="'WORKING_DAYS.REPAYMENTS_RESCHEDULING_RULE' | appTranslate"
                   interface="popover"
                   name="rescheduleStrategy"
                   [ngModel]="rescheduleId()"
@@ -99,7 +101,7 @@ import {
                 [ngModel]="extendTerm()"
                 (ngModelChange)="extendTerm.set($event)"
               >
-                Extend Term for Daily Repayments
+                {{ 'WORKING_DAYS.EXTEND_TERM_DAILY_REPAYMENTS' | appTranslate }}
               </ion-checkbox>
 
               <ion-checkbox
@@ -107,13 +109,13 @@ import {
                 [ngModel]="extendTermForRepaymentsOnHolidays()"
                 (ngModelChange)="extendTermForRepaymentsOnHolidays.set($event)"
               >
-                Extend Term for Repayments on Holidays
+                {{ 'WORKING_DAYS.EXTEND_TERM_HOLIDAY_REPAYMENTS' | appTranslate }}
               </ion-checkbox>
             </div>
 
             <div class="form-actions">
               <ion-button color="primary" type="submit" [disabled]="isSaving()">
-                {{ isSaving() ? ('COMMON.SAVING' | translate) : ('COMMON.SAVE' | translate) }}
+                {{ isSaving() ? ('COMMON.SAVING' | appTranslate) : ('COMMON.SAVE' | appTranslate) }}
               </ion-button>
             </div>
           </form>
@@ -154,13 +156,13 @@ export class WorkingDaysComponent implements OnInit {
 
   /** Rendered in order; `code` is the BYDAY token the API uses. */
   protected readonly DAYS = [
-    { code: 'MO', name: 'monday', label: 'Monday' },
-    { code: 'TU', name: 'tuesday', label: 'Tuesday' },
-    { code: 'WE', name: 'wednesday', label: 'Wednesday' },
-    { code: 'TH', name: 'thursday', label: 'Thursday' },
-    { code: 'FR', name: 'friday', label: 'Friday' },
-    { code: 'SA', name: 'saturday', label: 'Saturday' },
-    { code: 'SU', name: 'sunday', label: 'Sunday' },
+    { code: 'MO', name: 'monday', label: 'COMMON.MONDAY' },
+    { code: 'TU', name: 'tuesday', label: 'COMMON.TUESDAY' },
+    { code: 'WE', name: 'wednesday', label: 'COMMON.WEDNESDAY' },
+    { code: 'TH', name: 'thursday', label: 'COMMON.THURSDAY' },
+    { code: 'FR', name: 'friday', label: 'COMMON.FRIDAY' },
+    { code: 'SA', name: 'saturday', label: 'COMMON.SATURDAY' },
+    { code: 'SU', name: 'sunday', label: 'COMMON.SUNDAY' },
   ] as const;
 
   workingDays: Record<string, unknown> = {};

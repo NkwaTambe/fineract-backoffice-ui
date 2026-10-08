@@ -19,7 +19,8 @@
 
 import { inject, input, signal, Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { HOLIDAY_API, OFFICE_API, TranslatePipe } from '../../core/adapters';
+import type { Holiday, Office } from '../../core/adapters';
 import { NotificationService } from '../../core/services/notification.service';
 import {
   IonButton,
@@ -38,12 +39,6 @@ import {
   CellTemplateDirective,
   StatusBadgeComponent,
 } from '../../shared';
-import {
-  HolidaysService,
-  OfficesService,
-  GetHolidaysResponse,
-  GetOfficesResponse,
-} from '../../api';
 
 /**
  * Inline Dialog component for activation confirmation.
@@ -51,18 +46,18 @@ import {
 @Component({
   selector: 'app-confirm-dialog',
   standalone: true,
-  imports: [TranslateModule, IonButton],
+  imports: [TranslatePipe, IonButton],
   template: `
-    <h2 class="dialog-title">{{ data().title | translate }}</h2>
+    <h2 class="dialog-title">{{ data().title | appTranslate }}</h2>
     <div class="dialog-content">
-      <p>{{ data().message | translate: data().params }}</p>
+      <p>{{ data().message | appTranslate: data().params }}</p>
     </div>
     <div class="dialog-actions">
       <ion-button fill="clear" (click)="dismiss(false)">
-        {{ 'COMMON.CANCEL' | translate }}
+        {{ 'COMMON.CANCEL' | appTranslate }}
       </ion-button>
       <ion-button color="primary" (click)="dismiss(true)">
-        {{ 'COMMON.CONFIRM' | translate }}
+        {{ 'COMMON.CONFIRM' | appTranslate }}
       </ion-button>
     </div>
   `,
@@ -88,7 +83,7 @@ export class ConfirmDialogComponent {
   selector: 'app-holidays-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
     StatusBadgeComponent,
@@ -105,6 +100,7 @@ export class ConfirmDialogComponent {
       title="nav.holidays"
       helpTextKey="HELP.HOLIDAYS_DESC"
       createButtonLabel="SETTINGS.CREATE_HOLIDAY"
+      createPermission="CREATE_HOLIDAY"
       [columns]="columns"
       [data]="holidays()"
       [totalRecords]="holidays().length"
@@ -115,9 +111,11 @@ export class ConfirmDialogComponent {
     >
       <div filters class="office-filter-container">
         <ion-item fill="outline" class="office-filter-field">
-          <ion-label position="stacked">{{ 'HOLIDAYS.APPLICABLE_OFFICES' | translate }}</ion-label>
+          <ion-label position="stacked">{{
+            'HOLIDAYS.APPLICABLE_OFFICES' | appTranslate
+          }}</ion-label>
           <ion-select
-            [attr.aria-label]="'HOLIDAYS.APPLICABLE_OFFICES' | translate"
+            [attr.aria-label]="'HOLIDAYS.APPLICABLE_OFFICES' | appTranslate"
             interface="popover"
             [value]="selectedOfficeId()"
             (ionChange)="onOfficeChange($event.detail.value)"
@@ -130,26 +128,52 @@ export class ConfirmDialogComponent {
       </div>
 
       <ng-template appCellTemplate="fromDate" let-holiday>
-        {{ formatArrayDate(holiday.fromDate) }}
+        {{ holiday.fromDate ?? '-' }}
       </ng-template>
 
       <ng-template appCellTemplate="toDate" let-holiday>
-        {{ formatArrayDate(holiday.toDate) }}
+        {{ holiday.toDate ?? '-' }}
       </ng-template>
 
       <ng-template appCellTemplate="status" let-holiday>
         <app-status-badge [status]="holiday.status"></app-status-badge>
       </ng-template>
 
+      <!--
+        Edit and delete are offered only while the holiday is pending activation, which is the
+        only state the platform accepts either command in. Before this the list had neither, so a
+        holiday entered with the wrong dates was permanent — and holidays move repayment dates.
+      -->
       <ng-template appCellTemplate="actions" let-holiday>
-        @if (holiday.status?.code === 'holidayStatusType.pending.for.activation') {
+        @if (holiday.status.isPending) {
           <ion-button
             fill="clear"
             color="primary"
-            [appTooltip]="'HOLIDAYS.ACTIVATE' | translate"
+            [attr.aria-label]="'HOLIDAYS.ACTIVATE' | appTranslate"
+            [appTooltip]="'HOLIDAYS.ACTIVATE' | appTranslate"
             (click)="onActivateHoliday(holiday)"
           >
             <ion-icon name="checkmark-circle-outline"></ion-icon>
+          </ion-button>
+          <ion-button
+            fill="clear"
+            color="primary"
+            data-testid="holiday-edit"
+            [attr.aria-label]="'COMMON.EDIT' | appTranslate"
+            [appTooltip]="'COMMON.EDIT' | appTranslate"
+            (click)="onEditHoliday(holiday)"
+          >
+            <ion-icon name="create-outline"></ion-icon>
+          </ion-button>
+          <ion-button
+            fill="clear"
+            color="danger"
+            data-testid="holiday-delete"
+            [attr.aria-label]="'COMMON.DELETE' | appTranslate"
+            [appTooltip]="'COMMON.DELETE' | appTranslate"
+            (click)="onDeleteHoliday(holiday)"
+          >
+            <ion-icon name="trash-outline"></ion-icon>
           </ion-button>
         }
       </ng-template>
@@ -170,8 +194,8 @@ export class ConfirmDialogComponent {
   ],
 })
 export class HolidaysListComponent implements OnInit {
-  private readonly holidaysService = inject(HolidaysService);
-  private readonly officesService = inject(OfficesService);
+  private readonly holidayApi = inject(HOLIDAY_API);
+  private readonly officeApi = inject(OFFICE_API);
   private readonly router = inject(Router);
   private readonly dialogService = inject(DialogService);
   private readonly notifications = inject(NotificationService);
@@ -184,8 +208,8 @@ export class HolidaysListComponent implements OnInit {
     { key: 'actions', label: 'COMMON.ACTIONS', sortable: false },
   ];
 
-  readonly holidays = signal<GetHolidaysResponse[]>([]);
-  readonly offices = signal<GetOfficesResponse[]>([]);
+  readonly holidays = signal<Holiday[]>([]);
+  readonly offices = signal<readonly Office[]>([]);
   readonly selectedOfficeId = signal(1);
   readonly isLoading = signal(false);
 
@@ -195,12 +219,14 @@ export class HolidaysListComponent implements OnInit {
 
   private loadOffices(): void {
     this.isLoading.set(true);
-    this.officesService.getOffices(true).subscribe({
+    this.officeApi.list(true).subscribe({
       next: (data) => {
-        this.offices.set(data || []);
-        if (this.offices().length > 0) {
-          const hasOffice1 = this.offices().some((o) => o.id === 1);
-          this.selectedOfficeId.set(hasOffice1 ? 1 : this.offices()[0].id!);
+        this.offices.set(data);
+        const [first] = this.offices();
+        if (first !== undefined) {
+          // `id` is non-optional on the model, so no `!` is needed to read the fallback.
+          const hasHeadOffice = this.offices().some((o) => o.id === 1);
+          this.selectedOfficeId.set(hasHeadOffice ? 1 : first.id);
         }
         this.loadHolidays();
       },
@@ -213,9 +239,9 @@ export class HolidaysListComponent implements OnInit {
 
   private loadHolidays(): void {
     this.isLoading.set(true);
-    this.holidaysService.getHolidays(this.selectedOfficeId()).subscribe({
+    this.holidayApi.list(this.selectedOfficeId()).subscribe({
       next: (data) => {
-        this.holidays.set(data || []);
+        this.holidays.set(data);
         this.isLoading.set(false);
       },
       error: (err) => {
@@ -234,7 +260,7 @@ export class HolidaysListComponent implements OnInit {
     this.router.navigate(['/settings/holidays/create']);
   }
 
-  onActivateHoliday(holiday: GetHolidaysResponse): Promise<void> {
+  onActivateHoliday(holiday: Holiday): Promise<void> {
     return this.dialogService
       .open(ConfirmDialogComponent, {
         data: {
@@ -246,7 +272,7 @@ export class HolidaysListComponent implements OnInit {
       .then((result) => {
         if (result) {
           this.isLoading.set(true);
-          this.holidaysService.postHolidaysHolidayId(holiday.id!, {}, 'activate').subscribe({
+          this.holidayApi.activate(holiday.id).subscribe({
             next: () => {
               this.notifications.success('Holiday activated successfully');
               this.loadHolidays();
@@ -261,10 +287,35 @@ export class HolidaysListComponent implements OnInit {
       });
   }
 
-  formatArrayDate(dateArray: unknown): string {
-    if (!dateArray || !Array.isArray(dateArray) || dateArray.length < 3) {
-      return '-';
-    }
-    return `${dateArray[0]}-${String(dateArray[1]).padStart(2, '0')}-${String(dateArray[2]).padStart(2, '0')}`;
+  onEditHoliday(holiday: Holiday): void {
+    void this.router.navigate(['/settings/holidays/edit', holiday.id]);
+  }
+
+  onDeleteHoliday(holiday: Holiday): Promise<void> {
+    return this.dialogService
+      .open(ConfirmDialogComponent, {
+        data: {
+          title: 'HOLIDAYS.DELETE_TITLE',
+          message: 'HOLIDAYS.DELETE_CONFIRM',
+          params: { name: holiday.name },
+        },
+      })
+      .then((result) => {
+        if (!result) {
+          return;
+        }
+        this.isLoading.set(true);
+        this.holidayApi.remove(holiday.id).subscribe({
+          next: () => {
+            this.notifications.success('Holiday deleted successfully');
+            this.loadHolidays();
+          },
+          error: (err) => {
+            this.isLoading.set(false);
+            console.error('Failed to delete holiday', err);
+            this.notifications.error('Failed to delete holiday');
+          },
+        });
+      });
   }
 }

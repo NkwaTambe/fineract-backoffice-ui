@@ -17,15 +17,31 @@
  * under the License.
  */
 
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  OnDestroy,
+  computed,
+  inject,
+  signal,
+  viewChildren,
+} from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Observable, from } from 'rxjs';
-import { TranslateModule } from '@ngx-translate/core';
+import { Observable, from, map } from 'rxjs';
 import { DecimalPipe, NgClass } from '@angular/common';
 import { StatusBadgeComponent } from '../../shared/components/status-badge/status-badge.component';
 import { EntityDatatablesComponent } from '../../shared/components/entity-datatables/entity-datatables.component';
-import { FixedDepositAccountService, RecurringDepositAccountService } from '../../api';
-import { I18N } from '../../core/adapters';
+import { SavingsStandingInstructionsTabComponent } from './savings/savings-standing-instructions-tab.component';
+import {
+  FixedDepositAccountService,
+  FixedDepositAccountTransactionsService,
+  RecurringDepositAccountService,
+  RecurringDepositAccountTransactionsService,
+  SavingsAccountChargeData,
+} from '../../api';
+import { BASE_PATH } from '../../api/variables';
+import { I18N, TranslatePipe } from '../../core/adapters';
 import { NotificationService } from '../../core/services/notification.service';
 import { DialogService } from '../../core/services/dialog.service';
 import {
@@ -56,14 +72,64 @@ import {
   IonSegmentButton,
 } from '@ionic/angular/standalone';
 
+/**
+ * One row of a deposit product's interest rate chart.
+ *
+ * Read off `accountChart.chartSlabs` on the same `associations=all` response
+ * `loadCharges` already fetches for the charges tab — no separate request. The generated
+ * `GetFixedDepositAccountsChartSlabs`/`GetRecurringDepositAccountsChartSlabs` models describe
+ * only `annualInterestRate`, `currency`, `fromPeriod`, `id`, `periodType` and `toPeriod`; the
+ * amount range, description and incentives fields the real response carries (and web-app's own
+ * `interest-rate-chart-tab` renders) aren't in either generated model, so this is typed locally
+ * from what is actually read off the wire rather than forced through the incomplete type.
+ */
+interface ChartSlabIncentive {
+  entityType?: { value?: string };
+  attributeName?: { value?: string };
+  conditionType?: { value?: string };
+  attributeValueDesc?: string;
+  incentiveType?: { value?: string };
+  amount?: number;
+}
+
+interface ChartSlab {
+  fromPeriod?: number;
+  toPeriod?: number;
+  periodType?: { value?: string };
+  amountRangeFrom?: number;
+  amountRangeTo?: number;
+  annualInterestRate?: number;
+  description?: string;
+  incentives?: ChartSlabIncentive[];
+}
+
+/**
+ * The tabs on this screen, named.
+ *
+ * They were positional strings — '0', '7' — which say nothing at the point of use and shift
+ * meaning whenever a tab is inserted in the middle. The values are still strings because
+ * `ion-segment` compares them as such.
+ */
+export const DEPOSIT_TAB = {
+  overview: 'overview',
+  transactions: 'transactions',
+  charges: 'charges',
+  interestRateChart: 'interestRateChart',
+  standingInstructions: 'standingInstructions',
+  customFields: 'customFields',
+} as const;
+
+export type DepositTab = (typeof DEPOSIT_TAB)[keyof typeof DEPOSIT_TAB];
+
 @Component({
   selector: 'app-deposit-account-view',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     CdkTableModule,
     StatusBadgeComponent,
     EntityDatatablesComponent,
+    SavingsStandingInstructionsTabComponent,
     DecimalPipe,
     NgClass,
     IonIcon,
@@ -104,7 +170,7 @@ import {
             <div class="actions-area">
               <ion-button color="primary" id="actionsMenu-trigger" data-testid="deposit-actions">
                 <ion-icon name="settings-outline"></ion-icon>
-                {{ 'COMMON.ACTIONS' | translate }}
+                {{ 'COMMON.ACTIONS' | appTranslate }}
               </ion-button>
               <ion-popover trigger="actionsMenu-trigger" [dismissOnSelect]="true">
                 <ng-template>
@@ -112,11 +178,11 @@ import {
                     @if (isPending()) {
                       <ion-item button data-testid="deposit-action-approve" (click)="onApprove()">
                         <ion-icon slot="start" name="checkmark-outline"></ion-icon>
-                        <ion-label>{{ 'ACTIONS.APPROVE' | translate }}</ion-label>
+                        <ion-label>{{ 'ACTIONS.APPROVE' | appTranslate }}</ion-label>
                       </ion-item>
                       <ion-item button data-testid="deposit-action-reject" (click)="onReject()">
                         <ion-icon slot="start" name="close-circle-outline"></ion-icon>
-                        <ion-label>{{ 'ACTIONS.REJECT' | translate }}</ion-label>
+                        <ion-label>{{ 'ACTIONS.REJECT' | appTranslate }}</ion-label>
                       </ion-item>
                       <ion-item
                         button
@@ -124,13 +190,13 @@ import {
                         (click)="onWithdrawnByApplicant()"
                       >
                         <ion-icon slot="start" name="person-remove-outline"></ion-icon>
-                        <ion-label>{{ 'ACTIONS.WITHDRAWN_BY_CLIENT' | translate }}</ion-label>
+                        <ion-label>{{ 'ACTIONS.WITHDRAWN_BY_CLIENT' | appTranslate }}</ion-label>
                       </ion-item>
                     }
                     @if (isApproved()) {
                       <ion-item button data-testid="deposit-action-activate" (click)="onActivate()">
                         <ion-icon slot="start" name="play-circle-outline"></ion-icon>
-                        <ion-label>{{ 'ACTIONS.ACTIVATE' | translate }}</ion-label>
+                        <ion-label>{{ 'ACTIONS.ACTIVATE' | appTranslate }}</ion-label>
                       </ion-item>
                       <ion-item
                         button
@@ -138,27 +204,33 @@ import {
                         (click)="onUndoApproval()"
                       >
                         <ion-icon slot="start" name="arrow-undo-outline"></ion-icon>
-                        <ion-label>{{ 'ACTIONS.UNDO_APPROVAL' | translate }}</ion-label>
+                        <ion-label>{{ 'ACTIONS.UNDO_APPROVAL' | appTranslate }}</ion-label>
                       </ion-item>
                     }
                     @if (isActive()) {
+                      <ion-item button data-testid="deposit-action-deposit" (click)="onDeposit()">
+                        <ion-icon slot="start" name="add-outline"></ion-icon>
+                        <ion-label>{{ 'SAVINGS.DEPOSIT' | appTranslate }}</ion-label>
+                      </ion-item>
+                      <!-- Withdrawal is a recurring-deposit capability only. A fixed deposit
+                           refuses it outright — see onWithdraw. -->
                       @if (isRD) {
-                        <ion-item button (click)="onDeposit()">
-                          <ion-icon slot="start" name="add-outline"></ion-icon>
-                          <ion-label>{{ 'SAVINGS.DEPOSIT' | translate }}</ion-label>
+                        <ion-item
+                          button
+                          data-testid="deposit-action-withdraw"
+                          (click)="onWithdraw()"
+                        >
+                          <ion-icon slot="start" name="remove-outline"></ion-icon>
+                          <ion-label>{{ 'SAVINGS.WITHDRAW' | appTranslate }}</ion-label>
                         </ion-item>
                       }
-                      <ion-item button (click)="onWithdraw()">
-                        <ion-icon slot="start" name="remove-outline"></ion-icon>
-                        <ion-label>{{ 'SAVINGS.WITHDRAW' | translate }}</ion-label>
-                      </ion-item>
                       <ion-item
                         button
                         data-testid="deposit-action-postInterest"
                         (click)="onPostInterest()"
                       >
                         <ion-icon slot="start" name="cash-outline"></ion-icon>
-                        <ion-label>{{ 'ACTIONS.POST_INTEREST' | translate }}</ion-label>
+                        <ion-label>{{ 'ACTIONS.POST_INTEREST' | appTranslate }}</ion-label>
                       </ion-item>
                       <ion-item
                         button
@@ -166,16 +238,16 @@ import {
                         (click)="onPrematureClose()"
                       >
                         <ion-icon slot="start" name="alert-circle-outline"></ion-icon>
-                        <ion-label>{{ 'ACTIONS.PREMATURE_CLOSE' | translate }}</ion-label>
+                        <ion-label>{{ 'ACTIONS.PREMATURE_CLOSE' | appTranslate }}</ion-label>
                       </ion-item>
                       <ion-item button data-testid="deposit-action-close" (click)="onClose()">
                         <ion-icon slot="start" name="lock-closed-outline"></ion-icon>
-                        <ion-label>{{ 'ACTIONS.CLOSE' | translate }}</ion-label>
+                        <ion-label>{{ 'ACTIONS.CLOSE' | appTranslate }}</ion-label>
                       </ion-item>
                     }
                     @if (!isPending() && !isApproved() && !isActive()) {
                       <ion-item data-testid="deposit-no-actions">
-                        <ion-label>{{ 'ACTIONS.NONE_AVAILABLE' | translate }}</ion-label>
+                        <ion-label>{{ 'ACTIONS.NONE_AVAILABLE' | appTranslate }}</ion-label>
                       </ion-item>
                     }
                   </ion-list>
@@ -184,44 +256,59 @@ import {
 
               <ion-button fill="clear" (click)="onBack()">
                 <ion-icon name="arrow-back-outline"></ion-icon>
-                {{ 'COMMON.BACK' | translate }}
+                {{ 'COMMON.BACK' | appTranslate }}
               </ion-button>
             </div>
           </ion-card-content>
         </ion-card>
 
         <ion-segment [value]="activeTab()" (ionChange)="activeTab.set($any($event).detail.value)">
-          <ion-segment-button value="0">
-            <ion-label>{{ 'COMMON.OVERVIEW' | translate }}</ion-label>
+          <ion-segment-button [value]="TAB.overview">
+            <ion-label>{{ 'COMMON.OVERVIEW' | appTranslate }}</ion-label>
           </ion-segment-button>
-          <ion-segment-button value="1">
-            <ion-label>{{ 'COMMON.TRANSACTIONS' | translate }}</ion-label>
+          <ion-segment-button [value]="TAB.transactions" data-testid="deposit-tab-transactions">
+            <ion-label>{{ 'COMMON.TRANSACTIONS' | appTranslate }}</ion-label>
           </ion-segment-button>
-          <ion-segment-button value="2">
-            <ion-label>{{ 'SYSTEM.CUSTOM_FIELDS' | translate }}</ion-label>
+          <ion-segment-button [value]="TAB.charges" data-testid="deposit-tab-charges">
+            <ion-label>{{ 'LOANS.CHARGES' | appTranslate }}</ion-label>
+          </ion-segment-button>
+          <ion-segment-button
+            [value]="TAB.interestRateChart"
+            data-testid="deposit-tab-interest-rate-chart"
+          >
+            <ion-label>{{ 'INTEREST_RATE_CHARTS.TAB_LABEL' | appTranslate }}</ion-label>
+          </ion-segment-button>
+          <ion-segment-button
+            [value]="TAB.standingInstructions"
+            data-testid="deposit-tab-standing-instructions"
+          >
+            <ion-label>{{ 'SAVINGS.STANDING_INSTRUCTIONS' | appTranslate }}</ion-label>
+          </ion-segment-button>
+          <ion-segment-button [value]="TAB.customFields">
+            <ion-label>{{ 'SYSTEM.CUSTOM_FIELDS' | appTranslate }}</ion-label>
           </ion-segment-button>
         </ion-segment>
 
-        @if (activeTab() === '0') {
+        @if (activeTab() === TAB.overview) {
           <div class="tab-content">
             <div class="info-grid">
               <ion-card class="info-card">
                 <ion-card-header>
-                  <ion-card-title>{{ 'COMMON.DETAILS' | translate }}</ion-card-title>
+                  <ion-card-title>{{ 'COMMON.DETAILS' | appTranslate }}</ion-card-title>
                 </ion-card-header>
                 <ion-card-content class="details-list">
                   <div class="detail-item">
-                    <span class="label">{{ 'COMMON.BALANCE' | translate }}</span>
+                    <span class="label">{{ 'COMMON.BALANCE' | appTranslate }}</span>
                     <span class="value"
                       >{{ getCurrencySymbol() }} {{ getAccountBalance() | number: '1.2-2' }}</span
                     >
                   </div>
                   <div class="detail-item">
-                    <span class="label">{{ 'COMMON.INTEREST_RATE' | translate }}</span>
+                    <span class="label">{{ 'COMMON.INTEREST_RATE' | appTranslate }}</span>
                     <span class="value">{{ account()?.['nominalAnnualInterestRate'] }}%</span>
                   </div>
                   <div class="detail-item">
-                    <span class="label">{{ 'SAVINGS.MIN_BALANCE_REQUIRED' | translate }}</span>
+                    <span class="label">{{ 'SAVINGS.MIN_BALANCE_REQUIRED' | appTranslate }}</span>
                     <span class="value">{{ account()?.['minRequiredOpeningBalance'] }}</span>
                   </div>
                 </ion-card-content>
@@ -229,11 +316,11 @@ import {
 
               <ion-card class="info-card">
                 <ion-card-header>
-                  <ion-card-title>{{ 'LOANS.TIMELINE_STATUS' | translate }}</ion-card-title>
+                  <ion-card-title>{{ 'LOANS.TIMELINE_STATUS' | appTranslate }}</ion-card-title>
                 </ion-card-header>
                 <ion-card-content class="details-list">
                   <div class="detail-item">
-                    <span class="label">{{ 'COMMON.ACTIVATION_DATE' | translate }}</span>
+                    <span class="label">{{ 'COMMON.ACTIVATION_DATE' | appTranslate }}</span>
                     <span class="value">{{ getActivationDate() }}</span>
                   </div>
                 </ion-card-content>
@@ -241,35 +328,227 @@ import {
             </div>
           </div>
         }
-        @if (activeTab() === '1') {
+        @if (activeTab() === TAB.transactions) {
           <div class="tab-content">
-            <table cdk-table [dataSource]="transactions()" class="full-width-table">
-              <ng-container cdkColumnDef="id">
-                <th cdk-header-cell *cdkHeaderCellDef>ID</th>
-                <td cdk-cell *cdkCellDef="let tx">{{ tx.id }}</td>
-              </ng-container>
-              <ng-container cdkColumnDef="date">
-                <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.DATE' | translate }}</th>
-                <td cdk-cell *cdkCellDef="let tx">{{ formatDate(tx.date) }}</td>
-              </ng-container>
-              <ng-container cdkColumnDef="type">
-                <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.TYPE' | translate }}</th>
-                <td cdk-cell *cdkCellDef="let tx">{{ tx.transactionType?.value }}</td>
-              </ng-container>
-              <ng-container cdkColumnDef="amount">
-                <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.AMOUNT' | translate }}</th>
-                <td cdk-cell *cdkCellDef="let tx">
-                  <span [ngClass]="tx.entryType === 'DEBIT' ? 'debit' : 'credit'">
-                    {{ tx.currency?.displaySymbol }} {{ tx.amount | number: '1.2-2' }}
-                  </span>
-                </td>
-              </ng-container>
-              <tr cdk-header-row *cdkHeaderRowDef="['id', 'date', 'type', 'amount']"></tr>
-              <tr cdk-row *cdkRowDef="let row; columns: ['id', 'date', 'type', 'amount']"></tr>
-            </table>
+            @if (transactions().length > 0) {
+              <table cdk-table [dataSource]="transactions()" class="full-width-table">
+                <ng-container cdkColumnDef="id">
+                  <th cdk-header-cell *cdkHeaderCellDef>ID</th>
+                  <td cdk-cell *cdkCellDef="let tx">{{ tx.id }}</td>
+                </ng-container>
+                <ng-container cdkColumnDef="date">
+                  <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.DATE' | appTranslate }}</th>
+                  <td cdk-cell *cdkCellDef="let tx">{{ formatDate(tx.date) }}</td>
+                </ng-container>
+                <ng-container cdkColumnDef="type">
+                  <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.TYPE' | appTranslate }}</th>
+                  <td cdk-cell *cdkCellDef="let tx">{{ tx.transactionType?.value }}</td>
+                </ng-container>
+                <ng-container cdkColumnDef="amount">
+                  <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.AMOUNT' | appTranslate }}</th>
+                  <td cdk-cell *cdkCellDef="let tx">
+                    <span
+                      [ngClass]="{
+                        debit: tx.entryType === 'DEBIT' && !tx.reversed,
+                        credit: tx.entryType !== 'DEBIT' && !tx.reversed,
+                        'reversed-amount': tx.reversed,
+                      }"
+                    >
+                      {{ tx.currency?.displaySymbol }} {{ tx.amount | number: '1.2-2' }}
+                    </span>
+                  </td>
+                </ng-container>
+                <ng-container cdkColumnDef="runningBalance">
+                  <th cdk-header-cell *cdkHeaderCellDef>
+                    {{ 'COMMON.RUNNING_BALANCE' | appTranslate }}
+                  </th>
+                  <td cdk-cell *cdkCellDef="let tx">
+                    {{ tx.currency?.displaySymbol }} {{ tx.runningBalance || 0 | number: '1.2-2' }}
+                  </td>
+                </ng-container>
+                <ng-container cdkColumnDef="actions">
+                  <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.ACTIONS' | appTranslate }}</th>
+                  <td cdk-cell *cdkCellDef="let tx">
+                    @if (canUndo(tx)) {
+                      <ion-button
+                        fill="clear"
+                        color="danger"
+                        size="small"
+                        [attr.data-testid]="'deposit-tx-undo-' + tx.id"
+                        [attr.aria-label]="'ACTIONS.UNDO_TRANSACTION' | appTranslate"
+                        (click)="onUndoTransaction(tx)"
+                      >
+                        <ion-icon name="arrow-undo-outline"></ion-icon>
+                      </ion-button>
+                    } @else if (tx.reversed) {
+                      <span class="reversed-marker" data-testid="deposit-tx-reversed">
+                        {{ 'COMMON.REVERSED' | appTranslate }}
+                      </span>
+                    }
+                  </td>
+                </ng-container>
+                <tr cdk-header-row *cdkHeaderRowDef="transactionColumns"></tr>
+                <tr cdk-row *cdkRowDef="let row; columns: transactionColumns"></tr>
+              </table>
+            } @else {
+              <div class="empty-state" data-testid="deposit-no-transactions">
+                <ion-icon name="receipt-outline"></ion-icon>
+                <p>{{ 'LOANS.NO_TRANSACTIONS' | appTranslate }}</p>
+              </div>
+            }
           </div>
         }
-        @if (activeTab() === '2') {
+        @if (activeTab() === TAB.charges) {
+          <div class="tab-content">
+            <ion-card class="table-card">
+              <ion-card-content>
+                @if (charges().length > 0) {
+                  <table cdk-table [dataSource]="charges()" class="full-width-table">
+                    <ng-container cdkColumnDef="name">
+                      <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.NAME' | appTranslate }}</th>
+                      <td cdk-cell *cdkCellDef="let c">{{ c.name }}</td>
+                    </ng-container>
+
+                    <ng-container cdkColumnDef="amount">
+                      <th cdk-header-cell *cdkHeaderCellDef>
+                        {{ 'COMMON.AMOUNT' | appTranslate }}
+                      </th>
+                      <td cdk-cell *cdkCellDef="let c">
+                        {{ getCurrencySymbol() }} {{ c.amount | number: '1.2-2' }}
+                      </td>
+                    </ng-container>
+
+                    <ng-container cdkColumnDef="outstanding">
+                      <th cdk-header-cell *cdkHeaderCellDef>
+                        {{ 'LOANS.REPAYMENT_SCHEDULE_HEADERS.OUTSTANDING' | appTranslate }}
+                      </th>
+                      <td cdk-cell *cdkCellDef="let c">
+                        {{ getCurrencySymbol() }} {{ c.amountOutstanding | number: '1.2-2' }}
+                      </td>
+                    </ng-container>
+
+                    <tr cdk-header-row *cdkHeaderRowDef="chargeColumns"></tr>
+                    <tr cdk-row *cdkRowDef="let row; columns: chargeColumns"></tr>
+                  </table>
+                } @else {
+                  <div class="empty-state" data-testid="deposit-no-charges">
+                    <ion-icon name="cash-outline"></ion-icon>
+                    <p>{{ 'SAVINGS.NO_CHARGES' | appTranslate }}</p>
+                  </div>
+                }
+              </ion-card-content>
+            </ion-card>
+          </div>
+        }
+        @if (activeTab() === TAB.interestRateChart) {
+          <div class="tab-content">
+            <ion-card class="table-card">
+              <ion-card-content>
+                @if (chartSlabs().length > 0) {
+                  <table class="full-width-table" data-testid="deposit-interest-rate-chart">
+                    <thead>
+                      <tr>
+                        <th>{{ 'COMMON.PERIOD' | appTranslate }}</th>
+                        <th>
+                          {{ 'INTEREST_RATE_CHARTS.AMOUNT_RANGE_FROM' | appTranslate }} -
+                          {{ 'INTEREST_RATE_CHARTS.AMOUNT_RANGE_TO' | appTranslate }}
+                        </th>
+                        <th>{{ 'INTEREST_RATE_CHARTS.ANNUAL_INTEREST_RATE' | appTranslate }}</th>
+                        <th>{{ 'INTEREST_RATE_CHARTS.DESCRIPTION' | appTranslate }}</th>
+                        <th>{{ 'COMMON.ACTIONS' | appTranslate }}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (slab of chartSlabs(); track $index) {
+                        <tr>
+                          <td>
+                            {{ slab.fromPeriod }} - {{ slab.toPeriod }} {{ slab.periodType?.value }}
+                          </td>
+                          <td>
+                            {{ slab.amountRangeFrom | number: '1.2-2' }} -
+                            {{ slab.amountRangeTo | number: '1.2-2' }}
+                          </td>
+                          <td>{{ slab.annualInterestRate | number: '1.2-2' }} %</td>
+                          <td>{{ slab.description }}</td>
+                          <td>
+                            @if (slab.incentives?.length) {
+                              <ion-button
+                                fill="clear"
+                                size="small"
+                                [attr.data-testid]="'deposit-toggle-incentives-' + $index"
+                                (click)="onToggleIncentives($index)"
+                              >
+                                {{
+                                  (expandedSlabIndex() === $index
+                                    ? 'INTEREST_RATE_CHARTS.HIDE_INCENTIVES'
+                                    : 'INTEREST_RATE_CHARTS.VIEW_INCENTIVES'
+                                  ) | appTranslate
+                                }}
+                              </ion-button>
+                            }
+                          </td>
+                        </tr>
+                        @if (expandedSlabIndex() === $index && slab.incentives?.length) {
+                          <tr>
+                            <td colspan="5">
+                              <h4>{{ 'INTEREST_RATE_CHARTS.INCENTIVES' | appTranslate }}</h4>
+                              <table class="full-width-table incentives-table">
+                                <thead>
+                                  <tr>
+                                    <th>{{ 'SYSTEM.ENTITY_TYPE' | appTranslate }}</th>
+                                    <th>
+                                      {{ 'INTEREST_RATE_CHARTS.ATTRIBUTE_NAME' | appTranslate }}
+                                    </th>
+                                    <th>
+                                      {{ 'INTEREST_RATE_CHARTS.CONDITION_TYPE' | appTranslate }}
+                                    </th>
+                                    <th>
+                                      {{ 'INTEREST_RATE_CHARTS.ATTRIBUTE_VALUE' | appTranslate }}
+                                    </th>
+                                    <th>
+                                      {{ 'INTEREST_RATE_CHARTS.INCENTIVE_TYPE' | appTranslate }}
+                                    </th>
+                                    <th>{{ 'COMMON.AMOUNT' | appTranslate }}</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  @for (incentive of slab.incentives; track $index) {
+                                    <tr>
+                                      <td>{{ incentive.entityType?.value }}</td>
+                                      <td>{{ incentive.attributeName?.value }}</td>
+                                      <td>{{ incentive.conditionType?.value }}</td>
+                                      <td>{{ incentive.attributeValueDesc }}</td>
+                                      <td>{{ incentive.incentiveType?.value }}</td>
+                                      <td>{{ incentive.amount | number: '1.2-2' }}</td>
+                                    </tr>
+                                  }
+                                </tbody>
+                              </table>
+                            </td>
+                          </tr>
+                        }
+                      }
+                    </tbody>
+                  </table>
+                } @else {
+                  <div class="empty-state" data-testid="deposit-no-interest-rate-chart">
+                    <ion-icon name="trending-up-outline"></ion-icon>
+                    <p>{{ 'INTEREST_RATE_CHARTS.NO_CHART' | appTranslate }}</p>
+                  </div>
+                }
+              </ion-card-content>
+            </ion-card>
+          </div>
+        }
+        @if (activeTab() === TAB.standingInstructions) {
+          <div class="tab-content">
+            <app-savings-standing-instructions-tab
+              [savingsAccountId]="accountId"
+              [clientId]="clientId()"
+            ></app-savings-standing-instructions-tab>
+          </div>
+        }
+        @if (activeTab() === TAB.customFields) {
           <div class="tab-content">
             <app-entity-datatables
               [apptableName]="isRD ? 'm_savings_account' : 'm_savings_account'"
@@ -325,7 +604,7 @@ import {
         display: flex;
         gap: 8px;
         align-items: center;
-        color: #666;
+        color: var(--text-muted);
         font-size: 14px;
       }
       .actions-area {
@@ -356,7 +635,7 @@ import {
         padding-bottom: 8px;
       }
       .label {
-        color: #777;
+        color: var(--text-muted);
       }
       .value {
         font-weight: 600;
@@ -370,14 +649,48 @@ import {
       .credit {
         color: #2ecc71;
       }
+      /* Matches the savings account view, so a reversed row reads the same on both screens. */
+      .reversed-amount {
+        text-decoration: line-through;
+        opacity: 0.6;
+        color: var(--text-muted);
+      }
+      .reversed-marker {
+        color: var(--text-muted, #6b7280);
+        font-style: italic;
+      }
+      .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        padding: 48px 16px;
+        color: var(--text-muted, #6b7280);
+      }
+      .empty-state ion-icon {
+        font-size: 40px;
+      }
+      .incentives-table {
+        margin-top: 8px;
+        background: var(--ion-color-light, #f4f5f8);
+      }
     `,
   ],
 })
-export class DepositAccountViewComponent implements OnInit {
+export class DepositAccountViewComponent implements OnInit, OnDestroy {
   /** Selected tab; mat-tab-group tracked this internally, ion-segment does not. */
-  readonly activeTab = signal('0');
+  /** Exposed so the template names its tabs instead of numbering them. */
+  protected readonly TAB = DEPOSIT_TAB;
+
+  private readonly popovers = viewChildren(IonPopover);
+
+  readonly activeTab = signal<DepositTab>(DEPOSIT_TAB.overview);
   private readonly fdService = inject(FixedDepositAccountService);
   private readonly rdService = inject(RecurringDepositAccountService);
+  private readonly fdTransactionsService = inject(FixedDepositAccountTransactionsService);
+  private readonly rdTransactionsService = inject(RecurringDepositAccountTransactionsService);
+  private readonly httpClient = inject(HttpClient);
+  private readonly basePath = inject(BASE_PATH);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly dialogService = inject(DialogService);
@@ -388,13 +701,25 @@ export class DepositAccountViewComponent implements OnInit {
   isRD = false;
   readonly account = signal<Record<string, unknown> | null>(null);
   readonly transactions = signal<Record<string, unknown>[]>([]);
+  readonly charges = signal<SavingsAccountChargeData[]>([]);
+  readonly chartSlabs = signal<ChartSlab[]>([]);
+  readonly expandedSlabIndex = signal<number | null>(null);
   readonly isLoading = signal(true);
   readonly hasError = signal(false);
+
+  readonly transactionColumns = ['id', 'date', 'type', 'amount', 'runningBalance', 'actions'];
+  readonly chargeColumns = ['name', 'amount', 'outstanding'];
 
   ngOnInit(): void {
     this.accountId = Number(this.route.snapshot.paramMap.get('id'));
     this.isRD = this.router.url.includes('recurring');
     this.loadData();
+  }
+
+  ngOnDestroy(): void {
+    for (const popover of this.popovers()) {
+      void popover.dismiss().catch(() => false);
+    }
   }
 
   /**
@@ -420,19 +745,150 @@ export class DepositAccountViewComponent implements OnInit {
 
     request$.subscribe({
       next: (data) => {
-        const account = data as unknown as Record<string, unknown>;
-        this.account.set(account);
-        this.transactions.set(
-          Array.from((account['transactions'] as unknown[]) || []) as Record<string, unknown>[],
-        );
+        this.account.set(data as unknown as Record<string, unknown>);
         this.hasError.set(false);
         this.isLoading.set(false);
+        this.loadTransactions();
+        this.loadCharges();
       },
       error: () => {
         this.hasError.set(true);
         this.isLoading.set(false);
       },
     });
+  }
+
+  /**
+   * Reads the charges on this account, which — like the recurring-deposit transaction list
+   * above — the plain account read does not carry. Fineract adds `charges` to the response only
+   * when asked with `?associations=all`, a parameter neither deposit endpoint's generated method
+   * can send, so this goes through the same `HttpClient` escape hatch as `loadTransactions`.
+   */
+  /**
+   * Reads the charges and the interest rate chart in one call — both live under the same
+   * `associations=all` response as `loadTransactions`'s recurring-deposit branch, so there is no
+   * reason to ask for them separately.
+   */
+  private loadCharges(): void {
+    const path = this.isRD
+      ? `${this.basePath}/v1/recurringdepositaccounts/${this.accountId}`
+      : `${this.basePath}/v1/fixeddepositaccounts/${this.accountId}`;
+
+    this.httpClient
+      .get<{
+        charges?: SavingsAccountChargeData[];
+        accountChart?: { chartSlabs?: ChartSlab[] };
+      }>(path, { params: { associations: 'all' } })
+      .subscribe({
+        next: (response) => {
+          this.charges.set(response.charges ?? []);
+          this.chartSlabs.set(response.accountChart?.chartSlabs ?? []);
+        },
+        error: () => {
+          this.charges.set([]);
+          this.chartSlabs.set([]);
+        },
+      });
+  }
+
+  onToggleIncentives(index: number): void {
+    this.expandedSlabIndex.set(this.expandedSlabIndex() === index ? null : index);
+  }
+
+  /**
+   * Reads the transaction list, which the account response does not carry.
+   *
+   * `GET /fixeddepositaccounts/{id}` and `GET /recurringdepositaccounts/{id}` answer without a
+   * `transactions` key unless asked for one, so the tab read `account['transactions']` and found
+   * `undefined` on every account ever opened — the tab was empty by construction, not because
+   * these accounts had no transactions.
+   *
+   * The two account types are asked differently because only one of them can be:
+   *
+   * - **Fixed deposit** has a list endpoint, `GET /fixeddepositaccounts/{id}/transactions`, and a
+   *   generated method for it. That is the typed path and it is used.
+   * - **Recurring deposit** has no such endpoint — `GET /recurringdepositaccounts/{id}/transactions`
+   *   answers `405`. Its transactions come from `?associations=transactions` on the account, and
+   *   the upstream OpenAPI document does not describe an `associations` parameter for either
+   *   deposit type (it does for `/savingsaccounts/{accountId}`), so the generated client cannot
+   *   send it. Hence the same `HttpClient` escape hatch `group-view` uses, for the same reason.
+   *   Delete this branch once upstream describes the parameter.
+   *
+   * A failure here leaves the rest of the screen intact: the account loaded, and a missing
+   * transaction list is not a reason to blank the lifecycle actions.
+   */
+  private loadTransactions(): void {
+    const transactions$: Observable<unknown[]> = this.isRD
+      ? this.httpClient
+          .get<{
+            transactions?: unknown[];
+          }>(`${this.basePath}/v1/recurringdepositaccounts/${this.accountId}`, {
+            params: { associations: 'transactions' },
+          })
+          .pipe(map((account) => account.transactions ?? []))
+      : this.fdTransactionsService.getFixeddepositaccountsFixedDepositAccountIdTransactions(
+          this.accountId,
+        );
+
+    transactions$.subscribe({
+      next: (transactions) => this.transactions.set(transactions as Record<string, unknown>[]),
+      error: () => this.transactions.set([]),
+    });
+  }
+
+  /**
+   * Whether a row can still be undone.
+   *
+   * The platform is lenient here — it accepts `command=undo` against a transaction that is
+   * already reversed, and against a hold or a release, answering `200` each time and doing
+   * nothing useful. Offering the action anyway would mean a button that reports success and
+   * changes nothing, so the screen is stricter than the server: only a live entry is offered.
+   */
+  canUndo(transaction: Record<string, unknown>): boolean {
+    return this.isActive() && !transaction['reversed'];
+  }
+
+  /**
+   * Reverses a transaction.
+   *
+   * The row is not removed. Fineract marks it `reversed` and keeps it in the list, and the tab
+   * renders it struck through — an undone transaction that vanished would take the audit trail
+   * with it.
+   */
+  onUndoTransaction(transaction: Record<string, unknown>): void {
+    const transactionId = Number(transaction['id']);
+    void this.dialogService
+      .confirm({
+        title: this.i18n.translate('ACTIONS.UNDO_TRANSACTION'),
+        message: this.i18n.translate('ACTIONS.CONFIRM_UNDO_TRANSACTION'),
+        destructive: true,
+      })
+      .then((confirmed) => {
+        if (!confirmed) return;
+        // Both twins take (accountId, transactionId, body, command); the body is unused by the
+        // `undo` command but is a required positional argument.
+        const request$: Observable<unknown> = this.isRD
+          ? this.rdTransactionsService.postRecurringdepositaccountsRecurringDepositAccountIdTransactionsTransactionId(
+              this.accountId,
+              transactionId,
+              {},
+              'undo',
+            )
+          : this.fdTransactionsService.postFixeddepositaccountsFixedDepositAccountIdTransactionsTransactionId(
+              this.accountId,
+              transactionId,
+              {},
+              'undo',
+            );
+
+        request$.subscribe({
+          next: () => {
+            void this.notifications.success(this.i18n.translate('COMMON.SUCCESS'));
+            this.loadData();
+          },
+          error: () => undefined,
+        });
+      });
   }
 
   getStatusValue(): string {
@@ -458,6 +914,8 @@ export class DepositAccountViewComponent implements OnInit {
   getBalance(): number {
     return (this.account()?.['accountBalance'] as number) || 0;
   }
+
+  readonly clientId = computed(() => this.account()?.['clientId'] as number | undefined);
 
   formatDate(date: unknown): string {
     if (Array.isArray(date)) {
@@ -503,9 +961,7 @@ export class DepositAccountViewComponent implements OnInit {
   }
 
   private commandDate(floor: unknown): string {
-    // Through the parts rather than through `new Date(iso)`, which parses as UTC midnight and
-    // then reads back in local time — a day out for anyone west of Greenwich.
-    return formatDateToFineract(this.commandDateIso(floor).split('-').map(Number));
+    return formatDateToFineract(this.commandDateIso(floor));
   }
 
   /** A date the platform stamped on this account, by timeline key. */
@@ -654,12 +1110,25 @@ export class DepositAccountViewComponent implements OnInit {
   }
 
   onDeposit(): void {
-    this.router.navigate([`/products/recurring-deposits/${this.accountId}/transactions/deposit`]);
+    const path = this.isRD
+      ? `/products/recurring-deposits/${this.accountId}/transactions/create`
+      : `/products/fixed-deposits/${this.accountId}/transactions/deposit`;
+    this.router.navigate([path]);
   }
 
+  /**
+   * Recurring deposits only.
+   *
+   * A fixed deposit refuses the command rather than merely lacking a screen for it:
+   * `POST /fixeddepositaccounts/{id}/transactions?command=withdrawal` answers `503`
+   * `error.msg.fixeddepositaccount.account.trasaction.withdraw.notallowed`. The action is
+   * therefore hidden for a fixed deposit rather than offered and then failed — the money leaves
+   * a fixed deposit through maturity or premature closure, both of which are already on the menu.
+   */
   onWithdraw(): void {
-    const type = this.isRD ? 'recurring-deposits' : 'fixed-deposits';
-    this.router.navigate([`/products/${type}/${this.accountId}/transactions/withdrawal`]);
+    this.router.navigate([
+      `/products/recurring-deposits/${this.accountId}/transactions/withdrawal`,
+    ]);
   }
 
   onBack(): void {

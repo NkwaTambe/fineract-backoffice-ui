@@ -26,22 +26,53 @@
  * -tint and -contrast companions; all five are required for a colour to render
  * correctly across fills, ripples and contrast text.
  *
+ * The base colours below reference the app token rather than repeating its hex, so a deployment
+ * that overrides `--primary-color` recolours Ionic too. Without that indirection the two drift:
+ * the sidebar and buttons would take the deployment's colour while every ion-button kept the
+ * shipped one. The -rgb/-shade/-tint companions cannot be derived from a hex in CSS, so
+ * `BrandingService` computes and sets them alongside any colour token it applies.
+ *
  * Dark mode is driven by the existing `[data-theme='dark']` attribute set by
  * `ThemeService`, not by Ionic's own `.ion-palette-dark` class or a
  * prefers-color-scheme query — there is one switch, and this follows it.
  */
 
 :root {
-  /* Primary — #3498db */
-  --ion-color-primary: #3498db;
-  --ion-color-primary-rgb: 52, 152, 219;
+  /*
+   * Primary — #2471a3 (white text at 5.30:1).
+   *
+   * Deliberately `--primary-strong`, not `--primary-color`. Ionic pins
+   * `--ion-color-primary-contrast` to white, so whatever fills this slot has to carry white
+   * text. `primary-strong` is in `branding.service.ts`'s REQUIRES_WHITE_TEXT set and is held
+   * to a 4.5:1 floor against white; `primary-color` is explicitly exempt from that floor
+   * because its label is derived per-colour via `bestLabelFor()`. Pointing this at
+   * `primary-color` pairs a hardcoded white with a token free to be pale, which is how the
+   * shipped #3498db came to render button labels at 3.15:1 — see issue #613.
+   */
+  --ion-color-primary: var(--primary-strong, #2471a3);
+  --ion-color-primary-rgb: 36, 113, 163;
   --ion-color-primary-contrast: #ffffff;
   --ion-color-primary-contrast-rgb: 255, 255, 255;
-  --ion-color-primary-shade: #2e86c1;
+  /*
+   * Shade and tertiary are literals, not `var()`s, for the same reason the contrast above is
+   * white: nothing floors them. `--primary-text` is #1f6391 in light but #5dade2 in dark, so
+   * routing the pressed state through it would put white on a pale blue at ~2:1 in dark mode.
+   * `--primary-dark` is #2980b9 — 4.30:1 against white, under AA — so the `var(--primary-dark,
+   * #1b4f72)` this block used to carry never reached its accessible fallback at all.
+   */
+  --ion-color-primary-shade: #1f6391;
   --ion-color-primary-tint: #48a2df;
 
+  /* Tertiary — #1b4f72 (white text at 8.72:1). Used by the progressive-loan badges. */
+  --ion-color-tertiary: #1b4f72;
+  --ion-color-tertiary-rgb: 27, 79, 114;
+  --ion-color-tertiary-contrast: #ffffff;
+  --ion-color-tertiary-contrast-rgb: 255, 255, 255;
+  --ion-color-tertiary-shade: #153e5b;
+  --ion-color-tertiary-tint: #326081;
+
   /* Secondary — #2c3e50 */
-  --ion-color-secondary: #2c3e50;
+  --ion-color-secondary: var(--secondary-color, #2c3e50);
   --ion-color-secondary-rgb: 44, 62, 80;
   --ion-color-secondary-contrast: #ffffff;
   --ion-color-secondary-contrast-rgb: 255, 255, 255;
@@ -49,7 +80,7 @@
   --ion-color-secondary-tint: #415162;
 
   /* Success — #2ecc71 */
-  --ion-color-success: #2ecc71;
+  --ion-color-success: var(--success-color, #2ecc71);
   --ion-color-success-rgb: 46, 204, 113;
   --ion-color-success-contrast: #000000;
   --ion-color-success-contrast-rgb: 0, 0, 0;
@@ -57,7 +88,7 @@
   --ion-color-success-tint: #43d17f;
 
   /* Warning — #f39c12 */
-  --ion-color-warning: #f39c12;
+  --ion-color-warning: var(--warning-color, #f39c12);
   --ion-color-warning-rgb: 243, 156, 18;
   --ion-color-warning-contrast: #000000;
   --ion-color-warning-contrast-rgb: 0, 0, 0;
@@ -65,7 +96,7 @@
   --ion-color-warning-tint: #f4a62a;
 
   /* Danger — #e74c3c */
-  --ion-color-danger: #e74c3c;
+  --ion-color-danger: var(--error-color, #e74c3c);
   --ion-color-danger-rgb: 231, 76, 60;
   --ion-color-danger-contrast: #ffffff;
   --ion-color-danger-contrast-rgb: 255, 255, 255;
@@ -88,6 +119,17 @@
 }
 
 [data-theme='dark'] {
+  /*
+   * `--secondary-color` flips to a near-white #ecf0f1 in dark mode, which is right for the text
+   * it drives elsewhere but wrong for this slot: `--ion-color-secondary-contrast` stays white,
+   * so every `color="secondary"` button rendered a white label on #ecf0f1 at 1.15:1 — an
+   * invisible label, most visibly the Submit control on Survey Responses. The Ionic slot cannot
+   * follow a token that is free to be light. #5d6d7e is 5.31:1 against the white label and
+   * 3.14:1 against the dark card, so the control and its text both stay legible.
+   */
+  --ion-color-secondary: #5d6d7e;
+  --ion-color-secondary-rgb: 93, 109, 126;
+
   --ion-background-color: var(--bg-color);
   --ion-background-color-rgb: 18, 18, 18;
   --ion-text-color: var(--text-color);

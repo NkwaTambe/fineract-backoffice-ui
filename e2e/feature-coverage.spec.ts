@@ -5,10 +5,16 @@
  * regarding copyright ownership.  The ASF licenses this file
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
- * with the License.  See the NOTICE file BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
 
 import { test, expect, Page } from './fixtures';
@@ -68,6 +74,11 @@ async function loginAndMockApi(page: Page) {
     });
   });
 
+  // The header leaves out the business date when the instance has none, and
+  // 'header shows logged-in user info' checks for it.
+  await page.route('**/api/v1/businessdate**', async (route) => {
+    await route.fulfill({ json: [{ type: 'BUSINESS_DATE', date: [2026, 10, 2] }] });
+  });
   await page.goto('/login');
   if (!page.url().includes('/dashboard')) {
     await page.locator('#tenantId').fill(TENANT_DEFAULT);
@@ -176,6 +187,35 @@ test.describe('Navigation & Sidebar', () => {
       await page.getByRole('link', { name: route.link, exact: true }).click();
       await expect(page).toHaveURL(new RegExp(route.url));
     }
+  });
+
+  test('navigating to /accounting redirects to /accounting/chart-of-accounts', async ({ page }) => {
+    await page.goto('/accounting');
+    await expect(page).toHaveURL(/\/accounting\/chart-of-accounts$/);
+  });
+
+  test('navigating to /organization redirects to /organization/offices', async ({ page }) => {
+    await page.goto('/organization');
+    await expect(page).toHaveURL(/\/organization\/offices$/);
+  });
+
+  test('navigating to /system redirects to /system/data-tables', async ({ page }) => {
+    await page.goto('/system');
+    await expect(page).toHaveURL(/\/system\/data-tables$/);
+  });
+
+  test('an unknown route keeps its URL and offers recovery actions', async ({ page }) => {
+    await page.goto('/missing/report?source=e2e');
+
+    await expect(page).toHaveURL('/missing/report?source=e2e');
+    const heading = page.getByRole('heading', { name: 'Page not found' });
+    await expect(heading).toBeFocused();
+    await expect(
+      page.getByText('We could not find the page at /missing/report?source=e2e.'),
+    ).toBeVisible();
+
+    await page.getByRole('link', { name: 'Back to dashboard' }).click();
+    await expect(page).toHaveURL('/dashboard');
   });
 
   test('header shows logged-in user info', async ({ page }) => {
@@ -486,6 +526,12 @@ test.describe('Security', () => {
 
   test('audit logs page loads', async ({ page }) => {
     await page.getByRole('link', { name: 'Audit Logs' }).click();
+    await expect(page).toHaveURL('/security/audits');
+    await expect(page.locator(CARD_TITLE).first()).toContainText(/Audit/i);
+  });
+
+  test('leftover audit trails path lands on audits, not the dashboard', async ({ page }) => {
+    await page.goto('/security/audit-trails');
     await expect(page).toHaveURL('/security/audits');
     await expect(page.locator(CARD_TITLE).first()).toContainText(/Audit/i);
   });

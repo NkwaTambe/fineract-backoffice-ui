@@ -20,7 +20,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import {
   IonButton,
   IonCard,
@@ -47,18 +47,18 @@ import {
   FINERACT_LOCALE,
   toIsoDate,
 } from '../../../core/utils/date-formatter';
+import { createPickersReady } from '../../../shared/utils/pickers-ready';
 
 /**
- * Deposit form for a single recurring deposit account. The account id is read from the route.
- * Payment-type options come from the transaction template endpoint; the form posts a deposit
- * against the account's transaction collection.
+ * Transaction form for a single recurring deposit account. The account id and command are read
+ * from the route. Payment-type options come from the transaction template endpoint.
  */
 @Component({
   selector: 'app-recurring-deposit-transaction-form',
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonSpinner,
     IonInput,
@@ -79,7 +79,12 @@ import {
       <ion-card>
         <ion-card-header>
           <ion-card-title>
-            {{ 'RECURRING_DEPOSIT_TRANSACTIONS.CREATE' | translate }}
+            {{
+              (command() === 'withdrawal'
+                ? 'SAVINGS.WITHDRAWAL'
+                : 'RECURRING_DEPOSIT_TRANSACTIONS.CREATE'
+              ) | appTranslate
+            }}
           </ion-card-title>
         </ion-card-header>
 
@@ -87,9 +92,11 @@ import {
           <form #transactionForm="ngForm" (ngSubmit)="onSubmit()" class="rd-form">
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'RECURRING_DEPOSIT_TRANSACTIONS.DATE' | translate
+                'RECURRING_DEPOSIT_TRANSACTIONS.DATE' | appTranslate
               }}</ion-label>
-              <ion-datetime-button datetime="transactionDate-picker"></ion-datetime-button>
+              @if (pickersReady()) {
+                <ion-datetime-button datetime="transactionDate-picker"></ion-datetime-button>
+              }
               <ion-modal [keepContentsMounted]="true">
                 <ng-template>
                   <ion-datetime
@@ -106,10 +113,10 @@ import {
 
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'RECURRING_DEPOSIT_TRANSACTIONS.AMOUNT' | translate
+                'RECURRING_DEPOSIT_TRANSACTIONS.AMOUNT' | appTranslate
               }}</ion-label>
               <ion-input
-                [attr.aria-label]="'RECURRING_DEPOSIT_TRANSACTIONS.AMOUNT' | translate"
+                [attr.aria-label]="'RECURRING_DEPOSIT_TRANSACTIONS.AMOUNT' | appTranslate"
                 type="number"
                 name="transactionAmount"
                 [(ngModel)]="transactionAmount"
@@ -119,10 +126,10 @@ import {
 
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'RECURRING_DEPOSIT_TRANSACTIONS.PAYMENT_TYPE' | translate
+                'RECURRING_DEPOSIT_TRANSACTIONS.PAYMENT_TYPE' | appTranslate
               }}</ion-label>
               <ion-select
-                [attr.aria-label]="'RECURRING_DEPOSIT_TRANSACTIONS.PAYMENT_TYPE' | translate"
+                [attr.aria-label]="'RECURRING_DEPOSIT_TRANSACTIONS.PAYMENT_TYPE' | appTranslate"
                 interface="popover"
                 name="paymentTypeId"
                 [(ngModel)]="paymentTypeId"
@@ -135,7 +142,7 @@ import {
 
             <div class="form-actions">
               <ion-button fill="clear" type="button" (click)="onCancel()" [disabled]="isSaving()">
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               <ion-button
                 color="primary"
@@ -144,9 +151,9 @@ import {
               >
                 @if (isSaving()) {
                   <ion-spinner name="crescent"></ion-spinner>
-                  {{ 'COMMON.SAVING' | translate }}
+                  {{ 'COMMON.SAVING' | appTranslate }}
                 } @else {
-                  {{ 'COMMON.SAVE' | translate }}
+                  {{ 'COMMON.SAVE' | appTranslate }}
                 }
               </ion-button>
             </div>
@@ -171,11 +178,15 @@ import {
   ],
 })
 export class RecurringDepositTransactionFormComponent implements OnInit {
+  /** See `createPickersReady` — the date buttons must not outrun their pickers. */
+  readonly pickersReady = createPickersReady();
+
   private readonly transactionsService = inject(RecurringDepositAccountTransactionsService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
   accountId!: number;
+  readonly command = signal<'deposit' | 'withdrawal'>('deposit');
   readonly isSaving = signal(false);
 
   transactionDate = toIsoDate(new Date());
@@ -185,6 +196,8 @@ export class RecurringDepositTransactionFormComponent implements OnInit {
 
   ngOnInit(): void {
     this.accountId = Number(this.route.snapshot.paramMap.get('accountId'));
+    const command = this.route.snapshot.paramMap.get('command');
+    this.command.set(command === 'withdrawal' ? 'withdrawal' : 'deposit');
     this.transactionsService
       .getRecurringdepositaccountsRecurringDepositAccountIdTransactionsTemplate(this.accountId)
       .subscribe((tpl) => {
@@ -203,7 +216,11 @@ export class RecurringDepositTransactionFormComponent implements OnInit {
     };
 
     this.transactionsService
-      .postRecurringdepositaccountsRecurringDepositAccountIdTransactions(this.accountId, request)
+      .postRecurringdepositaccountsRecurringDepositAccountIdTransactions(
+        this.accountId,
+        request,
+        this.command(),
+      )
       .subscribe({
         next: () =>
           this.router.navigate(['/products/recurring-deposits', this.accountId, 'transactions']),

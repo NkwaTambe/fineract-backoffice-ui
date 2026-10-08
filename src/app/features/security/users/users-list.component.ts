@@ -20,10 +20,10 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 
 import { Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { USER_API, TranslatePipe } from '../../../core/adapters';
+import type { AppUser } from '../../../core/adapters';
 import { DataTableComponent, ColumnDef, CellTemplateDirective } from '../../../shared';
-import { UsersService, GetUsersResponse } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 /**
  * Component for listing system users.
@@ -31,12 +31,13 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
 @Component({
   selector: 'app-users-list',
   standalone: true,
-  imports: [TranslateModule, DataTableComponent, CellTemplateDirective, IonIcon, IonButton],
+  imports: [TranslatePipe, DataTableComponent, CellTemplateDirective, ButtonComponent],
   template: `
     <app-data-table
       title="nav.users"
       helpTextKey="HELP.USERS_DESC"
       createButtonLabel="USERS.CREATE"
+      createPermission="CREATE_USER"
       [columns]="columns"
       [data]="users()"
       [totalRecords]="users().length"
@@ -45,21 +46,20 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
       (create)="onCreateUser()"
     >
       <ng-template appCellTemplate="actions" let-user>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'COMMON.EDIT' | translate"
-          title="Edit User"
+        <app-button
+          type="button"
+          emphasis="quiet"
+          intent="primary"
+          icon="create-outline"
+          [label]="'COMMON.EDIT' | appTranslate"
           (click)="onEditUser(user)"
-        >
-          <ion-icon name="create-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,
 })
 export class UsersListComponent implements OnInit {
-  private readonly usersService = inject(UsersService);
+  private readonly userApi = inject(USER_API);
   private readonly router = inject(Router);
 
   readonly columns: ColumnDef[] = [
@@ -71,17 +71,15 @@ export class UsersListComponent implements OnInit {
     { key: 'actions', label: 'COMMON.ACTIONS', sortable: false },
   ];
 
-  readonly users = signal<GetUsersResponse[]>([]);
+  readonly users = signal<AppUser[]>([]);
 
   ngOnInit(): void {
     this.loadUsers();
   }
 
   private loadUsers(): void {
-    this.usersService.getUsers().subscribe({
-      next: (data) => {
-        this.users.set(data || []);
-      },
+    this.userApi.list().subscribe({
+      next: (users) => this.users.set(users),
       error: (err) => console.error('Failed to load users', err),
     });
   }
@@ -90,7 +88,7 @@ export class UsersListComponent implements OnInit {
     this.router.navigate(['/security/users/create']);
   }
 
-  onEditUser(user: GetUsersResponse): void {
+  onEditUser(user: AppUser): void {
     this.router.navigate(['/security/users/edit', user.id]);
   }
 }

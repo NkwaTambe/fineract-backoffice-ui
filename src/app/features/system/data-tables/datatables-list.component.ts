@@ -19,7 +19,7 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { RouterModule } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { I18N, TranslatePipe } from '../../../core/adapters';
 import {
   DataTableComponent,
   ColumnDef,
@@ -27,20 +27,20 @@ import {
   CellTemplateDirective,
 } from '../../../shared';
 import { DataTablesService, GetDataTablesResponse } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { DialogService } from '../../../core/services/dialog.service';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 @Component({
   selector: 'app-datatables-list',
   standalone: true,
   imports: [
     RouterModule,
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     HasPermissionDirective,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
@@ -51,36 +51,38 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       [isLoading]="isLoading()"
       [localLogic]="true"
     >
-      <ion-button
+      <app-button
+        type="button"
+        intent="primary"
+        [link]="['create']"
+        icon="add-outline"
         headerActions
-        color="primary"
-        [routerLink]="['create']"
         *appHasPermission="'CREATE_DATATABLE'"
+        >{{ 'SYSTEM.CREATE_DATA_TABLE' | appTranslate }}</app-button
       >
-        <ion-icon name="add-outline"></ion-icon>
-        {{ 'SYSTEM.CREATE_DATA_TABLE' | translate }}
-      </ion-button>
 
       <ng-template appCellTemplate="actions" let-row>
         <div class="action-buttons">
-          <ion-button
-            fill="clear"
-            color="primary"
-            [routerLink]="['edit', row.registeredTableName]"
+          <app-button
+            type="button"
+            intent="primary"
+            emphasis="quiet"
+            [label]="'COMMON.EDIT' | appTranslate"
+            [link]="['edit', row.registeredTableName]"
+            icon="create-outline"
             *appHasPermission="'UPDATE_DATATABLE'"
-            [appTooltip]="'COMMON.EDIT' | translate"
-          >
-            <ion-icon name="create-outline"></ion-icon>
-          </ion-button>
-          <ion-button
-            fill="clear"
-            color="danger"
+            [appTooltip]="'COMMON.EDIT' | appTranslate"
+          />
+          <app-button
+            type="button"
+            intent="danger"
+            emphasis="quiet"
+            [label]="'COMMON.DELETE' | appTranslate"
+            icon="trash-outline"
             (click)="onDelete(row.registeredTableName)"
             *appHasPermission="'DELETE_DATATABLE'"
-            [appTooltip]="'COMMON.DELETE' | translate"
-          >
-            <ion-icon name="trash-outline"></ion-icon>
-          </ion-button>
+            [appTooltip]="'COMMON.DELETE' | appTranslate"
+          />
         </div>
       </ng-template>
     </app-data-table>
@@ -96,6 +98,8 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
 })
 export class DatatablesListComponent implements OnInit {
   private readonly datatablesService = inject(DataTablesService);
+  private readonly dialogService = inject(DialogService);
+  private readonly i18n = inject(I18N);
 
   readonly datatables = signal<GetDataTablesResponse[]>([]);
   readonly isLoading = signal<boolean>(false);
@@ -135,12 +139,16 @@ export class DatatablesListComponent implements OnInit {
     });
   }
 
-  onDelete(name: string): void {
-    if (confirm(`Are you sure you want to delete data table '${name}'?`)) {
-      this.datatablesService.deleteDatatablesDatatableName(name).subscribe({
-        next: () => this.loadDatatables(),
-        error: (err) => console.error('Failed to delete datatable', err),
-      });
-    }
+  async onDelete(name: string): Promise<void> {
+    const confirmed = await this.dialogService.confirm({
+      title: this.i18n.translate('SYSTEM.DELETE_DATA_TABLE'),
+      message: this.i18n.translate('SYSTEM.CONFIRM_DELETE_DATA_TABLE', { name }),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    this.datatablesService.deleteDatatablesDatatableName(name).subscribe({
+      next: () => this.loadDatatables(),
+      error: (err) => console.error('Failed to delete datatable', err),
+    });
   }
 }

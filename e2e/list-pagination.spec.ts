@@ -26,6 +26,7 @@
  * against page.route() mocks, so it needs no backend.
  */
 
+import { mockClientTextSearch } from './utils/client-search-mock';
 import { test, expect, Page } from './fixtures';
 
 const TENANT = 'default';
@@ -80,7 +81,9 @@ async function mockSession(page: Page) {
     });
   });
 
-  // Serve the slice the app asks for, so the rows on screen reflect the offset.
+  await mockClientTextSearch(page, clientsPage(0, TOTAL_CLIENTS).pageItems);
+
+  // Status filtering keeps using the v1 endpoint.
   await page.route(/\/api\/v1\/clients(\?|$)/, async (route) => {
     const url = new URL(route.request().url());
     const offset = Number(url.searchParams.get('offset') ?? 0);
@@ -164,6 +167,52 @@ test.describe('List pagination', () => {
     // paginator still reading "51 - 54" would be lying about what is on screen.
     await expect(range(page)).toContainText(`1 - 10 of ${TOTAL_CLIENTS}`);
     await expect(firstAccountNo(page)).toHaveText('000000001');
+    await expect(
+      page.getByText('When a status is selected, search matches client names.'),
+    ).toBeVisible();
+  });
+
+  test('keeps search text when paging and shows the v2 account number', async ({ page }) => {
+    const searchLoaded = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/v2/clients/search') &&
+        response.request().postDataJSON().request.text === 'Client',
+    );
+    await page.getByPlaceholder('Type to search...').fill('Client');
+    await searchLoaded;
+    await expect(range(page)).toContainText(`1 - 10 of ${TOTAL_CLIENTS}`);
+    const requested = page.waitForRequest(
+      (request) =>
+        request.url().endsWith('/api/v2/clients/search') && request.postDataJSON().page === 1,
+    );
+    await pagerButton(page, NEXT).click();
+    expect((await requested).postDataJSON()).toMatchObject({
+      request: { text: 'Client' },
+      page: 1,
+      size: 10,
+    });
+    await expect(firstAccountNo(page)).toHaveText('000000011');
+  });
+
+  test('redirects the old search page and exposes only one client navigation item', async ({
+    page,
+  }) => {
+    await page.goto('/clients/search');
+    await expect(page).toHaveURL('/clients');
+    await expect(page.locator('a[href="/clients/search"]')).toHaveCount(0);
+    await expect(firstAccountNo(page)).toHaveText('000000001');
+  });
+
+  test('keeps an account-number search broad and disables unsupported Office sorting', async ({
+    page,
+  }) => {
+    await page.getByRole('button', { name: 'Office', exact: true }).click();
+    await expect(page.locator('th[aria-sort="ascending"]')).toContainText('Office');
+    await page.getByPlaceholder('Search by client name...').fill('000000011');
+    await expect(firstAccountNo(page)).toHaveText('000000011');
+    await expect(range(page)).toContainText('1 - 1 of 1');
+    await expect(page.getByRole('button', { name: 'Office', exact: true })).toHaveCount(0);
+    await expect(page.locator('th[aria-sort]')).toHaveCount(0);
   });
 
   test('returns to the first page when searching', async ({ page }) => {
@@ -204,6 +253,66 @@ test.describe('Profile', () => {
     await expect(page.locator('ion-spinner')).toHaveCount(0);
   });
 
+  test('changes the signed-in user password from the profile screen', async ({ page }) => {
+    await login(page);
+    let changeRequest: Record<string, unknown> | undefined;
+    await page.route(/\/api\/v1\/users\/1(?:\?.*)?$/, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 1,
+          username: USER,
+          firstname: 'App',
+          lastname: 'Administrator',
+          email: 'demomfi@mifos.org',
+          officeId: 1,
+          officeName: 'Head Office',
+          selectedRoles: [{ id: 1, name: 'Super user' }],
+        }),
+      });
+    });
+    await page.route('**/api/v1/passwordpreferences', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 2,
+          key: 'strong',
+          description: 'At least eight characters with mixed case and a number',
+          active: true,
+        }),
+      });
+    });
+    await page.route('**/api/v1/users/1/pwd', async (route) => {
+      changeRequest = JSON.parse(route.request().postData() ?? '{}');
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: '{}',
+      });
+    });
+
+    await page.goto('/profile');
+    await page.getByTestId('profile-change-password').click();
+
+    const newPassword = page.getByTestId('profile-new-password').locator('input');
+    const repeatPassword = page.getByTestId('profile-repeat-password').locator('input');
+    await newPassword.fill('Strong1!');
+    await repeatPassword.fill('Strong1!');
+    await expect(page.getByTestId('profile-password-policy')).toContainText('At least eight');
+    await page.getByTestId('profile-password-submit').click();
+
+    await expect
+      .poll(() => changeRequest)
+      .toEqual({
+        password: 'Strong1!',
+        repeatPassword: 'Strong1!',
+      });
+    await expect(page.getByText('Password changed successfully.')).toBeVisible();
+    await expect(page.getByTestId('profile-new-password')).toHaveCount(0);
+  });
+
   test('shows an error when the profile cannot be loaded', async ({ page }) => {
     await login(page);
     // The reported failure: this endpoint 404s and the page used to spin forever.
@@ -225,19 +334,24 @@ test.describe('List load failure', () => {
     // Fail the first request, serve the second. The retry has to be what fixes it, or this
     // passes whether or not the button is wired to anything.
     let attempts = 0;
-    await page.route(/\/api\/v1\/clients(\?|$)/, async (route) => {
+    await page.route('**/api/v2/clients/search', async (route) => {
       attempts += 1;
       if (attempts === 1) {
         await route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
         return;
       }
-      const url = new URL(route.request().url());
+      const { page: pageIndex, size } = route.request().postDataJSON();
+      const clients = clientsPage(pageIndex * size, size);
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify(
-          clientsPage(Number(url.searchParams.get('offset') ?? 0), PAGE_SIZE, undefined),
-        ),
+        body: JSON.stringify({
+          content: clients.pageItems.map((client) => ({
+            ...client,
+            accountNumber: client.accountNo,
+          })),
+          totalElements: clients.totalFilteredRecords,
+        }),
       });
     });
 
@@ -280,5 +394,36 @@ test.describe('List load failure', () => {
 
     await expect(page.getByTestId('data-table-error')).toHaveCount(0);
     await expect(page.locator('table.data-table')).toContainText('Weekly Meeting');
+  });
+
+  test('accounting rules: reports the failure and reloads when the user retries', async ({
+    page,
+  }) => {
+    await login(page);
+
+    let attempts = 0;
+    await page.route(/\/api\/v1\/accountingrules(\?|$)/, async (route) => {
+      attempts += 1;
+      if (attempts === 1) {
+        await route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([{ id: 1, name: 'Cash to Bank Transfer' }]),
+      });
+    });
+
+    await page.goto('/accounting/rules');
+
+    // Not "No records found": nobody knows whether there are records.
+    await expect(page.getByTestId('data-table-error')).toBeVisible();
+    await expect(page.locator('table.data-table')).toHaveCount(0);
+
+    await page.getByTestId('data-table-retry').click();
+
+    await expect(page.getByTestId('data-table-error')).toHaveCount(0);
+    await expect(page.locator('table.data-table')).toContainText('Cash to Bank Transfer');
   });
 });

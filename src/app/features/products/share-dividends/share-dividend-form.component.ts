@@ -20,7 +20,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import { SelfDividendService } from '../../../api';
 import {
   IonButton,
@@ -41,6 +41,7 @@ import {
   FINERACT_DATE_FORMAT,
   FINERACT_LOCALE,
 } from '../../../core/utils/date-formatter';
+import { createPickersReady } from '../../../shared/utils/pickers-ready';
 
 /**
  * Create form for a share product dividend. The share product id is read from the route
@@ -53,7 +54,7 @@ import {
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonSpinner,
     IonInput,
@@ -71,15 +72,17 @@ import {
     <div class="form-container">
       <ion-card>
         <ion-card-header>
-          <ion-card-title>{{ 'SHARE_DIVIDENDS.CREATE' | translate }}</ion-card-title>
+          <ion-card-title>{{ 'SHARE_DIVIDENDS.CREATE' | appTranslate }}</ion-card-title>
         </ion-card-header>
 
         <ion-card-content>
           <form #dividendForm="ngForm" (ngSubmit)="onSubmit()" class="dividend-form">
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'SHARE_DIVIDENDS.AMOUNT' | translate }}</ion-label>
+              <ion-label position="stacked">{{
+                'SHARE_DIVIDENDS.AMOUNT' | appTranslate
+              }}</ion-label>
               <ion-input
-                [attr.aria-label]="'SHARE_DIVIDENDS.AMOUNT' | translate"
+                [attr.aria-label]="'SHARE_DIVIDENDS.AMOUNT' | appTranslate"
                 type="number"
                 name="dividendAmount"
                 [(ngModel)]="dividendAmount"
@@ -89,9 +92,13 @@ import {
 
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'SHARE_DIVIDENDS.PERIOD_START_DATE' | translate
+                'SHARE_DIVIDENDS.PERIOD_START_DATE' | appTranslate
               }}</ion-label>
-              <ion-datetime-button datetime="dividendPeriodStartDate-picker"></ion-datetime-button>
+              @if (pickersReady()) {
+                <ion-datetime-button
+                  datetime="dividendPeriodStartDate-picker"
+                ></ion-datetime-button>
+              }
               <ion-modal [keepContentsMounted]="true">
                 <ng-template>
                   <ion-datetime
@@ -108,9 +115,11 @@ import {
 
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'SHARE_DIVIDENDS.PERIOD_END_DATE' | translate
+                'SHARE_DIVIDENDS.PERIOD_END_DATE' | appTranslate
               }}</ion-label>
-              <ion-datetime-button datetime="dividendPeriodEndDate-picker"></ion-datetime-button>
+              @if (pickersReady()) {
+                <ion-datetime-button datetime="dividendPeriodEndDate-picker"></ion-datetime-button>
+              }
               <ion-modal [keepContentsMounted]="true">
                 <ng-template>
                   <ion-datetime
@@ -127,7 +136,7 @@ import {
 
             <div class="form-actions">
               <ion-button fill="clear" type="button" (click)="onCancel()" [disabled]="isSaving()">
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               <ion-button
                 color="primary"
@@ -136,9 +145,9 @@ import {
               >
                 @if (isSaving()) {
                   <ion-spinner name="crescent"></ion-spinner>
-                  {{ 'COMMON.SAVING' | translate }}
+                  {{ 'COMMON.SAVING' | appTranslate }}
                 } @else {
-                  {{ 'COMMON.SAVE' | translate }}
+                  {{ 'COMMON.SAVE' | appTranslate }}
                 }
               </ion-button>
             </div>
@@ -163,6 +172,9 @@ import {
   ],
 })
 export class ShareDividendFormComponent implements OnInit {
+  /** See `createPickersReady` — the date buttons must not outrun their pickers. */
+  readonly pickersReady = createPickersReady();
+
   private readonly selfDividendService = inject(SelfDividendService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);

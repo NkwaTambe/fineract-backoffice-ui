@@ -19,12 +19,13 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
 import { ColumnDef, CellTemplateDirective } from '../../../shared';
+import { I18N, TranslatePipe } from '../../../core/adapters';
 import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 import { WorkingCapitalNearBreachService, WorkingCapitalNearBreachData } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { DialogService } from '../../../core/services/dialog.service';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 /**
  * Lists working-capital near-breach (early-warning) threshold definitions.
@@ -34,11 +35,10 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
   selector: 'app-wc-near-breach-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
@@ -46,6 +46,7 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       title="nav.wcNearBreach"
       helpTextKey="HELP.WC_NEAR_BREACH_DESC"
       createButtonLabel="WC_NEAR_BREACH.CREATE"
+      createPermission="CREATE_WORKINGCAPITALNEARBREACH"
       [columns]="columns"
       [data]="items()"
       [totalRecords]="items().length"
@@ -53,24 +54,24 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       (create)="onCreate()"
     >
       <ng-template appCellTemplate="actions" let-row>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'COMMON.EDIT' | translate"
-          [appTooltip]="'COMMON.EDIT' | translate"
+        <app-button
+          type="button"
+          intent="primary"
+          emphasis="quiet"
+          [label]="'COMMON.EDIT' | appTranslate"
+          icon="create-outline"
+          [appTooltip]="'COMMON.EDIT' | appTranslate"
           (click)="onEdit(row)"
-        >
-          <ion-icon name="create-outline"></ion-icon>
-        </ion-button>
-        <ion-button
-          fill="clear"
-          color="danger"
-          [attr.aria-label]="'COMMON.DELETE' | translate"
-          [appTooltip]="'COMMON.DELETE' | translate"
+        />
+        <app-button
+          type="button"
+          intent="danger"
+          emphasis="quiet"
+          [label]="'COMMON.DELETE' | appTranslate"
+          icon="trash-outline"
+          [appTooltip]="'COMMON.DELETE' | appTranslate"
           (click)="onDelete(row)"
-        >
-          <ion-icon name="trash-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,
@@ -78,6 +79,8 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
 export class WcNearBreachListComponent implements OnInit {
   private readonly service = inject(WorkingCapitalNearBreachService);
   private readonly router = inject(Router);
+  private readonly dialogService = inject(DialogService);
+  private readonly i18n = inject(I18N);
 
   readonly columns: ColumnDef[] = [
     { key: 'name', label: 'WC_NEAR_BREACH.NAME', sortable: true },
@@ -113,10 +116,19 @@ export class WcNearBreachListComponent implements OnInit {
   }
 
   onDelete(row: WorkingCapitalNearBreachData): void {
-    if (!row.id || !window.confirm('Delete this near-breach definition?')) return;
-    this.service.deleteWorkingCapitalNearBreachBreachId(row.id).subscribe({
-      next: () => this.load(),
-      error: (err: unknown) => console.error('Failed to delete near-breach', err),
-    });
+    if (!row.id) return;
+    void this.dialogService
+      .confirm({
+        title: this.i18n.translate('WC_NEAR_BREACH.DELETE'),
+        message: this.i18n.translate('WC_NEAR_BREACH.CONFIRM_DELETE', { name: row.name }),
+        destructive: true,
+      })
+      .then((confirmed) => {
+        if (!confirmed) return;
+        this.service.deleteWorkingCapitalNearBreachBreachId(row.id!).subscribe({
+          next: () => this.load(),
+          error: (err: unknown) => console.error('Failed to delete near-breach', err),
+        });
+      });
   }
 }

@@ -36,7 +36,7 @@
  * Videos/traces for every run are written under test-results/.
  */
 
-import { test, expect, Page } from './fixtures';
+import { test, expect, Page, recordingTimeout } from './fixtures';
 import { login, uniqueSuffix } from './utils/fineract-login';
 import { ionSelect } from './utils/ionic-locators';
 import { captureJson } from './utils/capture-response';
@@ -53,8 +53,10 @@ async function createClient(page: Page): Promise<string> {
   // dropdown has resolved before opening it — otherwise it opens empty.
   await page.goto('/clients/create', { waitUntil: 'networkidle' });
   await selectOption(page, 'Office', 'Head Office');
+  await page.getByRole('button', { name: 'Next' }).click();
   await page.getByRole('textbox', { name: 'First Name' }).fill(firstName);
   await page.getByRole('textbox', { name: 'Last Name' }).fill(lastName);
+  await page.getByRole('button', { name: 'Next' }).click();
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page).toHaveURL(/\/clients$/, { timeout: 15000 });
 
@@ -163,7 +165,7 @@ test.describe('Loan lifecycle: creation, approval, disbursement', () => {
 
   for (const scheduleType of ['Cumulative', 'Progressive'] as const) {
     test(`create, approve, and disburse a ${scheduleType} loan`, async ({ page }) => {
-      test.setTimeout(120000);
+      test.setTimeout(recordingTimeout(120000));
 
       const clientName = await createClient(page);
       const productName = await createLoanProduct(page, scheduleType);
@@ -209,7 +211,7 @@ test.describe('Loan lifecycle: creation, approval, disbursement', () => {
    * screen's approval can be undone.
    */
   test('an approved loan can be returned to pending approval', async ({ page }) => {
-    test.setTimeout(120000);
+    test.setTimeout(recordingTimeout(120000));
 
     const clientName = await createClient(page);
     const productName = await createLoanProduct(page, 'Cumulative');
@@ -249,7 +251,7 @@ test.describe('Loan lifecycle: creation, approval, disbursement', () => {
   test('the delinquency tab reads a real loan, and the empty data tabs stay hidden', async ({
     page,
   }) => {
-    test.setTimeout(120000);
+    test.setTimeout(recordingTimeout(120000));
 
     const clientName = await createClient(page);
     const productName = await createLoanProduct(page, 'Cumulative');

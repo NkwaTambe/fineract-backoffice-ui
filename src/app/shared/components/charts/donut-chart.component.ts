@@ -18,6 +18,7 @@
  */
 
 import { computed, input, Component } from '@angular/core';
+import { TranslatePipe } from '../../../core/adapters';
 
 export interface ChartData {
   label: string;
@@ -28,7 +29,7 @@ export interface ChartData {
 @Component({
   selector: 'app-donut-chart',
   standalone: true,
-  imports: [],
+  imports: [TranslatePipe],
   template: `
     <div class="chart-container">
       <svg viewBox="0 0 100 100" width="100%" height="100%">
@@ -44,7 +45,10 @@ export interface ChartData {
             [attr.stroke-dashoffset]="slice.dashOffset"
             transform="rotate(-90 50 50)"
           >
-            <title>{{ slice.label }}: {{ slice.value }}</title>
+            <title>
+              {{ labelsAreTranslationKeys() ? (slice.label | appTranslate) : slice.label }}:
+              {{ slice.value }}
+            </title>
           </circle>
         }
         <circle cx="50" cy="50" r="30" class="inner-circle"></circle>
@@ -63,7 +67,9 @@ export interface ChartData {
         @for (item of data(); track item.label) {
           <div class="legend-item">
             <span class="dot" [style.background-color]="item.color"></span>
-            <span class="label">{{ item.label }}</span>
+            <span class="label">{{
+              labelsAreTranslationKeys() ? (item.label | appTranslate) : item.label
+            }}</span>
             <span class="value">{{ item.value }}</span>
           </div>
         }
@@ -120,6 +126,9 @@ export interface ChartData {
   ],
 })
 export class DonutChartComponent {
+  /** Translate labels supplied as application keys; report-derived labels remain literal by default. */
+  readonly labelsAreTranslationKeys = input(false);
+
   /**
    * `transform` replaces the setter-into-private-signal pair this used to carry: callers still
    * pass a possibly-null array, and the null-coalescing that used to live in the setter body now

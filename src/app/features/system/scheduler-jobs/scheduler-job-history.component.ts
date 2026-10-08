@@ -19,11 +19,12 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
-import { ColumnDef } from '../../../shared';
+import { TranslatePipe } from '../../../core/adapters';
+import { CellTemplateDirective, ColumnDef } from '../../../shared';
 import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 import { SCHEDULERJOBService, JobDetailHistoryDataSwagger } from '../../../api';
-import { IonButton } from '@ionic/angular/standalone';
+import { ButtonComponent } from '../../../ui/button/button.component';
+import { DateTimePipe } from '../../../shared/pipes/date-time.pipe';
 
 /**
  * Read-only run history for a single scheduler job, reached from the jobs list.
@@ -31,10 +32,18 @@ import { IonButton } from '@ionic/angular/standalone';
 @Component({
   selector: 'app-scheduler-job-history',
   standalone: true,
-  imports: [TranslateModule, DataTableComponent, IonButton],
+  imports: [
+    TranslatePipe,
+    DataTableComponent,
+    ButtonComponent,
+    CellTemplateDirective,
+    DateTimePipe,
+  ],
   template: `
     <div class="history-actions">
-      <ion-button fill="clear" (click)="onBack()">{{ 'COMMON.BACK' | translate }}</ion-button>
+      <app-button type="button" emphasis="quiet" (click)="onBack()">{{
+        'COMMON.BACK' | appTranslate
+      }}</app-button>
     </div>
     <app-data-table
       title="SCHEDULER_JOBS.RUN_HISTORY"
@@ -42,7 +51,14 @@ import { IonButton } from '@ionic/angular/standalone';
       [data]="history()"
       [totalRecords]="history().length"
       [localLogic]="true"
-    ></app-data-table>
+    >
+      <ng-template appCellTemplate="jobRunStartTime" let-row>
+        {{ row.jobRunStartTime | dateTime }}
+      </ng-template>
+      <ng-template appCellTemplate="jobRunEndTime" let-row>
+        {{ row.jobRunEndTime | dateTime }}
+      </ng-template>
+    </app-data-table>
   `,
   styles: [
     `

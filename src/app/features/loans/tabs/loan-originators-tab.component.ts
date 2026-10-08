@@ -46,7 +46,7 @@ export class LoanOriginatorsTabComponent {
     { key: 'name', label: 'COMMON.NAME' },
     { key: 'originatorTypeName', label: 'LOANS.ORIGINATOR_TYPE' },
     { key: 'channelTypeName', label: 'LOANS.CHANNEL' },
-    { key: 'externalId', label: 'LOANS.EXTERNAL_ID' },
+    { key: 'externalId', label: 'COMMON.EXTERNAL_ID' },
     { key: 'status', label: 'COMMON.STATUS' },
   ];
 }

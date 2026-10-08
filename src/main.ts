@@ -18,16 +18,14 @@
  */
 
 import { initFederation } from '@angular-architects/native-federation';
+import { resolveRemotes } from './app/core/federation/remotes';
 
 // No framework imports above this line: native-federation must set up its shared-dependency
 // import map before anything imports a package like '@angular/core', or resolution fails.
-const isLocalDevServer = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+// That also rules out HttpClient here, which is why the probe below uses bare `fetch`.
 
-initFederation({
-  'fineract-mfe': isLocalDevServer
-    ? 'http://localhost:4201/remoteEntry.json'
-    : './remoteEntry.json',
-})
+resolveRemotes()
+  .then((remotes) => initFederation(remotes))
   .catch((err) => console.error(err))
   .then(() => import('./bootstrap'))
   .catch((err) => console.error(err));

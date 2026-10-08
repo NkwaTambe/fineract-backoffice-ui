@@ -19,13 +19,14 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
 import { ColumnDef, CellTemplateDirective } from '../../shared';
 import { DataTableComponent } from '../../shared/components/data-table/data-table.component';
 import { MeetingsService, MeetingData } from '../../api';
+import { I18N, TranslatePipe } from '../../core/adapters';
 import { formatArrayDate } from '../../core/utils/date-formatter';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
 import { TooltipDirective } from '../../shared/directives/tooltip.directive';
+import { DialogService } from '../../core/services/dialog.service';
+import { ButtonComponent } from '../../ui/button/button.component';
 
 /**
  * Lists the meetings recorded against a single group or center. The entity type
@@ -36,11 +37,10 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
   selector: 'app-meetings-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
@@ -48,6 +48,7 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
       title="MEETINGS.TITLE"
       helpTextKey="HELP.MEETINGS_DESC"
       createButtonLabel="MEETINGS.CREATE"
+      createPermission="CREATE_MEETING"
       [columns]="columns"
       [data]="meetings()"
       [totalRecords]="meetings().length"
@@ -61,24 +62,24 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
         {{ presentCount(row) }}
       </ng-template>
       <ng-template appCellTemplate="actions" let-row>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'COMMON.EDIT' | translate"
-          [appTooltip]="'COMMON.EDIT' | translate"
+        <app-button
+          type="button"
+          intent="primary"
+          emphasis="quiet"
+          [label]="'COMMON.EDIT' | appTranslate"
+          icon="create-outline"
+          [appTooltip]="'COMMON.EDIT' | appTranslate"
           (click)="onEdit(row)"
-        >
-          <ion-icon name="create-outline"></ion-icon>
-        </ion-button>
-        <ion-button
-          fill="clear"
-          color="danger"
-          [attr.aria-label]="'COMMON.DELETE' | translate"
-          [appTooltip]="'COMMON.DELETE' | translate"
+        />
+        <app-button
+          type="button"
+          intent="danger"
+          emphasis="quiet"
+          [label]="'COMMON.DELETE' | appTranslate"
+          icon="trash-outline"
+          [appTooltip]="'COMMON.DELETE' | appTranslate"
           (click)="onDelete(row)"
-        >
-          <ion-icon name="trash-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,
@@ -87,6 +88,8 @@ export class MeetingsListComponent implements OnInit {
   private readonly meetingsService = inject(MeetingsService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly dialogService = inject(DialogService);
+  private readonly i18n = inject(I18N);
 
   readonly columns: ColumnDef[] = [
     { key: 'meetingDate', label: 'MEETINGS.MEETING_DATE', sortable: false },
@@ -132,12 +135,23 @@ export class MeetingsListComponent implements OnInit {
   }
 
   onDelete(row: MeetingData): void {
-    if (!row.id || !window.confirm('Delete this meeting?')) return;
-    this.meetingsService
-      .deleteEntityTypeEntityIdMeetingsMeetingId(this.entityType, this.entityId, row.id)
-      .subscribe({
-        next: () => this.load(),
-        error: (err: unknown) => console.error('Failed to delete meeting', err),
+    if (!row.id) return;
+
+    void this.dialogService
+      .confirm({
+        title: this.i18n.translate('MEETINGS.DELETE'),
+        message: this.i18n.translate('MEETINGS.CONFIRM_DELETE', {
+          name: this.formatDate(row.meetingDate),
+        }),
+        destructive: true,
+      })
+      .then((confirmed) => {
+        if (!confirmed) return;
+        this.meetingsService
+          .deleteEntityTypeEntityIdMeetingsMeetingId(this.entityType, this.entityId, row.id!)
+          .subscribe({
+            next: () => this.load(),
+          });
       });
   }
 }

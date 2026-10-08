@@ -32,7 +32,7 @@
  *   npx playwright test e2e/group-membership.spec.ts --project=backend --workers=1
  */
 
-import { test, expect, Page } from './fixtures';
+import { test, expect, Page, recordingTimeout } from './fixtures';
 import { login, uniqueSuffix } from './utils/fineract-login';
 import { confirmDialog, modalFor } from './utils/ionic-locators';
 import { selectInDialog } from './utils/select-in-dialog';
@@ -67,8 +67,10 @@ async function createClient(page: Page, suffix: string): Promise<string> {
   const firstName = `E2EGroupMember${suffix}`;
   await page.goto('/clients/create');
   await selectOption(page, 'Office', HEAD_OFFICE);
+  await page.getByRole('button', { name: 'Next' }).click();
   await page.getByRole('textbox', { name: 'First Name' }).fill(firstName);
   await page.getByRole('textbox', { name: 'Last Name' }).fill('Tester');
+  await page.getByRole('button', { name: 'Next' }).click();
   await page.getByRole('button', { name: /^save$/i }).click();
   await expect(page).toHaveURL(/\/clients$/, { timeout: 20000 });
   return `${firstName} Tester`;
@@ -161,7 +163,7 @@ async function ensureClosureReason(page: Page, name: string): Promise<string> {
 async function openGroup(page: Page, name: string): Promise<void> {
   await page.goto('/groups');
   const row = await findRow(page, name);
-  await row.locator('ion-button[data-testid^="group-view-"]').click();
+  await row.getByTestId(/^group-view-/).click();
   await expect(page).toHaveURL(/\/groups\/view\/\d+$/, { timeout: 20000 });
   await expect(page.getByTestId('group-name')).toHaveText(name, { timeout: 20000 });
 }
@@ -170,7 +172,7 @@ test.describe('Group membership and lifecycle', () => {
   test('a group is activated, staffed, given members and a committee, then emptied', async ({
     page,
   }) => {
-    test.setTimeout(240000);
+    test.setTimeout(recordingTimeout(240000));
     await login(page);
 
     const suffix = uniqueSuffix();
@@ -271,7 +273,7 @@ test.describe('Group membership and lifecycle', () => {
   });
 
   test('notes are recorded against the group and can be removed again', async ({ page }) => {
-    test.setTimeout(180000);
+    test.setTimeout(recordingTimeout(180000));
     await login(page);
 
     const suffix = uniqueSuffix();
@@ -306,7 +308,7 @@ test.describe('Group membership and lifecycle', () => {
   test('an empty group is closed with a reason, and a group with members is refused', async ({
     page,
   }) => {
-    test.setTimeout(240000);
+    test.setTimeout(recordingTimeout(240000));
     await login(page);
 
     const suffix = uniqueSuffix();

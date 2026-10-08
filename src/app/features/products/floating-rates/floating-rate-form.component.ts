@@ -20,8 +20,12 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
-import { FloatingRatesService, FloatingRateRequest } from '../../../api';
+import { TranslatePipe } from '../../../core/adapters';
+import {
+  FloatingRatesService,
+  FloatingRateCreateRequest,
+  FloatingRateUpdateRequest,
+} from '../../../api';
 import {
   IonButton,
   IonCard,
@@ -30,7 +34,6 @@ import {
   IonCardTitle,
   IonCheckbox,
   IonDatetime,
-  IonDatetimeButton,
   IonIcon,
   IonInput,
   IonItem,
@@ -39,14 +42,17 @@ import {
   IonSpinner,
 } from '@ionic/angular/standalone';
 import {
+  formatArrayDate,
   formatDateToFineract,
   FINERACT_DATE_FORMAT,
   FINERACT_LOCALE,
+  toIsoDate,
 } from '../../../core/utils/date-formatter';
+import { DeferredDatetimeButtonComponent } from '../../../ui/deferred-datetime-button/deferred-datetime-button.component';
 
 /** A single editable rate period row in the form. */
 interface RatePeriodRow {
-  fromDate: Date;
+  fromDate: string;
   interestRate: number | null;
   isDifferentialToBaseLendingRate: boolean;
 }
@@ -59,7 +65,7 @@ interface RatePeriodRow {
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     IonIcon,
     IonButton,
     IonSpinner,
@@ -72,8 +78,8 @@ interface RatePeriodRow {
     IonCard,
     IonCheckbox,
     IonDatetime,
-    IonDatetimeButton,
     IonModal,
+    DeferredDatetimeButtonComponent,
   ],
   template: `
     <div class="form-container">
@@ -82,8 +88,8 @@ interface RatePeriodRow {
           <ion-card-title>
             {{
               isEditMode()
-                ? ('FLOATING_RATES.EDIT' | translate)
-                : ('FLOATING_RATES.CREATE' | translate)
+                ? ('FLOATING_RATES.EDIT' | appTranslate)
+                : ('FLOATING_RATES.CREATE' | appTranslate)
             }}
           </ion-card-title>
         </ion-card-header>
@@ -91,9 +97,9 @@ interface RatePeriodRow {
         <ion-card-content>
           <form #frForm="ngForm" (ngSubmit)="onSubmit()" class="fr-form">
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'FLOATING_RATES.NAME' | translate }}</ion-label>
+              <ion-label position="stacked">{{ 'FLOATING_RATES.NAME' | appTranslate }}</ion-label>
               <ion-input
-                [attr.aria-label]="'FLOATING_RATES.NAME' | translate"
+                [attr.aria-label]="'FLOATING_RATES.NAME' | appTranslate"
                 name="name"
                 [(ngModel)]="rate().name"
                 required
@@ -102,19 +108,19 @@ interface RatePeriodRow {
 
             <div class="checkboxes">
               <ion-checkbox name="isBaseLendingRate" [(ngModel)]="rate().isBaseLendingRate">
-                {{ 'FLOATING_RATES.IS_BASE_LENDING_RATE' | translate }}
+                {{ 'FLOATING_RATES.IS_BASE_LENDING_RATE' | appTranslate }}
               </ion-checkbox>
               <ion-checkbox name="isActive" [(ngModel)]="rate().isActive">
-                {{ 'COMMON.ACTIVE' | translate }}
+                {{ 'COMMON.ACTIVE' | appTranslate }}
               </ion-checkbox>
             </div>
 
             <div class="periods">
               <div class="periods-header">
-                <h3>{{ 'FLOATING_RATES.RATE_PERIODS' | translate }}</h3>
+                <h3>{{ 'FLOATING_RATES.RATE_PERIODS' | appTranslate }}</h3>
                 <ion-button fill="outline" type="button" (click)="addPeriod()">
                   <ion-icon name="add-outline"></ion-icon>
-                  {{ 'FLOATING_RATES.ADD_PERIOD' | translate }}
+                  {{ 'FLOATING_RATES.ADD_PERIOD' | appTranslate }}
                 </ion-button>
               </div>
 
@@ -122,16 +128,16 @@ interface RatePeriodRow {
                 <div class="period-row">
                   <ion-item fill="outline">
                     <ion-label position="stacked">{{
-                      'FLOATING_RATES.FROM_DATE' | translate
+                      'FLOATING_RATES.FROM_DATE' | appTranslate
                     }}</ion-label>
-                    <ion-datetime-button datetime="periodfromDate-picker"></ion-datetime-button>
+                    <app-deferred-datetime-button [datetimeId]="periodFromDatePickerId($index)" />
                     <ion-modal [keepContentsMounted]="true">
                       <ng-template>
                         <ion-datetime
-                          id="periodfromDate-picker"
-                          data-testid="periodfromDate-picker"
+                          [id]="periodFromDatePickerId($index)"
+                          [attr.data-testid]="periodFromDatePickerId($index)"
                           presentation="date"
-                          name="periodfromDate"
+                          [name]="'periodfromDate' + $index"
                           [(ngModel)]="period.fromDate"
                           required
                         ></ion-datetime>
@@ -141,10 +147,10 @@ interface RatePeriodRow {
 
                   <ion-item fill="outline">
                     <ion-label position="stacked">{{
-                      'FLOATING_RATES.INTEREST_RATE' | translate
+                      'FLOATING_RATES.INTEREST_RATE' | appTranslate
                     }}</ion-label>
                     <ion-input
-                      [attr.aria-label]="'FLOATING_RATES.INTEREST_RATE' | translate"
+                      [attr.aria-label]="'FLOATING_RATES.INTEREST_RATE' | appTranslate"
                       type="number"
                       [name]="'interestRate' + $index"
                       [(ngModel)]="period.interestRate"
@@ -156,14 +162,14 @@ interface RatePeriodRow {
                     [name]="'isDifferential' + $index"
                     [(ngModel)]="period.isDifferentialToBaseLendingRate"
                   >
-                    {{ 'FLOATING_RATES.IS_DIFFERENTIAL' | translate }}
+                    {{ 'FLOATING_RATES.IS_DIFFERENTIAL' | appTranslate }}
                   </ion-checkbox>
 
                   <ion-button
                     fill="clear"
                     color="danger"
                     type="button"
-                    [attr.aria-label]="'COMMON.DELETE' | translate"
+                    [attr.aria-label]="'COMMON.DELETE' | appTranslate"
                     (click)="removePeriod($index)"
                   >
                     <ion-icon name="trash-outline"></ion-icon>
@@ -174,14 +180,14 @@ interface RatePeriodRow {
 
             <div class="form-actions">
               <ion-button fill="clear" type="button" (click)="onCancel()" [disabled]="isSaving()">
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               <ion-button color="primary" type="submit" [disabled]="frForm.invalid || isSaving()">
                 @if (isSaving()) {
                   <ion-spinner name="crescent"></ion-spinner>
-                  {{ 'COMMON.SAVING' | translate }}
+                  {{ 'COMMON.SAVING' | appTranslate }}
                 } @else {
-                  {{ 'COMMON.SAVE' | translate }}
+                  {{ 'COMMON.SAVE' | appTranslate }}
                 }
               </ion-button>
             </div>
@@ -231,7 +237,7 @@ export class FloatingRateFormComponent implements OnInit {
   readonly isEditMode = signal(false);
   readonly isSaving = signal(false);
 
-  readonly rate = signal<FloatingRateRequest>({
+  readonly rate = signal<{ name: string; isBaseLendingRate?: boolean; isActive?: boolean }>({
     name: '',
     isBaseLendingRate: false,
     isActive: true,
@@ -253,7 +259,7 @@ export class FloatingRateFormComponent implements OnInit {
     if (!this.rateId) return;
     this.floatingRatesService.getFloatingratesFloatingRateId(this.rateId).subscribe((data) => {
       this.rate.set({
-        name: data.name,
+        name: data.name ?? '',
         isBaseLendingRate: data.isBaseLendingRate,
         isActive: data.isActive,
       });
@@ -262,9 +268,7 @@ export class FloatingRateFormComponent implements OnInit {
           const arr = p.fromDate as unknown as number[];
           return {
             fromDate:
-              Array.isArray(arr) && arr.length >= 3
-                ? new Date(arr[0], arr[1] - 1, arr[2])
-                : new Date(),
+              Array.isArray(arr) && arr.length >= 3 ? formatArrayDate(arr) : toIsoDate(new Date()),
             interestRate: p.interestRate ?? null,
             isDifferentialToBaseLendingRate: !!p.isDifferentialToBaseLendingRate,
           };
@@ -273,9 +277,14 @@ export class FloatingRateFormComponent implements OnInit {
     });
   }
 
+  /** Unique per row so each button's `getElementById` hits its own picker (#548). */
+  periodFromDatePickerId(index: number): string {
+    return `periodfromDate-picker-${index}`;
+  }
+
   addPeriod(): void {
     this.periods().push({
-      fromDate: new Date(),
+      fromDate: toIsoDate(new Date()),
       interestRate: null,
       isDifferentialToBaseLendingRate: false,
     });
@@ -287,28 +296,39 @@ export class FloatingRateFormComponent implements OnInit {
 
   onSubmit(): void {
     this.isSaving.set(true);
-    const payload: FloatingRateRequest = {
-      name: this.rate().name,
-      isBaseLendingRate: this.rate().isBaseLendingRate,
-      isActive: this.rate().isActive,
-      ratePeriods: this.periods().map((p) => ({
+    const ratePeriods = this.periods()
+      .filter((p) => typeof p.interestRate === 'number')
+      .map((p) => ({
         fromDate: formatDateToFineract(p.fromDate),
-        interestRate: p.interestRate ?? undefined,
+        interestRate: p.interestRate!,
         isDifferentialToBaseLendingRate: p.isDifferentialToBaseLendingRate,
         dateFormat: FINERACT_DATE_FORMAT,
         locale: FINERACT_LOCALE,
-      })),
-    };
+      }));
 
-    const request$ =
-      this.isEditMode() && this.rateId
-        ? this.floatingRatesService.putFloatingratesFloatingRateId(this.rateId, payload)
-        : this.floatingRatesService.postFloatingrates(payload);
-
-    request$.subscribe({
-      next: () => this.router.navigate([this.LIST_PATH]),
-      error: () => this.isSaving.set(false),
-    });
+    if (this.isEditMode() && this.rateId) {
+      const payload: FloatingRateUpdateRequest = {
+        name: this.rate().name,
+        isBaseLendingRate: this.rate().isBaseLendingRate,
+        isActive: this.rate().isActive,
+        ratePeriods,
+      };
+      this.floatingRatesService.putFloatingratesFloatingRateId(this.rateId, payload).subscribe({
+        next: () => this.router.navigate([this.LIST_PATH]),
+        error: () => this.isSaving.set(false),
+      });
+    } else {
+      const payload: FloatingRateCreateRequest = {
+        name: this.rate().name,
+        isBaseLendingRate: this.rate().isBaseLendingRate,
+        isActive: this.rate().isActive,
+        ratePeriods,
+      };
+      this.floatingRatesService.postFloatingrates(payload).subscribe({
+        next: () => this.router.navigate([this.LIST_PATH]),
+        error: () => this.isSaving.set(false),
+      });
+    }
   }
 
   onCancel(): void {

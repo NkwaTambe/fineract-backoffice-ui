@@ -19,7 +19,7 @@
 
 import { inject, input, signal, Component, OnInit } from '@angular/core';
 import { RouterModule } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { DOWNLOAD, TranslatePipe } from '../../../core/adapters';
 import {
   DataTableComponent,
   ColumnDef,
@@ -27,33 +27,31 @@ import {
   CellTemplateDirective,
 } from '../../../shared';
 import { DocumentsService, DocumentData } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
-import { DOWNLOAD } from '../../../core/adapters';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 @Component({
   selector: 'app-client-documents-list',
   standalone: true,
   imports: [
     RouterModule,
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     HasPermissionDirective,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
     <div class="tab-actions">
-      <ion-button
-        color="primary"
-        [routerLink]="['/clients', clientId(), 'documents', 'create']"
+      <app-button
+        type="button"
+        intent="primary"
+        [link]="['/clients', clientId(), 'documents', 'create']"
+        icon="cloud-upload-outline"
         *appHasPermission="'CREATE_DOCUMENT'"
+        >{{ 'CLIENTS.ADD_DOCUMENT' | appTranslate }}</app-button
       >
-        <ion-icon name="cloud-upload-outline"></ion-icon>
-        {{ 'CLIENTS.ADD_DOCUMENT' | translate }}
-      </ion-button>
     </div>
 
     <app-data-table
@@ -64,24 +62,26 @@ import { DOWNLOAD } from '../../../core/adapters';
     >
       <ng-template appCellTemplate="actions" let-row>
         <div class="action-buttons">
-          <ion-button
-            fill="clear"
-            color="primary"
+          <app-button
+            type="button"
+            intent="primary"
+            emphasis="quiet"
+            [label]="'COMMON.DOWNLOAD' | appTranslate"
+            icon="download-outline"
             (click)="onDownload(row.id)"
             *appHasPermission="'READ_DOCUMENT'"
-            [appTooltip]="'COMMON.DOWNLOAD' | translate"
-          >
-            <ion-icon name="download-outline"></ion-icon>
-          </ion-button>
-          <ion-button
-            fill="clear"
-            color="danger"
+            [appTooltip]="'COMMON.DOWNLOAD' | appTranslate"
+          />
+          <app-button
+            type="button"
+            intent="danger"
+            emphasis="quiet"
+            [label]="'COMMON.DELETE' | appTranslate"
+            icon="trash-outline"
             (click)="onDelete(row.id)"
             *appHasPermission="'DELETE_DOCUMENT'"
-            [appTooltip]="'COMMON.DELETE' | translate"
-          >
-            <ion-icon name="trash-outline"></ion-icon>
-          </ion-button>
+            [appTooltip]="'COMMON.DELETE' | appTranslate"
+          />
         </div>
       </ng-template>
     </app-data-table>

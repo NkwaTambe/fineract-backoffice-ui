@@ -19,8 +19,8 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { JsonPipe } from '@angular/common';
-import { TranslateModule } from '@ngx-translate/core';
 import { LoanReschedulingService } from '../../../api';
+import { TranslatePipe } from '../../../core/adapters';
 import { NotificationService } from '../../../core/services/notification.service';
 import {
   IonButton,
@@ -43,7 +43,7 @@ import {
   imports: [
     FormsModule,
     JsonPipe,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonSpinner,
     IonInput,
@@ -60,16 +60,16 @@ import {
   template: `
     <ion-card>
       <ion-card-header>
-        <ion-card-title>{{ 'LOAN_SCHEDULE_MODIFY.TITLE' | translate }}</ion-card-title>
+        <ion-card-title>{{ 'LOAN_SCHEDULE_MODIFY.TITLE' | appTranslate }}</ion-card-title>
       </ion-card-header>
       <ion-card-content>
         <div class="form-grid">
           <ion-item fill="outline">
             <ion-label position="stacked">{{
-              'LOAN_SCHEDULE_MODIFY.LOAN_ID' | translate
+              'LOAN_SCHEDULE_MODIFY.LOAN_ID' | appTranslate
             }}</ion-label>
             <ion-input
-              [attr.aria-label]="'LOAN_SCHEDULE_MODIFY.LOAN_ID' | translate"
+              [attr.aria-label]="'LOAN_SCHEDULE_MODIFY.LOAN_ID' | appTranslate"
               type="number"
               [(ngModel)]="loanId"
               required
@@ -78,28 +78,30 @@ import {
 
           <ion-item fill="outline">
             <ion-label position="stacked">{{
-              'LOAN_SCHEDULE_MODIFY.COMMAND' | translate
+              'LOAN_SCHEDULE_MODIFY.COMMAND' | appTranslate
             }}</ion-label>
             <ion-select
-              [attr.aria-label]="'LOAN_SCHEDULE_MODIFY.COMMAND' | translate"
+              [attr.aria-label]="'LOAN_SCHEDULE_MODIFY.COMMAND' | appTranslate"
               interface="popover"
               [(ngModel)]="command"
               required
             >
               @for (cmd of commands; track cmd.value) {
-                <ion-select-option [value]="cmd.value">{{ cmd.label }}</ion-select-option>
+                <ion-select-option [value]="cmd.value">{{
+                  cmd.label | appTranslate
+                }}</ion-select-option>
               }
             </ion-select>
           </ion-item>
         </div>
 
         <ion-item fill="outline" class="full-width">
-          <ion-label position="stacked">{{ 'LOAN_SCHEDULE_MODIFY.BODY' | translate }}</ion-label>
+          <ion-label position="stacked">{{ 'LOAN_SCHEDULE_MODIFY.BODY' | appTranslate }}</ion-label>
           <ion-textarea
-            [attr.aria-label]="'LOAN_SCHEDULE_MODIFY.BODY' | translate"
+            [attr.aria-label]="'LOAN_SCHEDULE_MODIFY.BODY' | appTranslate"
             [(ngModel)]="bodyText"
             rows="6"
-            [placeholder]="'LOAN_SCHEDULE_MODIFY.BODY_PLACEHOLDER' | translate"
+            [placeholder]="'LOAN_SCHEDULE_MODIFY.BODY_PLACEHOLDER' | appTranslate"
           ></ion-textarea>
         </ion-item>
 
@@ -112,7 +114,7 @@ import {
             @if (isLoading()) {
               <ion-spinner name="crescent"></ion-spinner>
             } @else {
-              {{ 'LOAN_SCHEDULE_MODIFY.SUBMIT' | translate }}
+              {{ 'LOAN_SCHEDULE_MODIFY.SUBMIT' | appTranslate }}
             }
           </ion-button>
         </div>
@@ -120,7 +122,7 @@ import {
         @if (response() !== null) {
           <ion-card class="response-card">
             <ion-card-header>
-              <ion-card-title>{{ 'LOAN_SCHEDULE_MODIFY.RESPONSE' | translate }}</ion-card-title>
+              <ion-card-title>{{ 'LOAN_SCHEDULE_MODIFY.RESPONSE' | appTranslate }}</ion-card-title>
             </ion-card-header>
             <ion-card-content>
               <pre>{{ response() | json }}</pre>
@@ -175,8 +177,14 @@ export class LoanScheduleModifyComponent {
   readonly response = signal<unknown>(null);
 
   commands = [
-    { value: 'calculateRepaymentSchedule', label: 'Calculate Repayment Schedule' },
-    { value: 'forceRecalculateRepaymentSchedule', label: 'Force Recalculate Repayment Schedule' },
+    {
+      value: 'calculateRepaymentSchedule',
+      label: 'LOAN_SCHEDULE_MODIFY.CALCULATE_REPAYMENT_SCHEDULE',
+    },
+    {
+      value: 'forceRecalculateRepaymentSchedule',
+      label: 'LOAN_SCHEDULE_MODIFY.FORCE_RECALCULATE_REPAYMENT_SCHEDULE',
+    },
   ];
 
   submit(): void {

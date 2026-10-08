@@ -18,20 +18,22 @@
  */
 
 import {
-  importProvidersFrom,
   isDevMode,
   provideBrowserGlobalErrorListeners,
   provideCheckNoChangesConfig,
   provideZoneChangeDetection,
-  APP_INITIALIZER,
+  provideAppInitializer,
   ApplicationConfig,
   ErrorHandler,
+  inject,
 } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { TitleStrategy, provideRouter } from '@angular/router';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
-import { TranslateModule } from '@ngx-translate/core';
-import { provideTranslateHttpLoader } from '@ngx-translate/http-loader';
+import {
+  MissingTranslationHandler,
+  provideTranslateLoader,
+  provideTranslateService,
+} from '@ngx-translate/core';
 
 import { routes } from './app.routes';
 import { authInterceptor } from './core/interceptors/auth.interceptor';
@@ -41,15 +43,30 @@ import { loadingInterceptor } from './core/interceptors/loading.interceptor';
 import { retryInterceptor } from './core/interceptors/retry.interceptor';
 import { GlobalErrorHandler } from './core/errors/global-error-handler';
 import { ConfigService } from './core/services/config.service';
+import { BrandingService } from './core/services/branding.service';
+import { DeploymentTranslateLoader } from './core/adapters/i18n/deployment-translate.loader';
+import { ReportingMissingTranslationHandler } from './core/adapters/i18n/missing-translation.handler';
 import { provideIonicAngular } from '@ionic/angular/standalone';
 
 import { BASE_PATH } from './api/variables';
+import { TranslatedTitleStrategy } from './core/router/translated-title.strategy';
 
 /**
- * Factory function to load configuration before app bootstrap
+ * Loads configuration before the application bootstraps.
+ *
+ * Branding is applied in the same step, immediately after the config resolves and before the
+ * first render, so the application never paints in the shipped colours and then repaints in the
+ * deployment's.
  */
-export function initializeApp(configService: ConfigService) {
-  return () => configService.loadConfig();
+export async function initializeApp(): Promise<void> {
+  // Both resolved before the first `await`. An injection context does not survive one, so
+  // `inject()` after the config has loaded throws NG0203 — at startup, in production, where the
+  // failure is a blank page.
+  const config = inject(ConfigService);
+  const branding = inject(BrandingService);
+
+  await config.loadConfig();
+  branding.apply();
 }
 
 export const appConfig: ApplicationConfig = {
@@ -74,6 +91,8 @@ export const appConfig: ApplicationConfig = {
     ...(isDevMode() ? [provideCheckNoChangesConfig({ interval: 500, exhaustive: true })] : []),
     { provide: ErrorHandler, useClass: GlobalErrorHandler },
     provideRouter(routes),
+    // Routes carry a translation key in `title`; this resolves it. See the strategy's own docs.
+    { provide: TitleStrategy, useClass: TranslatedTitleStrategy },
     // Order is the chain order, outermost first. `retryInterceptor` is last, and so closest
     // to the backend, deliberately: `loadingInterceptor` outside it counts one logical request
     // instead of flickering the progress bar per attempt, `errorInterceptor` toasts only once
@@ -87,38 +106,44 @@ export const appConfig: ApplicationConfig = {
         retryInterceptor,
       ]),
     ),
-    provideAnimationsAsync(),
-    {
-      provide: APP_INITIALIZER,
-      useFactory: initializeApp,
-      deps: [ConfigService],
-      multi: true,
-    },
+    // No `provideAnimationsAsync()`. It is deprecated as of Angular 20.2 in favour of the
+    // `animate.enter` / `animate.leave` template APIs, and nothing here needed it: the app
+    // declares no `@angular/animations` triggers, and Ionic drives its own transitions through
+    // the Web Animations API rather than Angular's.
+    provideAppInitializer(initializeApp),
     {
       provide: BASE_PATH,
       useFactory: (configService: ConfigService) => {
         const url = configService.apiUrl;
         console.log('Initializing API BASE_PATH:', url);
-        return url.endsWith('/v1') ? url.substring(0, url.length - 3) : url;
+        return url.endsWith('/v1') ? url.slice(0, Math.max(0, url.length - 3)) : url;
       },
       deps: [ConfigService],
     },
-    // No language options here, deliberately. `defaultLanguage` was deprecated in
-    // ngx-translate 17 and, without `useDefaultLang: true`, did nothing but print a warning
-    // on every startup — the language has always been set by `AppComponent`, which calls
-    // `addLangs`, `setFallbackLang('en')` and `use(...)`.
+    // No language options here, deliberately. `lang` and `fallbackLang` are the two ways to have
+    // `TranslateService`'s constructor start loading a catalogue, and the language has always been
+    // set by `AppComponent`, which calls `addLangs`, `setFallbackLang('en')` and `use(...)`.
     //
     // Passing `fallbackLang: 'en'` here instead is NOT equivalent, and must not be
-    // reintroduced as a way of clearing that warning. It makes `TranslateService`'s
+    // reintroduced as a way of tidying this up. It makes `TranslateService`'s
     // constructor load the `en` catalogue immediately, and that constructor runs from
     // `errorInterceptor`'s `inject(I18N)` — that is, while the interceptor chain is being
     // built for the application's first request. The catalogue fetch re-enters the
     // half-built chain and never resolves, so every key renders as its own name and the
     // login button reads `login.submit`. Caught by e2e/all-functions-read-shortcut.spec.ts.
-    importProvidersFrom(TranslateModule.forRoot()),
-    provideTranslateHttpLoader({
-      prefix: 'assets/i18n/',
-      suffix: '.json',
+    //
+    // The two plugins passed here do not touch language selection or catalogue loading, so they
+    // are exempt from the argument above. The missing-translation handler only observes a lookup
+    // that already failed (see the handler for why an unresolved key needs to be loud somewhere).
+    // The loader replaces the library's HTTP one, so the shipped catalogue and a deployment's own
+    // string overrides arrive as one already-merged object. See DeploymentTranslateLoader for
+    // why the merge cannot be applied after the fact.
+    provideTranslateService({
+      missingTranslationHandler: {
+        provide: MissingTranslationHandler,
+        useExisting: ReportingMissingTranslationHandler,
+      },
+      loader: provideTranslateLoader(DeploymentTranslateLoader),
     }),
     // The adapter tokens (`OVERLAY`, `I18N`) resolve to their default implementations
     // without a provider here — see `core/adapters/`. A deployment swapping the component

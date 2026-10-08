@@ -17,7 +17,17 @@
  * under the License.
  */
 
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  OnDestroy,
+  computed,
+  inject,
+  signal,
+  viewChildren,
+} from '@angular/core';
+
+import { createPermissionCheck } from '../../shared/utils/permission-check';
 import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { Observable } from 'rxjs';
@@ -40,7 +50,7 @@ import {
   CellTemplateDirective,
   ColumnDef,
   DataTableComponent,
-  HasPermissionDirective,
+  RequiresPermissionDirective,
   StatusBadgeComponent,
 } from '../../shared';
 import { TooltipDirective } from '../../shared/directives/tooltip.directive';
@@ -82,9 +92,11 @@ import {
   GroupStaffResult,
 } from './group-staff-dialog.component';
 import { GroupNotesListComponent } from './tabs/group-notes-list.component';
+import { GroupAccountsTabComponent } from './tabs/group-accounts-tab.component';
+import { EntityDocumentsComponent } from '../../shared/components/entity-documents/entity-documents.component';
+import { EntityDatatablesComponent } from '../../shared/components/entity-datatables/entity-datatables.component';
 
 /** A tab index that is also what the segment binds to; `ion-segment` deals in strings. */
-const TAB = { GENERAL: '0', MEMBERS: '1', COMMITTEE: '2', NOTES: '3' } as const;
 
 /**
  * The group detail screen: summary, membership, committee and notes, plus the lifecycle
@@ -101,16 +113,38 @@ const TAB = { GENERAL: '0', MEMBERS: '1', COMMITTEE: '2', NOTES: '3' } as const;
  * render empty against a group that has members. See {@link GroupDetail} for why the response is
  * typed here rather than taken from the generated client.
  */
+/**
+ * The tabs on this screen, named.
+ *
+ * They were positional strings — '0', '7' — which say nothing at the point of use and shift
+ * meaning whenever a tab is inserted in the middle. The values are still strings because
+ * `ion-segment` compares them as such.
+ */
+export const GROUP_TAB = {
+  general: 'general',
+  members: 'members',
+  committee: 'committee',
+  notes: 'notes',
+  accounts: 'accounts',
+  documents: 'documents',
+  customFields: 'customFields',
+} as const;
+
+export type GroupTab = (typeof GROUP_TAB)[keyof typeof GROUP_TAB];
+
 @Component({
   selector: 'app-group-view',
   standalone: true,
   imports: [
+    GroupAccountsTabComponent,
+    EntityDocumentsComponent,
+    EntityDatatablesComponent,
     RouterModule,
     TranslatePipe,
     StatusBadgeComponent,
     DataTableComponent,
     CellTemplateDirective,
-    HasPermissionDirective,
+    RequiresPermissionDirective,
     TooltipDirective,
     GroupNotesListComponent,
     IonButton,
@@ -165,7 +199,7 @@ const TAB = { GENERAL: '0', MEMBERS: '1', COMMITTEE: '2', NOTES: '3' } as const;
                           button
                           data-testid="group-action-activate"
                           (click)="onActivate()"
-                          *appHasPermission="'ACTIVATE_GROUP'"
+                          appRequiresPermission="ACTIVATE_GROUP"
                         >
                           <ion-icon slot="start" name="play-circle-outline"></ion-icon>
                           <ion-label>{{ 'GROUPS.ACTIVATE' | appTranslate }}</ion-label>
@@ -176,7 +210,7 @@ const TAB = { GENERAL: '0', MEMBERS: '1', COMMITTEE: '2', NOTES: '3' } as const;
                           button
                           data-testid="group-action-close"
                           (click)="onClose()"
-                          *appHasPermission="'CLOSE_GROUP'"
+                          appRequiresPermission="CLOSE_GROUP"
                         >
                           <ion-icon slot="start" name="close-circle-outline"></ion-icon>
                           <ion-label>{{ 'GROUPS.CLOSE' | appTranslate }}</ion-label>
@@ -187,7 +221,7 @@ const TAB = { GENERAL: '0', MEMBERS: '1', COMMITTEE: '2', NOTES: '3' } as const;
                           button
                           data-testid="group-action-assign-staff"
                           (click)="onAssignStaff()"
-                          *appHasPermission="'ASSIGNSTAFF_GROUP'"
+                          appRequiresPermission="ASSIGNSTAFF_GROUP"
                         >
                           <ion-icon slot="start" name="person-add-outline"></ion-icon>
                           <ion-label>{{ 'GROUPS.ASSIGN_STAFF' | appTranslate }}</ion-label>
@@ -197,7 +231,7 @@ const TAB = { GENERAL: '0', MEMBERS: '1', COMMITTEE: '2', NOTES: '3' } as const;
                             button
                             data-testid="group-action-unassign-staff"
                             (click)="onUnassignStaff()"
-                            *appHasPermission="'UNASSIGNSTAFF_GROUP'"
+                            appRequiresPermission="UNASSIGNSTAFF_GROUP"
                           >
                             <ion-icon slot="start" name="person-remove-outline"></ion-icon>
                             <ion-label>{{ 'GROUPS.UNASSIGN_STAFF' | appTranslate }}</ion-label>
@@ -207,7 +241,7 @@ const TAB = { GENERAL: '0', MEMBERS: '1', COMMITTEE: '2', NOTES: '3' } as const;
                           button
                           data-testid="group-action-edit"
                           [routerLink]="['/groups/edit', groupId]"
-                          *appHasPermission="'UPDATE_GROUP'"
+                          appRequiresPermission="UPDATE_GROUP"
                         >
                           <ion-icon slot="start" name="create-outline"></ion-icon>
                           <ion-label>{{ 'COMMON.EDIT' | appTranslate }}</ion-label>
@@ -228,21 +262,30 @@ const TAB = { GENERAL: '0', MEMBERS: '1', COMMITTEE: '2', NOTES: '3' } as const;
 
         <div class="content-body">
           <ion-segment [value]="activeTab()" (ionChange)="activeTab.set($any($event).detail.value)">
-            <ion-segment-button value="0" data-testid="group-tab-general">
+            <ion-segment-button [value]="TAB.general" data-testid="group-tab-general">
               <ion-label>{{ 'GROUPS.GENERAL' | appTranslate }}</ion-label>
             </ion-segment-button>
-            <ion-segment-button value="1" data-testid="group-tab-members">
+            <ion-segment-button [value]="TAB.members" data-testid="group-tab-members">
               <ion-label>{{ 'GROUPS.MEMBERS' | appTranslate }}</ion-label>
             </ion-segment-button>
-            <ion-segment-button value="2" data-testid="group-tab-committee">
+            <ion-segment-button [value]="TAB.committee" data-testid="group-tab-committee">
               <ion-label>{{ 'GROUPS.COMMITTEE' | appTranslate }}</ion-label>
             </ion-segment-button>
-            <ion-segment-button value="3" data-testid="group-tab-notes">
+            <ion-segment-button [value]="TAB.accounts" data-testid="group-tab-accounts">
+              <ion-label>{{ 'COMMON.ACCOUNTS' | appTranslate }}</ion-label>
+            </ion-segment-button>
+            <ion-segment-button [value]="TAB.documents" data-testid="group-tab-documents">
+              <ion-label>{{ 'SAVINGS.DOCUMENTS' | appTranslate }}</ion-label>
+            </ion-segment-button>
+            <ion-segment-button [value]="TAB.customFields" data-testid="group-tab-custom-fields">
+              <ion-label>{{ 'SYSTEM.CUSTOM_FIELDS' | appTranslate }}</ion-label>
+            </ion-segment-button>
+            <ion-segment-button [value]="TAB.notes" data-testid="group-tab-notes">
               <ion-label>{{ 'GROUPS.NOTES' | appTranslate }}</ion-label>
             </ion-segment-button>
           </ion-segment>
 
-          @if (activeTab() === '0') {
+          @if (activeTab() === TAB.general) {
             <div class="tab-content">
               <ion-card>
                 <ion-card-header>
@@ -286,7 +329,7 @@ const TAB = { GENERAL: '0', MEMBERS: '1', COMMITTEE: '2', NOTES: '3' } as const;
             </div>
           }
 
-          @if (activeTab() === '1') {
+          @if (activeTab() === TAB.members) {
             <div class="tab-content">
               <div class="tab-actions">
                 <ion-button
@@ -294,7 +337,7 @@ const TAB = { GENERAL: '0', MEMBERS: '1', COMMITTEE: '2', NOTES: '3' } as const;
                   data-testid="group-add-members"
                   [disabled]="isClosed()"
                   (click)="onAddMembers()"
-                  *appHasPermission="'ASSOCIATECLIENTS_GROUP'"
+                  appRequiresPermission="ASSOCIATECLIENTS_GROUP"
                 >
                   <ion-icon name="person-add-outline"></ion-icon>
                   {{ 'GROUPS.ADD_MEMBERS' | appTranslate }}
@@ -305,7 +348,7 @@ const TAB = { GENERAL: '0', MEMBERS: '1', COMMITTEE: '2', NOTES: '3' } as const;
                   data-testid="group-remove-members"
                   [disabled]="isClosed() || !members().length"
                   (click)="onRemoveMembers()"
-                  *appHasPermission="'DISASSOCIATECLIENTS_GROUP'"
+                  appRequiresPermission="DISASSOCIATECLIENTS_GROUP"
                 >
                   <ion-icon name="person-remove-outline"></ion-icon>
                   {{ 'GROUPS.REMOVE_MEMBERS' | appTranslate }}
@@ -319,7 +362,11 @@ const TAB = { GENERAL: '0', MEMBERS: '1', COMMITTEE: '2', NOTES: '3' } as const;
                 [localLogic]="true"
               >
                 <ng-template appCellTemplate="displayName" let-row>
-                  <a [routerLink]="['/clients/view', row.id]">{{ row.displayName }}</a>
+                  @if (canViewClient()) {
+                    <a [routerLink]="['/clients/view', row.id]">{{ row.displayName }}</a>
+                  } @else {
+                    {{ row.displayName }}
+                  }
                 </ng-template>
                 <ng-template appCellTemplate="status" let-row>
                   <app-status-badge [status]="row.status"></app-status-badge>
@@ -328,7 +375,7 @@ const TAB = { GENERAL: '0', MEMBERS: '1', COMMITTEE: '2', NOTES: '3' } as const;
             </div>
           }
 
-          @if (activeTab() === '2') {
+          @if (activeTab() === TAB.committee) {
             <div class="tab-content">
               <div class="tab-actions">
                 <ion-button
@@ -336,7 +383,7 @@ const TAB = { GENERAL: '0', MEMBERS: '1', COMMITTEE: '2', NOTES: '3' } as const;
                   data-testid="group-assign-role"
                   [disabled]="isClosed() || !members().length"
                   (click)="onAssignRole()"
-                  *appHasPermission="'ASSIGNROLE_GROUP'"
+                  appRequiresPermission="ASSIGNROLE_GROUP"
                 >
                   <ion-icon name="ribbon-outline"></ion-icon>
                   {{ 'GROUPS.ASSIGN_ROLE' | appTranslate }}
@@ -359,7 +406,7 @@ const TAB = { GENERAL: '0', MEMBERS: '1', COMMITTEE: '2', NOTES: '3' } as const;
                     [attr.data-testid]="'group-unassign-role-' + row.id"
                     [disabled]="isClosed()"
                     (click)="onUnassignRole(row)"
-                    *appHasPermission="'UNASSIGNROLE_GROUP'"
+                    appRequiresPermission="UNASSIGNROLE_GROUP"
                     [appTooltip]="'GROUPS.UNASSIGN_ROLE' | appTranslate"
                     [attr.aria-label]="'GROUPS.UNASSIGN_ROLE' | appTranslate"
                   >
@@ -370,9 +417,30 @@ const TAB = { GENERAL: '0', MEMBERS: '1', COMMITTEE: '2', NOTES: '3' } as const;
             </div>
           }
 
-          @if (activeTab() === '3') {
+          @if (activeTab() === TAB.notes) {
             <div class="tab-content">
               <app-group-notes-list [groupId]="groupId"></app-group-notes-list>
+            </div>
+          }
+
+          @if (activeTab() === TAB.accounts) {
+            <div class="tab-content">
+              <app-group-accounts-tab [groupId]="groupId"></app-group-accounts-tab>
+            </div>
+          }
+
+          @if (activeTab() === TAB.documents) {
+            <div class="tab-content">
+              <app-entity-documents entityType="groups" [entityId]="groupId"></app-entity-documents>
+            </div>
+          }
+
+          @if (activeTab() === TAB.customFields) {
+            <div class="tab-content">
+              <app-entity-datatables
+                apptableName="m_group"
+                [entityId]="groupId"
+              ></app-entity-datatables>
             </div>
           }
         </div>
@@ -452,7 +520,8 @@ const TAB = { GENERAL: '0', MEMBERS: '1', COMMITTEE: '2', NOTES: '3' } as const;
     `,
   ],
 })
-export class GroupViewComponent implements OnInit {
+export class GroupViewComponent implements OnInit, OnDestroy {
+  private readonly popovers = viewChildren(IonPopover);
   private readonly groupsService = inject(GroupsService);
   private readonly httpClient = inject(HttpClient);
   private readonly basePath = inject(BASE_PATH);
@@ -467,7 +536,10 @@ export class GroupViewComponent implements OnInit {
   readonly group = signal<GroupDetail | null>(null);
   readonly isLoading = signal(false);
   readonly hasError = signal(false);
-  readonly activeTab = signal<string>(TAB.GENERAL);
+  /** Exposed so the template names its tabs instead of numbering them. */
+  protected readonly TAB = GROUP_TAB;
+
+  readonly activeTab = signal<GroupTab>(GROUP_TAB.general);
 
   /**
    * `clientMembers` rather than `activeClientMembers`.
@@ -476,6 +548,13 @@ export class GroupViewComponent implements OnInit {
    * officer would use to chase them, and makes the member count disagree with what the platform
    * will let you disassociate.
    */
+  /**
+   * A group's members come back with READ_GROUP alone, but the client screen is gated on
+   * READ_CLIENT, so a reader without it was offered a name whose only destination was
+   * `/forbidden`. The member is still named — the membership is what this tab is for.
+   */
+  protected readonly canViewClient = createPermissionCheck('READ_CLIENT');
+
   readonly members = computed<GroupClientMember[]>(() => this.group()?.clientMembers ?? []);
   readonly roles = computed<GroupRoleAssignment[]>(() => this.group()?.groupRoles ?? []);
 
@@ -499,6 +578,12 @@ export class GroupViewComponent implements OnInit {
   ngOnInit(): void {
     this.groupId = Number(this.route.snapshot.paramMap.get('id'));
     this.loadGroup();
+  }
+
+  ngOnDestroy(): void {
+    for (const popover of this.popovers()) {
+      void popover.dismiss().catch(() => false);
+    }
   }
 
   /**
@@ -553,7 +638,7 @@ export class GroupViewComponent implements OnInit {
     if (!result) return;
 
     this.runCommand('activate', {
-      activationDate: formatDateToFineract(new Date(result.actionDate)),
+      activationDate: formatDateToFineract(result.actionDate),
       locale: FINERACT_LOCALE,
       dateFormat: FINERACT_DATE_FORMAT,
     });
@@ -569,7 +654,7 @@ export class GroupViewComponent implements OnInit {
     if (!result) return;
 
     this.runCommand('close', {
-      closureDate: formatDateToFineract(new Date(result.actionDate)),
+      closureDate: formatDateToFineract(result.actionDate),
       closureReasonId: result.closureReasonId,
       locale: FINERACT_LOCALE,
       dateFormat: FINERACT_DATE_FORMAT,

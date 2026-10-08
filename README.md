@@ -78,7 +78,7 @@ System admins handle security, audit, and infrastructure. The UI supports:
 - **UI Components:** Ionic (`@ionic/angular` v8, Material Design mode)
 - **Backend Integration:** Fineract REST API (e.g. `/fineract-provider/api/v1/`)
 - **Authentication:** Fineract-based auth (basic auth or token-based)
-- **Testing:** Karma + Jasmine (unit), Playwright (e2e)
+- **Testing:** Vitest (unit), Playwright (e2e)
 - **Deployment:** Designed to run alongside Fineract (e.g. Docker, reverse proxy)
 
 ---
@@ -103,45 +103,57 @@ System admins handle security, audit, and infrastructure. The UI supports:
 
 ## Prerequisites
 
-- **Node.js** (v22 or later recommended) and **npm** or **yarn**
-- **Angular CLI** (`npm i -g @angular/cli`)
-- **Apache Fineract** instance (e.g. via Docker: `docker run -d -p 8443:8443 apache/fineract:latest`)
-- Access to Fineract REST API (default demo: `mifos` / `password` on `https://localhost:8443/fineract-provider/api/v1`)
+- **Node.js** `>=22.22.3` and npm. The repository includes the Angular CLI, so a global install is not needed.
+- For local HTTPS development, [`mkcert`](https://github.com/FiloSottile/mkcert) to generate the ignored
+  `ssl/localhost.*` files once.
+- A Fineract instance for manual work or real-backend E2E tests. Mocked unit and Playwright tests do
+  not need one.
 
 ---
 
 ## Getting Started
 
-### Development
+### Quick start
 
 ```bash
-# Install dependencies
-npm install
+# Install exactly what the lockfile specifies
+npm ci
 
-# Configure API base URL (e.g. in environment files)
-# Default: https://localhost:8443/fineract-provider/api/v1
+# Generate local-only HTTPS certificates (first run)
+./scripts/setup-ssl.sh
 
 # Run development server
 npm start
 ```
 
-Access the app at `http://localhost:4200` (or the configured port).
+The app is available at `https://localhost:4200`. The development proxy keeps API traffic same-origin;
+see [Project Setup Guide](SETUP.md) to connect a local Fineract instance or a sandbox.
 
-### Testing & Quality
+### Validate a change
 
 ```bash
-# Run unit tests (Karma + Jasmine)
+# Run unit tests (Vitest)
 npm test -- --watch=false
 
-# Run end-to-end tests (Playwright)
-npm run test:e2e
+# Install the Chromium binary used by the next command (first run)
+npx playwright install chromium
+
+# Run the fast, mocked browser tests (no Fineract backend required)
+npm run test:e2e -- --project=mocked
 
 # Run linting
 npm run lint
 
-# Format code
-npm run format
+# Check formatting without modifying files
+npm run format:check
+
+# Production build
+npm run build
 ```
+
+For real-backend E2E, a local Docker stack, and focused Playwright runs, see
+[E2E testing](DOCS/E2E_TESTING.md). The complete PR check list and commands for reproducing failures
+are in [CI checks](DOCS/CI_CHECKS.md).
 
 ### Configuration
 
@@ -152,23 +164,52 @@ npm run format
 
 ## Deployment with Fineract
 
-The UI is built as a static SPA and can be deployed together with Fineract:
+### The whole stack, in one command
 
-1. **Standalone Build + Reverse Proxy**
-   - Build: `ng build --configuration production`
-   - Serve output (e.g. `dist/`) via NGINX or similar
-   - Configure reverse proxy so the UI and Fineract share the same origin or CORS allow the API domain
+```bash
+docker compose -f deploy/docker-compose.yml up --build
+# http://localhost:8080  —  mifos / password on a fresh database
+```
 
-2. **Docker (co-located)**
-   - Use `apache/fineract` image for the backend
-   - Add an Angular build step and serve the static files from NGINX or another web server alongside Fineract
+This brings up PostgreSQL, Apache Fineract and the UI on one network. Fineract is deliberately not
+published to the host: the browser reaches it through the UI's own origin.
 
-3. **Single Domain Example (NGINX)**
+### How the UI reaches the API
 
-   ```
-   /          → Angular app (static files)
-   /api/      → proxy to Fineract (https://fineract:8443/fineract-provider/api/v1)
-   ```
+The application always calls **`/api/v1` on its own origin**, and NGINX proxies that to Fineract.
+That is not a convenience — it is what lets the shipped Content-Security-Policy keep
+`connect-src 'self'`. Pointing the browser at Fineract on another host means editing _two_ places
+deliberately: the CSP in `deploy/nginx.conf.template`, and `allowedApiOrigins` in `config.json`.
+They are separate so that a browser-side setting alone cannot open a new destination.
+
+```
+browser ──► http://ui/           ──► index.html + assets
+browser ──► http://ui/api/v1/... ──► nginx ──► https://fineract:8443/fineract-provider/api/v1/...
+```
+
+### Configuration
+
+Every value is read at container start; nothing needs a rebuild.
+
+| Variable                    | Default                                       | What it does                                                                                                                                                                                                         |
+| --------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `FINERACT_API_URL`          | `https://fineract:8443/fineract-provider/api` | The upstream Fineract, as reachable **from the container**. Not a browser-visible URL.                                                                                                                               |
+| `FINERACT_PROXY_SSL_VERIFY` | `off`                                         | Whether NGINX verifies the upstream certificate. Stock Fineract images are self-signed; turn this **on** wherever the upstream presents a certificate the container trusts.                                          |
+| `FINERACT_FORWARDED_PROTO`  | `https`                                       | The `X-Forwarded-Proto` sent to Fineract. It answers 302 to every API call if this is anything else, and the NGINX-to-Fineract hop really is TLS. Set to `$scheme` only behind a proxy that already sets the header. |
+| `DEFAULT_TENANT`            | `default`                                     | Tenant pre-filled on the sign-in form.                                                                                                                                                                               |
+| `RBAC_ENABLED`              | `true`                                        | Client-side permission gating. Must be exactly `true` or `false`; anything else refuses to start.                                                                                                                    |
+| `INSTITUTION_TYPE`          | `universal`                                   | Which group-lending features are exposed.                                                                                                                                                                            |
+| `DEVELOPER_TOOLS_ENABLED`   | `false`                                       | Exposes screens driving Fineract's `/v1/internal/**` endpoints. Leave off anywhere real.                                                                                                                             |
+
+### Serving the build yourself
+
+```bash
+npm ci && npm run build     # output in dist/fineract-backoffice-ui/browser
+```
+
+Serve that directory from any web server, and give it the two things the container provides: a
+`config.json` (see `public/config.json` for the shape) and a proxy from `/api/` to Fineract on the
+same origin. `deploy/nginx.conf.template` is a working reference for both.
 
 ---
 
@@ -179,9 +220,26 @@ The UI is built as a static SPA and can be deployed together with Fineract:
 
 ---
 
+## Community
+
+This repository is part of the Apache Fineract project. Bugs in this UI belong in its GitHub
+Issues, but **features and design decisions are made on the project's developer mailing list**.
+
+- **Mailing list** — subscribe with a blank email to <dev-subscribe@fineract.apache.org>, post to
+  <dev@fineract.apache.org>, and search the
+  [archive](https://lists.apache.org/list.html?dev@fineract.apache.org) first.
+- **Matrix** — [the Fineract space](https://matrix.to/#/%23apache-fineract-home:matrix.org),
+  [developer room](https://matrix.to/#/%23apache-fineract-dev:matrix.org), and
+  [GSoC](https://matrix.to/#/%23apache-fineract-gsoc:matrix.org).
+
+[CONTRIBUTING.md](CONTRIBUTING.md#talk-to-the-community-first) has a table of which channel suits
+which kind of question.
+
+---
+
 ## License
 
-Copyright 2025 The Apache Software Foundation
+Copyright 2025-2026 The Apache Software Foundation
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
 
@@ -194,4 +252,13 @@ For more information on contributing, setting up the project, and our coding sta
 - [Contributing Guide](CONTRIBUTING.md)
 - [Project Setup Guide](SETUP.md)
 - [Code Style Guide](STYLE.md)
-- [Prompt Checkpoint](GEMINI.md)
+- [Agent guidance](AGENTS.md)
+- [CI checks](DOCS/CI_CHECKS.md)
+- [E2E testing](DOCS/E2E_TESTING.md)
+- [Architecture decisions](DOCS/adr/)
+- [Security model](security.md)
+- [Fonts](DOCS/FONTS.md)
+- [The guided tour](DOCS/GUIDED_TOUR.md)
+- [Lint and dependency-licence policy](DOCS/LINT_POLICY.md)
+- [Releasing](RELEASING.md)
+- [Changelog](CHANGELOG.md)

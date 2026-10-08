@@ -19,28 +19,29 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
 import { ColumnDef, CellTemplateDirective } from '../../../shared';
 import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 import { AccountNumberFormatService, GetAccountNumberFormatsIdResponse } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { DialogService } from '../../../core/services/dialog.service';
+import { ButtonComponent } from '../../../ui/button/button.component';
+import { I18N, TranslatePipe } from '../../../core/adapters';
 
 @Component({
   selector: 'app-account-number-formats-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
     <app-data-table
-      [title]="'ACCOUNT_NUMBER_FORMATS.TITLE' | translate"
+      [title]="'ACCOUNT_NUMBER_FORMATS.TITLE' | appTranslate"
       createButtonLabel="ACCOUNT_NUMBER_FORMATS.TITLE"
+      createPermission="CREATE_ACCOUNTNUMBERFORMAT"
       [columns]="columns"
       [data]="formats()"
       [totalRecords]="formats().length"
@@ -56,24 +57,24 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       </ng-template>
 
       <ng-template appCellTemplate="actions" let-row>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'COMMON.EDIT' | translate"
-          [appTooltip]="'COMMON.EDIT' | translate"
+        <app-button
+          type="button"
+          intent="primary"
+          emphasis="quiet"
+          [label]="'COMMON.EDIT' | appTranslate"
+          icon="create-outline"
+          [appTooltip]="'COMMON.EDIT' | appTranslate"
           (click)="onEdit(row)"
-        >
-          <ion-icon name="create-outline"></ion-icon>
-        </ion-button>
-        <ion-button
-          fill="clear"
-          color="danger"
-          [attr.aria-label]="'COMMON.DELETE' | translate"
-          [appTooltip]="'COMMON.DELETE' | translate"
+        />
+        <app-button
+          type="button"
+          intent="danger"
+          emphasis="quiet"
+          [label]="'COMMON.DELETE' | appTranslate"
+          icon="trash-outline"
+          [appTooltip]="'COMMON.DELETE' | appTranslate"
           (click)="onDelete(row)"
-        >
-          <ion-icon name="trash-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,
@@ -81,6 +82,8 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
 export class AccountNumberFormatsListComponent implements OnInit {
   private readonly accountNumberFormatService = inject(AccountNumberFormatService);
   private readonly router = inject(Router);
+  private readonly dialogService = inject(DialogService);
+  private readonly i18n = inject(I18N);
 
   readonly columns: ColumnDef[] = [
     { key: 'accountType', label: 'ACCOUNT_NUMBER_FORMATS.ACCOUNT_TYPE', sortable: true },
@@ -115,19 +118,26 @@ export class AccountNumberFormatsListComponent implements OnInit {
 
   onDelete(row: GetAccountNumberFormatsIdResponse): void {
     if (!row.id) return;
-    const confirmed = window.confirm(
-      `Delete account number format for "${row.accountType?.value ?? row.id}"?`,
-    );
-    if (!confirmed) return;
-    this.accountNumberFormatService
-      .deleteAccountnumberformatsAccountNumberFormatId(row.id)
-      .subscribe({
-        next: () => {
-          this.formats.set(this.formats().filter((f) => f.id !== row.id));
-        },
-        error: (err: unknown) => {
-          console.error('Failed to delete account number format', err);
-        },
+    void this.dialogService
+      .confirm({
+        title: this.i18n.translate('ACCOUNT_NUMBER_FORMATS.DELETE'),
+        message: this.i18n.translate('ACCOUNT_NUMBER_FORMATS.CONFIRM_DELETE', {
+          name: row.accountType?.value ?? row.id,
+        }),
+        destructive: true,
+      })
+      .then((confirmed) => {
+        if (!confirmed) return;
+        this.accountNumberFormatService
+          .deleteAccountnumberformatsAccountNumberFormatId(row.id!)
+          .subscribe({
+            next: () => {
+              this.formats.set(this.formats().filter((f) => f.id !== row.id));
+            },
+            error: (err: unknown) => {
+              console.error('Failed to delete account number format', err);
+            },
+          });
       });
   }
 }

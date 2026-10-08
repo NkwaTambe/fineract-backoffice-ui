@@ -5,14 +5,21 @@
  * regarding copyright ownership.  The ASF licenses this file
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
- * with the License.  See the NOTICE file BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
 
 /* eslint-disable sonarjs/no-duplicate-string -- Playwright test patterns inherently repeat locator strings */
 
+import { mockClientTextSearch } from './utils/client-search-mock';
 import { test, expect, Page } from './fixtures';
 
 /* ─────────── Constants ─────────── */
@@ -100,6 +107,7 @@ async function mockOffices(page: Page, offices = [OFFICE_HEAD]) {
 }
 
 async function mockClients(page: Page, clients: unknown[] = []) {
+  await mockClientTextSearch(page, clients);
   const body =
     clients.length > 0
       ? JSON.stringify({ totalFilteredRecords: clients.length, pageItems: clients })
@@ -126,9 +134,18 @@ async function mockDashboardCounts(page: Page) {
   });
 }
 
+// The header leaves out the business date when the instance has none (GET /businessdate
+// answers []), so the header checks below need one to be configured.
+async function mockBusinessDate(page: Page) {
+  await page.route('**/api/v1/businessdate**', async (route) => {
+    await route.fulfill({ json: [{ type: 'BUSINESS_DATE', date: [2026, 10, 2] }] });
+  });
+}
+
 async function loginAndGoToDashboard(page: Page) {
   await mockConfig(page);
   await mockAuth(page);
+  await mockBusinessDate(page);
   await mockDashboardCounts(page);
   await page.goto('/login');
 
@@ -153,6 +170,20 @@ async function loginAndGoToDashboard(page: Page) {
 
 function okJsonResponse(body: string) {
   return { status: 200, contentType: JSON_CONTENT, body };
+}
+
+/** A form field's own `<ion-label>`, so a help tooltip repeating the label cannot match too. */
+function fieldLabel(page: Page, text: string) {
+  return page
+    .locator('ion-label')
+    .filter({ hasText: new RegExp(`^${text}`) })
+    .first();
+}
+
+/** Opens the client form's Office select and picks the named office. */
+async function selectClientOffice(page: Page, officeName: string) {
+  await page.locator('ion-select[name="officeId"]').click();
+  await page.locator('ion-alert, ion-popover').getByRole('radio', { name: officeName }).click();
 }
 
 function mockPostOffice(page: Page) {
@@ -295,7 +326,7 @@ test.describe('E2E: Dashboard', () => {
   });
 
   test('should have Guide button in header', async ({ page }) => {
-    await expect(page.getByRole('button', { name: 'Help Tour' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Guide' })).toBeVisible();
   });
 
   test('should have dark mode toggle button', async ({ page }) => {
@@ -573,39 +604,62 @@ test.describe('E2E: Client Creation', () => {
     await page.getByRole('link', { name: 'Clients' }).click();
     await page.getByRole('button', { name: /Create Client/i }).click();
     await expect(page).toHaveURL('/clients/create');
-    await expect(page.getByText('Create Client')).toBeVisible();
+    // Not the bare text: the breadcrumb trail's current-page crumb also reads "Create Client".
+    await expect(page.locator('ion-card-title').first()).toContainText('Create Client');
   });
 
-  test('should display all required client form fields', async ({ page }) => {
+  test('should display all required client form fields, across the wizard steps', async ({
+    page,
+  }) => {
     await mockClients(page);
     await page.getByRole('link', { name: 'Clients' }).click();
     await page.getByRole('button', { name: /Create Client/i }).click();
 
+    // Step 1 — Client Type.
     await expect(page.getByText('Legal Form')).toBeVisible();
+    await expect(page.getByText('Active')).toBeVisible();
+    await selectClientOffice(page, HEAD_OFFICE);
+
+    // Step 2 — Personal Details.
+    await page.getByRole('button', { name: 'Next' }).click();
     await expect(page.getByText('Submitted On')).toBeVisible();
     await expect(page.getByText('Activation Date')).toBeVisible();
-    await expect(page.getByText('Active')).toBeVisible();
     await expect(page.getByText('First Name')).toBeVisible();
     await expect(page.getByText('Last Name')).toBeVisible();
   });
 
-  test('should display optional client form fields', async ({ page }) => {
+  test('should display optional client form fields, across the wizard steps', async ({ page }) => {
     await mockClients(page);
     await page.getByRole('link', { name: 'Clients' }).click();
     await page.getByRole('button', { name: /Create Client/i }).click();
+    await selectClientOffice(page, HEAD_OFFICE);
+    await page.getByRole('button', { name: 'Next' }).click();
 
-    await expect(page.getByText('Middle Name')).toBeVisible();
-    await expect(page.getByText('Date of Birth')).toBeVisible();
-    await expect(page.getByText('External ID')).toBeVisible();
-    await expect(page.getByText('Mobile No')).toBeVisible();
-    await expect(page.getByText('Email Address')).toBeVisible();
+    // Step 2 — Personal Details. Scoped to the field label: several of these fields carry a
+    // help tooltip whose text repeats the label ("The client's date of birth."), and a tooltip
+    // left open by the previous click makes a bare getByText ambiguous.
+    await expect(fieldLabel(page, 'Middle Name')).toBeVisible();
+    await expect(fieldLabel(page, 'Date of Birth')).toBeVisible();
+    await page.locator('input[name="firstname"]').fill('Jane');
+    await page.locator('input[name="lastname"]').fill('Smith');
+
+    // Step 3 — Contact Details.
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(fieldLabel(page, 'External ID')).toBeVisible();
+    await expect(fieldLabel(page, 'Mobile No')).toBeVisible();
+    await expect(fieldLabel(page, 'Email Address')).toBeVisible();
   });
 
-  test('should have save disabled initially', async ({ page }) => {
+  test('should have Next disabled until the current step is valid', async ({ page }) => {
     await mockClients(page);
     await page.getByRole('link', { name: 'Clients' }).click();
     await page.getByRole('button', { name: /Create Client/i }).click();
-    await expect(page.getByRole('button', { name: SAVE_BTN })).toBeDisabled();
+
+    // Office (required) is unset, so step 1 is invalid.
+    await expect(page.getByRole('button', { name: 'Next' })).toBeDisabled();
+
+    await selectClientOffice(page, HEAD_OFFICE);
+    await expect(page.getByRole('button', { name: 'Next' })).toBeEnabled();
   });
 
   test('should populate office dropdown from API', async ({ page }) => {
@@ -624,7 +678,8 @@ test.describe('E2E: Client Creation', () => {
     await page.keyboard.press('Escape');
   });
 
-  test('should fill client form and enable save', async ({ page }) => {
+  test('should fill client form and enable save on the last step', async ({ page }) => {
+    await mockClientTextSearch(page);
     await page.route('**/api/v1/clients?**', async (route) => {
       await route.fulfill(okJsonResponse(EMPTY_LIST));
     });
@@ -635,17 +690,18 @@ test.describe('E2E: Client Creation', () => {
 
     await page.locator('ion-select[name="legalFormId"]').click();
     await page.locator('ion-alert, ion-popover').getByRole('radio', { name: 'Person' }).click();
-
-    await page.locator('ion-select[name="officeId"]').click();
-    await page.locator('ion-alert, ion-popover').getByRole('radio', { name: HEAD_OFFICE }).click();
+    await selectClientOffice(page, HEAD_OFFICE);
+    await page.getByRole('button', { name: 'Next' }).click();
 
     await page.locator('input[name="firstname"]').fill('Jane');
     await page.locator('input[name="lastname"]').fill('Smith');
+    await page.getByRole('button', { name: 'Next' }).click();
 
     await expect(page.getByRole('button', { name: SAVE_BTN })).toBeEnabled();
   });
 
   test('should submit client and redirect to clients list', async ({ page }) => {
+    await mockClientTextSearch(page);
     await page.route('**/api/v1/clients?**', async (route) => {
       await route.fulfill(okJsonResponse(EMPTY_LIST));
     });
@@ -656,12 +712,12 @@ test.describe('E2E: Client Creation', () => {
 
     await page.locator('ion-select[name="legalFormId"]').click();
     await page.locator('ion-alert, ion-popover').getByRole('radio', { name: 'Person' }).click();
-
-    await page.locator('ion-select[name="officeId"]').click();
-    await page.locator('ion-alert, ion-popover').getByRole('radio', { name: HEAD_OFFICE }).click();
+    await selectClientOffice(page, HEAD_OFFICE);
+    await page.getByRole('button', { name: 'Next' }).click();
 
     await page.locator('input[name="firstname"]').fill('Jane');
     await page.locator('input[name="lastname"]').fill('Smith');
+    await page.getByRole('button', { name: 'Next' }).click();
 
     await page.getByRole('button', { name: SAVE_BTN }).click();
     await expect(page).toHaveURL('/clients');
@@ -697,6 +753,9 @@ test.describe('E2E: Client Creation', () => {
     await mockClients(page);
     await page.getByRole('link', { name: 'Clients' }).click();
     await page.getByRole('button', { name: /Create Client/i }).click();
+    // Submitted On / Activation Date live on step 2 (Personal Details).
+    await selectClientOffice(page, HEAD_OFFICE);
+    await page.getByRole('button', { name: 'Next' }).click();
 
     await expect(page.locator('ion-datetime-button').first()).toBeVisible();
   });
@@ -705,6 +764,8 @@ test.describe('E2E: Client Creation', () => {
     await mockClients(page);
     await page.getByRole('link', { name: 'Clients' }).click();
     await page.getByRole('button', { name: /Create Client/i }).click();
+    await selectClientOffice(page, HEAD_OFFICE);
+    await page.getByRole('button', { name: 'Next' }).click();
 
     const submittedValue = await page.locator('input[name="submittedOnDate"]').inputValue();
     const activationValue = await page.locator('input[name="activationDate"]').inputValue();
@@ -728,6 +789,9 @@ test.describe('E2E: Client Creation', () => {
 
     await page.locator('ion-select[name="legalFormId"]').click();
     await page.locator('ion-alert, ion-popover').getByRole('radio', { name: 'Entity' }).click();
+    // The Company Name field itself lives on step 2 (Personal Details).
+    await selectClientOffice(page, HEAD_OFFICE);
+    await page.getByRole('button', { name: 'Next' }).click();
 
     await expect(page.locator('input[name="fullname"]')).toBeVisible();
   });
@@ -839,7 +903,10 @@ test.describe('E2E: Other Products Pages', () => {
     });
     await page.getByRole('link', { name: 'Recurring Deposit Products' }).click();
     await expect(page).toHaveURL('/products/recurring');
-    await expect(page.getByText('Recurring Deposit Products')).toBeVisible();
+    // The breadcrumb's current crumb, not the bare text: the sidebar link reads the same.
+    await expect(
+      page.getByRole('navigation', { name: 'Breadcrumb' }).getByText('Recurring Deposit Products'),
+    ).toBeVisible();
   });
 
   test('Share Products page loads', async ({ page }) => {
@@ -848,7 +915,10 @@ test.describe('E2E: Other Products Pages', () => {
     });
     await page.getByRole('link', { name: 'Share Products' }).click();
     await expect(page).toHaveURL('/products/share');
-    await expect(page.getByText('Share Products')).toBeVisible();
+    // The breadcrumb's current crumb, not the bare text: the sidebar link reads the same.
+    await expect(
+      page.getByRole('navigation', { name: 'Breadcrumb' }).getByText('Share Products'),
+    ).toBeVisible();
   });
 
   test('Tax Components page loads', async ({ page }) => {

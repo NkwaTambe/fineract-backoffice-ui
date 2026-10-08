@@ -15,6 +15,37 @@
 # specific language governing permissions and limitations
 # under the License.
 
+# Grouping notes:
+#
+# Groups are drawn from the open Dependabot PRs that cannot install on their
+# own. Each was checked with `npm install --package-lock-only` against
+# apache/main, alone and grouped:
+#
+#   #542 @angular/common 22.1.1        alone: ERESOLVE   grouped: installs
+#   #522 @angular/core 22.1.4          alone: ERESOLVE   grouped: installs
+#   #521 @angular/compiler-cli 22.1.4  alone: ERESOLVE   grouped: installs
+#   #517 + #518 codeql-action          two PRs for one pinned SHA that the
+#                                      init/analyze pair must share
+#
+# The pinned `@angular/*` packages peer-depend on each other by exact version,
+# so any one of them moving alone is uninstallable. `typescript` sits in the
+# same group because its blocker is Angular, not the linters: @angular/build
+# peers `typescript >=6.0 <6.1` (this is what fails #312, the TS 7 bump).
+#
+# A dependency joins the FIRST group it matches, so order matters — `angular`
+# claims `angular-eslint` and `typescript` before `linting` or `catch-all` can.
+#
+# Groups deliberately do not set `update-types`: these families release in
+# lockstep and a split major is not installable. `catch-all` is the exception —
+# it sweeps up minor/patch noise from everything else and leaves majors to
+# arrive as individual, reviewable PRs.
+#
+# Grouping is not a fix for an upstream cap. #516 (eslint 10) fails alone and
+# still fails with the whole `linting` group at latest, because
+# eslint-plugin-import 2.32.0 is the newest release and peers at eslint ^9.
+#
+# `applies-to` is left at its default (`version-updates`), so security updates
+# still open one focused PR each instead of waiting for a group.
 version: 2
 updates:
   - package-ecosystem: 'npm'
@@ -23,9 +54,66 @@ updates:
       interval: 'weekly'
     cooldown:
       default-days: 7
+    groups:
+      angular:
+        patterns:
+          - '@angular/*'
+          - '@angular-devkit/*'
+          - '@angular-architects/*'
+          - '@softarc/*'
+          - 'angular-eslint'
+          - 'zone.js'
+          - 'typescript'
+      ionic:
+        patterns:
+          - '@ionic/*'
+          - 'ionicons'
+      linting:
+        patterns:
+          - 'eslint'
+          - 'eslint-*'
+          - '@eslint/*'
+          - 'typescript-eslint'
+          - 'prettier'
+          - 'prettier-*'
+      testing:
+        patterns:
+          - 'vitest'
+          - '@vitest/*'
+          - 'playwright'
+          - '@playwright/*'
+          - '@axe-core/*'
+          - 'jsdom'
+      # Weakest evidence of the set: #207 (core 18) does install alone, because
+      # http-loader 17 declares no peer on core. Grouped anyway because
+      # http-loader 18 peers `@ngx-translate/core >=18.0.0`, so the pair is real
+      # from 18 onward and a lone core bump just leaves a silent skew.
+      ngx-translate:
+        patterns:
+          - '@ngx-translate/*'
+      types:
+        patterns:
+          - '@types/*'
+      catch-all:
+        patterns:
+          - '*'
+        update-types:
+          - 'minor'
+          - 'patch'
   - package-ecosystem: 'github-actions'
     directory: '/'
     schedule:
       interval: 'weekly'
     cooldown:
       default-days: 7
+    groups:
+      # Both codeql-action steps share one pinned SHA and must move together;
+      # keeping them out of the catch-all means a CodeQL bump is never held up
+      # by an unrelated action, and never lands buried in one.
+      codeql:
+        patterns:
+          - 'github/codeql-action'
+          - 'github/codeql-action/*'
+      github-actions:
+        patterns:
+          - '*'

@@ -18,13 +18,12 @@
  */
 
 import { Component, OnInit, inject, signal } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
 import { Router } from '@angular/router';
 import { DatePipe, NgClass } from '@angular/common';
 import { DataTableComponent, ColumnDef, CellTemplateDirective } from '../../shared';
-import { AccountingClosureService, GetGlClosureResponse } from '../../api';
-import { TranslatePipe } from '../../core/adapters';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { ACCOUNTING_CLOSURE_API, TranslatePipe } from '../../core/adapters';
+import type { AccountingClosure } from '../../core/adapters';
+import { ButtonComponent } from '../../ui/button/button.component';
 
 /**
  * Component for listing accounting period closures.
@@ -35,25 +34,26 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
   selector: 'app-accounting-closures-list',
   standalone: true,
   imports: [
-    TranslateModule,
     DataTableComponent,
     CellTemplateDirective,
     TranslatePipe,
     DatePipe,
     NgClass,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
   ],
   template: `
     <app-data-table
       title="nav.accountingClosures"
       helpTextKey="HELP.ACCOUNTING_CLOSURES_DESC"
       createButtonLabel="ACCOUNTING_CLOSURES.CREATE"
+      createPermission="CREATE_GLCLOSURE"
       [columns]="columns"
       [data]="closures()"
+      [hasError]="hasError()"
       [localLogic]="true"
       [showSearch]="false"
       (create)="onCreateClosure()"
+      (retry)="onRetry()"
     >
       <ng-template appCellTemplate="closingDate" let-closure>
         {{ closure.closingDate | date: 'mediumDate' }}
@@ -61,19 +61,19 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
 
       <ng-template appCellTemplate="isClosed" let-closure>
         <span class="status-chip" [ngClass]="closure.isClosed ? 'closed' : 'open'">
-          {{ closure.isClosed ? 'Closed' : 'Open' }}
+          {{ (closure.isClosed ? 'COMMON.CLOSED' : 'COMMON.OPEN') | appTranslate }}
         </span>
       </ng-template>
 
       <ng-template appCellTemplate="actions" let-closure>
-        <ion-button
-          fill="clear"
-          color="danger"
-          [title]="'ACCOUNTING_CLOSURES.REOPEN' | appTranslate"
+        <app-button
+          type="button"
+          emphasis="quiet"
+          intent="danger"
+          icon="lock-open-outline"
           (click)="onDeleteClosure(closure)"
-        >
-          <ion-icon name="lock-open-outline"></ion-icon>
-        </ion-button>
+          [label]="'ACCOUNTING_CLOSURES.REOPEN' | appTranslate"
+        />
       </ng-template>
     </app-data-table>
   `,
@@ -97,39 +97,48 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
   ],
 })
 export class AccountingClosuresListComponent implements OnInit {
-  private readonly closureService = inject(AccountingClosureService);
+  private readonly closureApi = inject(ACCOUNTING_CLOSURE_API);
   private readonly router = inject(Router);
 
   readonly columns: ColumnDef[] = [
-    { key: 'officeName', label: 'Office', sortable: true },
-    { key: 'closingDate', label: 'Closing Date', sortable: true },
-    { key: 'comments', label: 'Comments', sortable: true },
-    { key: 'isClosed', label: 'Status', sortable: true },
-    { key: 'actions', label: 'Actions', sortable: false },
+    { key: 'officeName', label: 'COMMON.OFFICE', sortable: true },
+    { key: 'closingDate', label: 'ACCOUNTING_CLOSURES.CLOSING_DATE', sortable: true },
+    { key: 'comments', label: 'ACCOUNTING_CLOSURES.COMMENTS', sortable: true },
+    { key: 'isClosed', label: 'COMMON.STATUS', sortable: true },
+    { key: 'actions', label: 'COMMON.ACTIONS', sortable: false },
   ];
 
-  readonly closures = signal<GetGlClosureResponse[]>([]);
+  readonly closures = signal<AccountingClosure[]>([]);
+  readonly hasError = signal(false);
 
   ngOnInit() {
     this.loadClosures();
   }
 
   private loadClosures() {
-    this.closureService.getGlclosures().subscribe({
-      next: (data) => this.closures.set(data),
-      error: (err) => console.error('Failed to load closures', err),
+    this.closureApi.list().subscribe({
+      next: (data) => {
+        this.closures.set(data);
+        this.hasError.set(false);
+      },
+      error: (err) => {
+        console.error('Failed to load closures', err);
+        this.hasError.set(true);
+      },
     });
+  }
+
+  onRetry() {
+    this.loadClosures();
   }
 
   onCreateClosure() {
     this.router.navigate(['/accounting/closures/create']);
   }
 
-  onDeleteClosure(closure: GetGlClosureResponse) {
-    if (closure.id && confirm('Are you sure you want to re-open this period?')) {
-      this.closureService
-        .deleteGlclosuresGlClosureId(closure.id)
-        .subscribe(() => this.loadClosures());
+  onDeleteClosure(closure: AccountingClosure) {
+    if (confirm('Are you sure you want to re-open this period?')) {
+      this.closureApi.remove(closure.id).subscribe(() => this.loadClosures());
     }
   }
 }

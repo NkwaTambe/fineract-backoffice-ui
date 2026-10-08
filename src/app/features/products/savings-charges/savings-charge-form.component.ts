@@ -20,7 +20,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import {
   IonButton,
   IonCard,
@@ -47,6 +47,7 @@ import {
   FINERACT_DATE_FORMAT,
   FINERACT_LOCALE,
 } from '../../../core/utils/date-formatter';
+import { createPickersReady } from '../../../shared/utils/pickers-ready';
 
 /**
  * Create form for a savings account charge. The available charge options come from the
@@ -58,7 +59,7 @@ import {
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonSpinner,
     IonInput,
@@ -78,15 +79,17 @@ import {
     <div class="form-container">
       <ion-card>
         <ion-card-header>
-          <ion-card-title>{{ 'SAVINGS_CHARGES.CREATE' | translate }}</ion-card-title>
+          <ion-card-title>{{ 'SAVINGS_CHARGES.CREATE' | appTranslate }}</ion-card-title>
         </ion-card-header>
 
         <ion-card-content>
           <form #chargeForm="ngForm" (ngSubmit)="onSubmit()" class="charge-form">
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'SAVINGS_CHARGES.CHARGE' | translate }}</ion-label>
+              <ion-label position="stacked">{{
+                'SAVINGS_CHARGES.CHARGE' | appTranslate
+              }}</ion-label>
               <ion-select
-                [attr.aria-label]="'SAVINGS_CHARGES.CHARGE' | translate"
+                [attr.aria-label]="'SAVINGS_CHARGES.CHARGE' | appTranslate"
                 interface="popover"
                 name="chargeId"
                 [(ngModel)]="charge.chargeId"
@@ -99,9 +102,11 @@ import {
             </ion-item>
 
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'SAVINGS_CHARGES.AMOUNT' | translate }}</ion-label>
+              <ion-label position="stacked">{{
+                'SAVINGS_CHARGES.AMOUNT' | appTranslate
+              }}</ion-label>
               <ion-input
-                [attr.aria-label]="'SAVINGS_CHARGES.AMOUNT' | translate"
+                [attr.aria-label]="'SAVINGS_CHARGES.AMOUNT' | appTranslate"
                 type="number"
                 name="amount"
                 [(ngModel)]="charge.amount"
@@ -110,8 +115,12 @@ import {
             </ion-item>
 
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'SAVINGS_CHARGES.DUE_DATE' | translate }}</ion-label>
-              <ion-datetime-button datetime="dueDate-picker"></ion-datetime-button>
+              <ion-label position="stacked">{{
+                'SAVINGS_CHARGES.DUE_DATE' | appTranslate
+              }}</ion-label>
+              @if (pickersReady()) {
+                <ion-datetime-button datetime="dueDate-picker"></ion-datetime-button>
+              }
               <ion-modal [keepContentsMounted]="true">
                 <ng-template>
                   <ion-datetime
@@ -127,7 +136,7 @@ import {
 
             <div class="form-actions">
               <ion-button fill="clear" type="button" (click)="onCancel()" [disabled]="isSaving()">
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               <ion-button
                 color="primary"
@@ -136,9 +145,9 @@ import {
               >
                 @if (isSaving()) {
                   <ion-spinner name="crescent"></ion-spinner>
-                  {{ 'COMMON.SAVING' | translate }}
+                  {{ 'COMMON.SAVING' | appTranslate }}
                 } @else {
-                  {{ 'COMMON.SAVE' | translate }}
+                  {{ 'COMMON.SAVE' | appTranslate }}
                 }
               </ion-button>
             </div>
@@ -163,6 +172,9 @@ import {
   ],
 })
 export class SavingsChargeFormComponent implements OnInit {
+  /** See `createPickersReady` — the date buttons must not outrun their pickers. */
+  readonly pickersReady = createPickersReady();
+
   private readonly savingsChargesService = inject(SavingsChargesService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);

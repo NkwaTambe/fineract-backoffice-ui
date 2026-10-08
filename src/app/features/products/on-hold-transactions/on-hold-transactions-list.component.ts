@@ -19,12 +19,12 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
 import { ColumnDef, CellTemplateDirective } from '../../../shared';
 import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 import {
   DepositAccountOnHoldFundTransactionsService,
   DepositAccountOnHoldTransactionData,
+  GetSavingsAccountsSavingsAccountIdOnHoldTransactionsResponse,
 } from '../../../api';
 
 /**
@@ -35,7 +35,7 @@ import {
 @Component({
   selector: 'app-on-hold-transactions-list',
   standalone: true,
-  imports: [TranslateModule, DataTableComponent, CellTemplateDirective],
+  imports: [DataTableComponent, CellTemplateDirective],
   template: `
     <app-data-table
       title="ON_HOLD_TRANSACTIONS.TITLE"
@@ -83,12 +83,8 @@ export class OnHoldTransactionsListComponent implements OnInit {
     this.transactionsService
       .getSavingsaccountsSavingsIdOnholdtransactions(this.savingsId)
       .subscribe({
-        next: (data: string) => {
-          const parsed =
-            typeof data === 'string'
-              ? (JSON.parse(data || '[]') as DepositAccountOnHoldTransactionData[])
-              : ((data ?? []) as unknown as DepositAccountOnHoldTransactionData[]);
-          this.transactions.set(parsed || []);
+        next: (data: GetSavingsAccountsSavingsAccountIdOnHoldTransactionsResponse) => {
+          this.transactions.set(data?.pageItems ?? []);
         },
         error: (err: unknown) => {
           console.error('Failed to load on-hold transactions', err);

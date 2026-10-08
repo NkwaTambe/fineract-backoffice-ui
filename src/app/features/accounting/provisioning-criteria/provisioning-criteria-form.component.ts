@@ -20,7 +20,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import { ProvisioningCriteriaService, PostProvisioningCriteriaRequest } from '../../../api';
 import {
   IonButton,
@@ -39,12 +39,30 @@ import {
  * per-category definitions and a loan-product mapping; those arrays are complex and
  * are preserved as-is on edit. This form edits only the criteria name.
  */
+/**
+ * The criteria as this screen holds it.
+ *
+ * The provisioning definitions — the percentage, ageing band and pair of GL accounts per category
+ * — travel under `definitions`. They were sent as `provisioningcriteria`, which the platform now
+ * refuses outright: `The parameter provisioningcriteria is not supported`, so saving an edit
+ * answered 400. The generated request type is not used directly because the property is named
+ * differently either side of the spec sync, and this has to compile against both.
+ *
+ * The form does not edit the definitions; it carries them so that changing the name does not
+ * discard the provisioning rules attached to the criteria.
+ */
+interface ProvisioningCriteriaPayload {
+  criteriaName?: string;
+  loanProducts?: unknown[];
+  definitions?: unknown[];
+}
+
 @Component({
   selector: 'app-provisioning-criteria-form',
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonSpinner,
     IonInput,
@@ -62,8 +80,8 @@ import {
           <ion-card-title>
             {{
               isEditMode()
-                ? ('PROVISIONING_CRITERIA.EDIT' | translate)
-                : ('PROVISIONING_CRITERIA.CREATE' | translate)
+                ? ('PROVISIONING_CRITERIA.EDIT' | appTranslate)
+                : ('PROVISIONING_CRITERIA.CREATE' | appTranslate)
             }}
           </ion-card-title>
         </ion-card-header>
@@ -72,21 +90,21 @@ import {
           <form #criteriaForm="ngForm" (ngSubmit)="onSubmit()" class="provisioning-form">
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'PROVISIONING_CRITERIA.NAME' | translate
+                'PROVISIONING_CRITERIA.NAME' | appTranslate
               }}</ion-label>
               <ion-input
-                [attr.aria-label]="'PROVISIONING_CRITERIA.NAME' | translate"
+                [attr.aria-label]="'PROVISIONING_CRITERIA.NAME' | appTranslate"
                 name="criteriaName"
                 [(ngModel)]="criteria().criteriaName"
                 required
               ></ion-input>
             </ion-item>
 
-            <p class="form-note">{{ 'PROVISIONING_CRITERIA.DEFINITIONS_NOTE' | translate }}</p>
+            <p class="form-note">{{ 'PROVISIONING_CRITERIA.DEFINITIONS_NOTE' | appTranslate }}</p>
 
             <div class="form-actions">
               <ion-button fill="clear" type="button" (click)="onCancel()" [disabled]="isSaving()">
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               <ion-button
                 color="primary"
@@ -95,9 +113,9 @@ import {
               >
                 @if (isSaving()) {
                   <ion-spinner name="crescent"></ion-spinner>
-                  {{ 'COMMON.SAVING' | translate }}
+                  {{ 'COMMON.SAVING' | appTranslate }}
                 } @else {
-                  {{ 'COMMON.SAVE' | translate }}
+                  {{ 'COMMON.SAVE' | appTranslate }}
                 }
               </ion-button>
             </div>
@@ -136,7 +154,7 @@ export class ProvisioningCriteriaFormComponent implements OnInit {
   readonly isEditMode = signal(false);
   readonly isSaving = signal(false);
 
-  readonly criteria = signal<PostProvisioningCriteriaRequest>({ criteriaName: '' });
+  readonly criteria = signal<ProvisioningCriteriaPayload>({ criteriaName: '' });
 
   ngOnInit(): void {
     this.route.paramMap.subscribe((params) => {
@@ -152,10 +170,12 @@ export class ProvisioningCriteriaFormComponent implements OnInit {
   load(): void {
     if (!this.criteriaId) return;
     this.criteriaService.getProvisioningcriteriaCriteriaId(this.criteriaId).subscribe((data) => {
+      const raw = data as unknown as Record<string, unknown>;
       this.criteria.set({
         criteriaName: data.criteriaName,
-        loanProducts: data.loanProducts,
-        provisioningcriteria: data.provisioningcriteria,
+        loanProducts: data.loanProducts as unknown[] | undefined,
+        // Read under both names so this works either side of the rename.
+        definitions: (raw['definitions'] ?? raw['provisioningcriteria']) as unknown[] | undefined,
       });
     });
   }
@@ -164,8 +184,13 @@ export class ProvisioningCriteriaFormComponent implements OnInit {
     this.isSaving.set(true);
     const request$ =
       this.isEditMode() && this.criteriaId
-        ? this.criteriaService.putProvisioningcriteriaCriteriaId(this.criteriaId, this.criteria())
-        : this.criteriaService.postProvisioningcriteria(this.criteria());
+        ? this.criteriaService.putProvisioningcriteriaCriteriaId(
+            this.criteriaId,
+            this.criteria() as PostProvisioningCriteriaRequest,
+          )
+        : this.criteriaService.postProvisioningcriteria(
+            this.criteria() as PostProvisioningCriteriaRequest,
+          );
 
     request$.subscribe({
       next: () => this.router.navigate([this.LIST_PATH]),

@@ -19,7 +19,7 @@
 
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import { PeriodicAccrualAccountingService, PostRunaccrualsRequest } from '../../../api';
 import {
   IonButton,
@@ -39,6 +39,7 @@ import {
   FINERACT_DATE_FORMAT,
   FINERACT_LOCALE,
 } from '../../../core/utils/date-formatter';
+import { createPickersReady } from '../../../shared/utils/pickers-ready';
 
 /**
  * Single action screen that triggers periodic accrual accounting up to a chosen date.
@@ -49,7 +50,7 @@ import {
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonSpinner,
     IonCardContent,
@@ -66,11 +67,11 @@ import {
     <div class="form-container">
       <ion-card>
         <ion-card-header>
-          <ion-card-title>{{ 'RUN_ACCRUALS.TITLE' | translate }}</ion-card-title>
+          <ion-card-title>{{ 'RUN_ACCRUALS.TITLE' | appTranslate }}</ion-card-title>
         </ion-card-header>
 
         <ion-card-content>
-          <p class="hint">{{ 'HELP.RUN_ACCRUALS_DESC' | translate }}</p>
+          <p class="hint">{{ 'HELP.RUN_ACCRUALS_DESC' | appTranslate }}</p>
 
           @if (successMessage()) {
             <div class="success-message">{{ successMessage() }}</div>
@@ -78,8 +79,12 @@ import {
 
           <form #accrualForm="ngForm" (ngSubmit)="onSubmit()" class="accrual-form">
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'RUN_ACCRUALS.TILL_DATE' | translate }}</ion-label>
-              <ion-datetime-button datetime="tillDate-picker"></ion-datetime-button>
+              <ion-label position="stacked">{{
+                'RUN_ACCRUALS.TILL_DATE' | appTranslate
+              }}</ion-label>
+              @if (pickersReady()) {
+                <ion-datetime-button datetime="tillDate-picker"></ion-datetime-button>
+              }
               <ion-modal [keepContentsMounted]="true">
                 <ng-template>
                   <ion-datetime
@@ -102,9 +107,9 @@ import {
               >
                 @if (isSubmitting()) {
                   <ion-spinner name="crescent"></ion-spinner>
-                  {{ 'RUN_ACCRUALS.RUNNING' | translate }}
+                  {{ 'RUN_ACCRUALS.RUNNING' | appTranslate }}
                 } @else {
-                  {{ 'RUN_ACCRUALS.RUN' | translate }}
+                  {{ 'RUN_ACCRUALS.RUN' | appTranslate }}
                 }
               </ion-button>
             </div>
@@ -140,6 +145,9 @@ import {
   ],
 })
 export class RunAccrualsComponent {
+  /** See `createPickersReady` — the date buttons must not outrun their pickers. */
+  readonly pickersReady = createPickersReady();
+
   private readonly accrualService = inject(PeriodicAccrualAccountingService);
 
   tillDate: string | null = null;

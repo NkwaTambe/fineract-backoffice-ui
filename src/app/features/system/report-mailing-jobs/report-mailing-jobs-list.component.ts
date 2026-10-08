@@ -20,8 +20,8 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
-import { ColumnDef, CellTemplateDirective } from '../../../shared';
+import { I18N, TranslatePipe } from '../../../core/adapters';
+import { ColumnDef, CellTemplateDirective, LoadErrorComponent } from '../../../shared';
 import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 import {
   IonButton,
@@ -33,6 +33,7 @@ import {
 } from '@ionic/angular/standalone';
 import { CdkTableModule } from '@angular/cdk/table';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { DialogService } from '../../../core/services/dialog.service';
 import {
   ReportMailingJobsService,
   GetReportMailingJobsResponse,
@@ -43,12 +44,41 @@ import {
 /**
  * Lists scheduled report-mailing jobs with a Run History tab.
  */
+/**
+ * The tabs on this screen, named.
+ *
+ * They were positional strings — '0', '7' — which say nothing at the point of use and shift
+ * meaning whenever a tab is inserted in the middle. The values are still strings because
+ * `ion-segment` compares them as such.
+ */
+export const MAILING_TAB = {
+  jobs: 'jobs',
+  history: 'history',
+} as const;
+
+export type MailingTab = (typeof MAILING_TAB)[keyof typeof MAILING_TAB];
+
+/**
+ * Normalises the report-mailing-jobs payload into rows.
+ *
+ * The generated type says `Array`, the endpoint sends `{ totalFilteredRecords, pageItems }`.
+ * Both are accepted, and anything else throws so the caller can show a failure instead of an
+ * empty table.
+ */
+export function readJobs(data: unknown): GetReportMailingJobsResponse[] {
+  if (data === null || data === undefined) return [];
+  if (Array.isArray(data)) return data as GetReportMailingJobsResponse[];
+  const pageItems = (data as { pageItems?: unknown })?.pageItems;
+  if (Array.isArray(pageItems)) return pageItems as GetReportMailingJobsResponse[];
+  throw new TypeError(`Unexpected report-mailing-jobs payload: ${typeof data}`);
+}
+
 @Component({
   selector: 'app-report-mailing-jobs-list',
   standalone: true,
   imports: [
     DatePipe,
-    TranslateModule,
+    TranslatePipe,
     CdkTableModule,
     DataTableComponent,
     CellTemplateDirective,
@@ -59,54 +89,65 @@ import {
     IonSegmentButton,
     IonLabel,
     TooltipDirective,
+    LoadErrorComponent,
   ],
   template: `
     <ion-segment [value]="activeTab()" (ionChange)="activeTab.set($any($event).detail.value)">
-      <ion-segment-button value="0">
-        <ion-label>{{ 'nav.reportMailingJobs' | translate }}</ion-label>
+      <ion-segment-button [value]="TAB.jobs">
+        <ion-label>{{ 'nav.reportMailingJobs' | appTranslate }}</ion-label>
       </ion-segment-button>
-      <ion-segment-button value="1">
-        <ion-label>{{ 'REPORT_MAILING.RUN_HISTORY' | translate }}</ion-label>
+      <ion-segment-button [value]="TAB.history">
+        <ion-label>{{ 'REPORT_MAILING.RUN_HISTORY' | appTranslate }}</ion-label>
       </ion-segment-button>
     </ion-segment>
 
-    @if (activeTab() === '0') {
-      <app-data-table
-        title="nav.reportMailingJobs"
-        helpTextKey="HELP.REPORT_MAILING_JOBS_DESC"
-        createButtonLabel="REPORT_MAILING_JOBS.CREATE"
-        [columns]="columns"
-        [data]="jobs()"
-        [totalRecords]="jobs().length"
-        [localLogic]="true"
-        (create)="onCreate()"
-      >
-        <ng-template appCellTemplate="isActive" let-row>
-          {{ (row.isActive ? 'COMMON.YES' : 'COMMON.NO') | translate }}
-        </ng-template>
-        <ng-template appCellTemplate="actions" let-row>
-          <ion-button
-            fill="clear"
-            color="primary"
-            [attr.aria-label]="'COMMON.EDIT' | translate"
-            [appTooltip]="'COMMON.EDIT' | translate"
-            (click)="onEdit(row)"
-          >
-            <ion-icon name="create-outline"></ion-icon>
-          </ion-button>
-          <ion-button
-            fill="clear"
-            color="danger"
-            [attr.aria-label]="'COMMON.DELETE' | translate"
-            [appTooltip]="'COMMON.DELETE' | translate"
-            (click)="onDelete(row)"
-          >
-            <ion-icon name="trash-outline"></ion-icon>
-          </ion-button>
-        </ng-template>
-      </app-data-table>
+    @if (activeTab() === TAB.jobs) {
+      @if (loadFailed()) {
+        <app-load-error
+          testId="report-mailing-jobs-load-error"
+          [message]="'REPORT_MAILING.LOAD_FAILED' | appTranslate"
+          [actionLabel]="'COMMON.RETRY' | appTranslate"
+          (action)="load()"
+        ></app-load-error>
+      } @else {
+        <app-data-table
+          title="nav.reportMailingJobs"
+          helpTextKey="HELP.REPORT_MAILING_JOBS_DESC"
+          createButtonLabel="REPORT_MAILING_JOBS.CREATE"
+          createPermission="CREATE_REPORTMAILINGJOB"
+          [columns]="columns"
+          [data]="jobs()"
+          [totalRecords]="jobs().length"
+          [localLogic]="true"
+          (create)="onCreate()"
+        >
+          <ng-template appCellTemplate="isActive" let-row>
+            {{ (row.isActive ? 'COMMON.YES' : 'COMMON.NO') | appTranslate }}
+          </ng-template>
+          <ng-template appCellTemplate="actions" let-row>
+            <ion-button
+              fill="clear"
+              color="primary"
+              [attr.aria-label]="'COMMON.EDIT' | appTranslate"
+              [appTooltip]="'COMMON.EDIT' | appTranslate"
+              (click)="onEdit(row)"
+            >
+              <ion-icon name="create-outline"></ion-icon>
+            </ion-button>
+            <ion-button
+              fill="clear"
+              color="danger"
+              [attr.aria-label]="'COMMON.DELETE' | appTranslate"
+              [appTooltip]="'COMMON.DELETE' | appTranslate"
+              (click)="onDelete(row)"
+            >
+              <ion-icon name="trash-outline"></ion-icon>
+            </ion-button>
+          </ng-template>
+        </app-data-table>
+      }
     }
-    @if (activeTab() === '1') {
+    @if (activeTab() === TAB.history) {
       <div class="history-container">
         @if (historyLoading()) {
           <div class="spinner-wrap">
@@ -115,33 +156,35 @@ import {
         } @else {
           <table cdk-table [dataSource]="runHistory()" class="history-table">
             <ng-container cdkColumnDef="id">
-              <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.ID' | translate }}</th>
+              <th cdk-header-cell *cdkHeaderCellDef>{{ 'COMMON.ID' | appTranslate }}</th>
               <td cdk-cell *cdkCellDef="let row">{{ row.id }}</td>
             </ng-container>
 
             <ng-container cdkColumnDef="jobName">
               <th cdk-header-cell *cdkHeaderCellDef>
-                {{ 'REPORT_MAILING_JOBS.NAME' | translate }}
+                {{ 'REPORT_MAILING_JOBS.NAME' | appTranslate }}
               </th>
               <td cdk-cell *cdkCellDef="let row">{{ row.jobName }}</td>
             </ng-container>
 
             <ng-container cdkColumnDef="scheduledFireTime">
               <th cdk-header-cell *cdkHeaderCellDef>
-                {{ 'REPORT_MAILING.SCHEDULED_FIRE_TIME' | translate }}
+                {{ 'REPORT_MAILING.SCHEDULED_FIRE_TIME' | appTranslate }}
               </th>
               <td cdk-cell *cdkCellDef="let row">{{ row.scheduledFireTime | date: 'medium' }}</td>
             </ng-container>
 
             <ng-container cdkColumnDef="triggerType">
               <th cdk-header-cell *cdkHeaderCellDef>
-                {{ 'REPORT_MAILING.TRIGGER_TYPE' | translate }}
+                {{ 'REPORT_MAILING.TRIGGER_TYPE' | appTranslate }}
               </th>
               <td cdk-cell *cdkCellDef="let row">{{ row.triggerType }}</td>
             </ng-container>
 
             <ng-container cdkColumnDef="status">
-              <th cdk-header-cell *cdkHeaderCellDef>{{ 'REPORT_MAILING.STATUS' | translate }}</th>
+              <th cdk-header-cell *cdkHeaderCellDef>
+                {{ 'REPORT_MAILING.STATUS' | appTranslate }}
+              </th>
               <td cdk-cell *cdkCellDef="let row">{{ row.status }}</td>
             </ng-container>
 
@@ -155,7 +198,7 @@ import {
                   [attr.colspan]="historyColumns.length"
                   style="text-align:center;padding:1rem;"
                 >
-                  {{ 'COMMON.NO_DATA' | translate }}
+                  {{ 'COMMON.NO_DATA' | appTranslate }}
                 </td>
               </tr>
             }
@@ -182,10 +225,15 @@ import {
 })
 export class ReportMailingJobsListComponent implements OnInit {
   /** Selected tab; mat-tab-group tracked this internally, ion-segment does not. */
-  readonly activeTab = signal('0');
+  /** Exposed so the template names its tabs instead of numbering them. */
+  protected readonly TAB = MAILING_TAB;
+
+  readonly activeTab = signal<MailingTab>(MAILING_TAB.jobs);
   private readonly jobsService = inject(ReportMailingJobsService);
   private readonly historyService = inject(ListReportMailingJobHistoryService);
   private readonly router = inject(Router);
+  private readonly dialogService = inject(DialogService);
+  private readonly i18n = inject(I18N);
 
   readonly columns: ColumnDef[] = [
     { key: 'name', label: 'REPORT_MAILING_JOBS.NAME', sortable: true },
@@ -201,6 +249,8 @@ export class ReportMailingJobsListComponent implements OnInit {
 
   readonly runHistory = signal<ReportMailingJobRunHistoryData[]>([]);
   readonly historyLoading = signal(false);
+  /** True once a load has failed, so the screen can say so instead of reading as empty. */
+  readonly loadFailed = signal(false);
   private historyLoaded = false;
 
   ngOnInit(): void {
@@ -209,11 +259,19 @@ export class ReportMailingJobsListComponent implements OnInit {
 
   load(): void {
     this.jobsService.getReportmailingjobs().subscribe({
-      next: (data: GetReportMailingJobsResponse[]) => {
-        this.jobs.set(data || []);
+      // Generated as `Array<GetReportMailingJobsResponse>`, but the endpoint returns the paged
+      // envelope `{ totalFilteredRecords, pageItems }`. Assigning that object straight into a
+      // signal typed as an array made a downstream computed throw `t is not iterable`, after a
+      // successful response, so `error` below never saw it — see issue #611. `loadRunHistory`
+      // below already guards the same way.
+      next: (data: unknown) => {
+        this.jobs.set(readJobs(data));
+        this.loadFailed.set(false);
       },
       error: (err: unknown) => {
         console.error('Failed to load report-mailing jobs', err);
+        this.jobs.set([]);
+        this.loadFailed.set(true);
       },
     });
   }
@@ -251,8 +309,17 @@ export class ReportMailingJobsListComponent implements OnInit {
     this.router.navigate(['/system/report-mailing-jobs/edit', row.id]);
   }
 
-  onDelete(row: GetReportMailingJobsResponse): void {
-    if (!row.id || !window.confirm('Delete this report-mailing job?')) return;
+  async onDelete(row: GetReportMailingJobsResponse): Promise<void> {
+    if (!row.id) return;
+    const confirmed = await this.dialogService.confirm({
+      title: this.i18n.translate('REPORT_MAILING_JOBS.DELETE'),
+      message: this.i18n.translate('REPORT_MAILING_JOBS.CONFIRM_DELETE', {
+        name: row.name ?? '',
+        recipients: row.emailRecipients ?? '',
+      }),
+      destructive: true,
+    });
+    if (!confirmed) return;
     this.jobsService.deleteReportmailingjobsEntityId(row.id).subscribe({
       next: () => this.load(),
       error: (err: unknown) => console.error('Failed to delete report-mailing job', err),

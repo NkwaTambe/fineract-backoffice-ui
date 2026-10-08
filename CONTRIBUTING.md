@@ -22,6 +22,50 @@ under the License.
 Thank you for your interest in contributing! This is a back-office web client for
 [Apache Fineract](https://github.com/apache/fineract).
 
+## Talk to the community first
+
+This repository is one part of the Apache Fineract project, and the people who can tell
+you whether an idea already exists, is already being worked on, or belongs somewhere else
+are on the project's own channels rather than in a GitHub thread.
+
+**The developer mailing list is where decisions are made.** It is the ASF's system of
+record: anything that shapes the project is expected to happen there, so a feature nobody
+has seen on the list has not really been proposed yet.
+
+|                        |                                                                                |
+| ---------------------- | ------------------------------------------------------------------------------ |
+| Subscribe              | Send a blank email to <dev-subscribe@fineract.apache.org>                      |
+| Post                   | <dev@fineract.apache.org>                                                      |
+| Read the archive first | [lists.apache.org](https://lists.apache.org/list.html?dev@fineract.apache.org) |
+
+**Matrix is where the day-to-day conversation happens.** Faster than email, and the right
+place for "is anyone already doing this?" before you spend a weekend on it.
+
+|                    |                                                                                            |
+| ------------------ | ------------------------------------------------------------------------------------------ |
+| Space (start here) | [#apache-fineract-home:matrix.org](https://matrix.to/#/%23apache-fineract-home:matrix.org) |
+| Developer chat     | [#apache-fineract-dev:matrix.org](https://matrix.to/#/%23apache-fineract-dev:matrix.org)   |
+| GSoC               | [#apache-fineract-gsoc:matrix.org](https://matrix.to/#/%23apache-fineract-gsoc:matrix.org) |
+
+Chat is not a substitute for the list. If a conversation in Matrix reaches a conclusion
+that affects other people, summarise it to <dev@fineract.apache.org> so it is on the
+record and reachable by anyone who was asleep in another timezone.
+
+### Which channel for what
+
+| You want to                                                                    | Go to                                                        |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| Report a UI bug                                                                | GitHub Issues, here                                          |
+| Report platform behaviour — balances, rejected payloads, scheduler, accounting | [ASF Jira](https://issues.apache.org/jira/projects/FINERACT) |
+| **Propose a feature or a new screen**                                          | **Raise it on the dev list, then open an issue here**        |
+| Ask whether something is already being worked on                               | Matrix, then the dev list if it matters                      |
+| Discuss a design before writing code                                           | Dev list — a thread there saves rewriting a PR               |
+| Submit code                                                                    | A pull request, here                                         |
+
+A feature request opened here without any discussion is not wasted — it will be read —
+but it starts from a standing start. One that arrives with a dev-list thread behind it
+already has the context, the objections and often a reviewer.
+
 ## Reporting bugs
 
 Use this repository's **GitHub Issues** for anything about the web UI — a screen that
@@ -44,7 +88,7 @@ explaining why, start with Jira.
 5.  **Run local checks**:
     - `npm run lint`
     - `npm run format:check`
-    - `npm test -- --watch=false`
+    - `npm test -- --watch=false` — the Vitest unit suite
     - `npm run build`
     - `npm run check:icons` — every `<ion-icon name="...">` is registered
     - `npm run i18n:check` — translations are complete
@@ -81,6 +125,24 @@ The same flow runs in CI via `.github/workflows/e2e.yml`. See
 [`DOCS/E2E_TESTING.md`](DOCS/E2E_TESTING.md) for writing specs, and prefer `data-testid`
 over element selectors so tests survive markup changes.
 
+Once the backend above is up, `npm run seed:demo-data` populates it with a representative
+dataset — an office, staff, a center, a group, an active loan, a loan pending approval, a
+savings account, a fixed deposit, a share account, a manual journal entry and two reports —
+for manual sanity testing rather than the narrow fixtures an individual spec builds for
+itself. It prints what it created. This is its own Playwright project (`demo-seed`), so it
+never runs as a side effect of the `backend` project in CI.
+
+## Unit Tests
+
+Unit tests use Vitest and are named `*.test.ts`. Run the application suite with
+`npm test -- --watch=false` or `npm run test:unit`.
+
+Use `vi.fn()` for mocks and `expect` for assertions. `describe`, `it`, `expect` and `vi` are
+globals. For a mocked service, use `SpyObj<T>` and `createSpyObj<T>([…])` from
+`src/app/testing/mocks.ts`.
+
+Background on the completed migration: [`DOCS/adr/0004-vitest-migration.md`](DOCS/adr/0004-vitest-migration.md).
+
 ## UI Components
 
 The UI layer is **Ionic** (`@ionic/angular` v8), configured in `mode: 'md'`.
@@ -111,6 +173,18 @@ New runtime dependencies must be **Apache Category A** compatible. CI enforces t
 `MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD` via `license-checker`; anything GPL/LGPL/AGPL
 or SSPL will fail the build. Declare packages you import directly in `package.json` rather than
 relying on transitive resolution, so the audit sees them.
+
+## AI-assisted contributions
+
+Generative AI tools may assist with contribution work, but they do not replace contributor
+accountability. The human submitting a change is responsible for its correctness, security,
+performance, maintainability, and for having the rights needed to contribute it to the ASF.
+
+Follow the ASF's [Generative Tooling Guidance](https://www.apache.org/legal/generative-tooling.html),
+including its guidance on third-party material and tool terms. Contributors are encouraged, but not
+required, to disclose material AI assistance in a pull request or commit message. A useful disclosure
+names the tool or model and the harness or workflow used. Disclosure does not transfer responsibility
+away from the contributor.
 
 ## Pull Request Guidelines
 

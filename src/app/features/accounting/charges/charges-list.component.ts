@@ -20,12 +20,11 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 
 import { Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
 import { CurrencyPipe, DecimalPipe } from '@angular/common';
 import { DataTableComponent, ColumnDef, CellTemplateDirective } from '../../../shared';
 import { ChargesService, ChargeData } from '../../../api';
 import { TranslatePipe } from '../../../core/adapters';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 /**
  * Component for listing globally configured charges and penalties.
@@ -36,26 +35,27 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
   selector: 'app-charges-list',
   standalone: true,
   imports: [
-    TranslateModule,
     DataTableComponent,
     CellTemplateDirective,
     TranslatePipe,
     DecimalPipe,
     CurrencyPipe,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
   ],
   template: `
     <app-data-table
       title="nav.charges"
       helpTextKey="HELP.CHARGES_DESC"
       createButtonLabel="CHARGES.CREATE"
+      createPermission="CREATE_CHARGE"
       [columns]="columns"
       [data]="charges()"
       [totalRecords]="charges().length"
+      [hasError]="hasError()"
       [showSearch]="true"
       [localLogic]="true"
       (create)="onCreateCharge()"
+      (retry)="onRetry()"
     >
       <ng-template appCellTemplate="amount" let-charge>
         @if (
@@ -69,23 +69,22 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
       </ng-template>
 
       <ng-template appCellTemplate="penalty" let-charge>
-        {{ (charge.penalty ? 'COMMON.YES' : 'COMMON.NO') | translate }}
+        {{ (charge.penalty ? 'COMMON.YES' : 'COMMON.NO') | appTranslate }}
       </ng-template>
 
       <ng-template appCellTemplate="active" let-charge>
-        {{ (charge.active ? 'COMMON.YES' : 'COMMON.NO') | translate }}
+        {{ (charge.active ? 'COMMON.YES' : 'COMMON.NO') | appTranslate }}
       </ng-template>
 
       <ng-template appCellTemplate="actions" let-charge>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'COMMON.EDIT' | translate"
-          [title]="'CHARGES.EDIT' | appTranslate"
+        <app-button
+          type="button"
+          emphasis="quiet"
+          intent="primary"
+          icon="create-outline"
+          [label]="'COMMON.EDIT' | appTranslate"
           (click)="onEditCharge(charge)"
-        >
-          <ion-icon name="create-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,
@@ -103,6 +102,7 @@ export class ChargesListComponent implements OnInit {
   ];
 
   readonly charges = signal<ChargeData[]>([]);
+  readonly hasError = signal(false);
 
   ngOnInit(): void {
     this.loadCharges();
@@ -111,10 +111,18 @@ export class ChargesListComponent implements OnInit {
   private loadCharges(): void {
     this.chargesService.getCharges().subscribe({
       next: (data) => {
+        this.hasError.set(false);
         this.charges.set(data || []);
       },
-      error: (err) => console.error('Failed to load charges', err),
+      error: () => {
+        this.hasError.set(true);
+        this.charges.set([]);
+      },
     });
+  }
+
+  onRetry(): void {
+    this.loadCharges();
   }
 
   onCreateCharge(): void {

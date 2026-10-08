@@ -19,7 +19,7 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../core/adapters';
 import { IonButton, IonBadge, IonIcon } from '@ionic/angular/standalone';
 import { Router } from '@angular/router';
 import { of } from 'rxjs';
@@ -32,14 +32,7 @@ import { readScheduleTypeCode, readScheduleTypeLabel } from './loan-schedule-typ
 @Component({
   selector: 'app-loan-products-list',
   standalone: true,
-  imports: [
-    TranslateModule,
-    IonButton,
-    IonBadge,
-    IonIcon,
-    DataTableComponent,
-    CellTemplateDirective,
-  ],
+  imports: [TranslatePipe, IonButton, IonBadge, IonIcon, DataTableComponent, CellTemplateDirective],
   template: `
     <app-data-table
       [hasError]="hasError()"
@@ -47,6 +40,7 @@ import { readScheduleTypeCode, readScheduleTypeLabel } from './loan-schedule-typ
       title="nav.loanProducts"
       helpTextKey="HELP.LOAN_PRODUCTS_DESC"
       createButtonLabel="PRODUCTS.CREATE_LOAN_PRODUCT"
+      createPermission="CREATE_LOANPRODUCT"
       [columns]="columns"
       [data]="products()"
       [totalRecords]="products().length"
@@ -65,7 +59,7 @@ import { readScheduleTypeCode, readScheduleTypeLabel } from './loan-schedule-typ
         <ion-button
           fill="clear"
           color="primary"
-          [attr.aria-label]="'COMMON.VIEW' | translate"
+          [attr.aria-label]="'COMMON.VIEW' | appTranslate"
           (click)="onViewProduct(product)"
         >
           <ion-icon name="eye-outline" slot="icon-only"></ion-icon>
@@ -73,7 +67,7 @@ import { readScheduleTypeCode, readScheduleTypeLabel } from './loan-schedule-typ
         <ion-button
           fill="clear"
           color="primary"
-          [attr.aria-label]="'COMMON.EDIT' | translate"
+          [attr.aria-label]="'COMMON.EDIT' | appTranslate"
           (click)="onEditProduct(product)"
         >
           <ion-icon name="create-outline" slot="icon-only"></ion-icon>

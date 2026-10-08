@@ -19,33 +19,33 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import { DecimalPipe } from '@angular/common';
 import { of } from 'rxjs';
 import { catchError, tap } from 'rxjs/operators';
 import { DataTableComponent, ColumnDef, CellTemplateDirective } from '../../../shared';
 import { RecurringDepositProductService, GetRecurringDepositProductsResponse } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 @Component({
   selector: 'app-recurring-deposit-products-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
     DecimalPipe,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
     <app-data-table
       [hasError]="hasError()"
       (retry)="onRetry()"
-      title="nav.recurringDeposits"
+      title="nav.recurringDepositProducts"
       createButtonLabel="PRODUCTS.CREATE_RECURRING_DEPOSIT_PRODUCT"
+      createPermission="CREATE_RECURRINGDEPOSITPRODUCT"
       [columns]="columns"
       [data]="products()"
       [showSearch]="true"
@@ -58,14 +58,15 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       </ng-template>
 
       <ng-template appCellTemplate="actions" let-product>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [appTooltip]="'COMMON.EDIT' | translate"
+        <app-button
+          type="button"
+          intent="primary"
+          emphasis="quiet"
+          [label]="'COMMON.EDIT' | appTranslate"
+          icon="create-outline"
+          [appTooltip]="'COMMON.EDIT' | appTranslate"
           (click)="onEdit(product)"
-        >
-          <ion-icon name="create-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,

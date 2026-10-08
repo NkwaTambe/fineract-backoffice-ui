@@ -32,6 +32,11 @@ on:
     branches:
       - main
       - develop
+  # Deliberately no `tags:` trigger. Adding one made every job in this workflow a
+  # cache-poisoning finding (zizmor, 11 × high): a tag push is a publishing trigger, and a job
+  # that restores an npm cache on one can be fed content written from a lower-privilege context,
+  # which is precisely the threat that matters for a release build. The tag check lives in
+  # release-tag.yml instead, where it needs no dependencies and therefore no cache.
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -73,6 +78,16 @@ jobs:
       # longer exists, so a fixed one cannot quietly come back and the file only shrinks.
       - name: Lint TypeScript files
         run: npm run lint:prune
+      # eslint-rules/ holds this repository's own rules, currently the cognitive-complexity rule
+      # that replaced the one from the removed LGPL plugin. Its tests assert exact scores, so a
+      # silent drift into being stricter or laxer than what it replaced fails here.
+      - name: Test the repository's own ESLint rules
+        run: npm run test:eslint-rules
+      # `scripts/` is outside `src`, so neither `npm run lint` nor either unit runner covers
+      # it — and it renders the Markdown that gets posted to pull requests. CodeQL found an
+      # incomplete escaping in that renderer, which is what these tests pin.
+      - name: Test the reporting scripts
+        run: npm run test:scripts
 
   html-lint:
     name: HTML Lint
@@ -124,11 +139,79 @@ jobs:
           node-version: 'lts/*'
           cache: 'npm'
       - run: npm ci
+      # Three checks: every referenced key exists, no key is interpolated without a translate
+      # pipe, and no catalogue holds a key en.json dropped or loses coverage. What none of them
+      # can see is a key assembled at runtime — the e2e suite fails on those instead, via
+      # ReportingMissingTranslationHandler and the failOnMissingTranslations fixture.
       - name: Verify translations
         run: npm run i18n:check
-      - name: Verify every ion-icon name is registered
+      # The one shape i18n:check cannot see: English written straight into a template, with no
+      # key and no pipe. Nothing is looked up, so nothing misses and no raw key ever appears —
+      # the text simply stays English in every language. Per-file baseline, shrinking only.
+      - name: Verify no new untranslated template text
+        run: npm run check:template-text
+      - name: Verify every icon name is registered
         run: npm run check:icons
-
+      - name: Verify every icon-only button has an accessible name
+        run: npm run check:a11y-names
+      # A required signal input only throws when the screen renders, and most list screens
+      # have no spec that renders them — so a missing `type` would reach a user rather than CI.
+      - name: Verify every app-button declares its type and can be named
+        run: npm run check:ui-primitives
+      # Fineract serves /v1/internal/** only under its `test` Spring profile, which upstream
+      # states must not be enabled in production. The few screens built on those endpoints are
+      # gated behind `developerToolsEnabled`; this pins that list so a new dependency on a
+      # test-only endpoint has to be a deliberate choice.
+      - name: Verify no ungated dependency on test-only Fineract endpoints
+        run: npm run check:internal-endpoints
+      # Route authorization and navigation visibility are declared in two places, and the
+      # failure when they disagree is silent: a menu item leading to Access Denied, or a screen
+      # missing from the menu that the URL still opens. This compares them.
+      - name: Verify route permissions agree with navigation
+        run: npm run check:route-permissions
+      # A gate on a permission code Fineract does not define can never be satisfied by any
+      # role, so the control it protects is disabled forever and looks exactly like one the
+      # viewer is not entitled to. Two had shipped that way. Checked against a committed
+      # snapshot, so this needs no Fineract running.
+      - name: Verify every permission code exists in Fineract's catalogue
+        run: npm run check:permission-codes
+      # Navigation ids are the handle a deployment's config names, in a file this repository
+      # never sees. A renamed or removed id silently stops matching there, so the menu a
+      # deployment meant to change comes back on upgrade with no error anywhere. The same check
+      # holds labelKey to being an actual key: `labelKey: 'Admin'` renders exactly like a
+      # working entry in English and stays English everywhere else.
+      - name: Verify navigation ids are stable and every label is a translation key
+        run: npm run check:nav-ids
+      # public/branding/ is reserved for deployments. Anything committed there becomes a merge
+      # conflict for every downstream that mounts its own overlay.
+      - name: Verify the deployment overlay path is unused upstream
+        run: npm run check:branding-path
+      # Resolves a maximally-customized reference deployment against the current tree. The unit
+      # tests use a three-entry fixture and the e2e suite mocks its own overlay, so both keep
+      # passing while an id or token a real deployment names disappears.
+      - name: Verify the reference downstream config still resolves
+        run: npm run check:reference-downstream
+      # The narrow layout rests on three invariants a diff cannot show: one breakpoint shared
+      # between the CSS and ViewportService, no 100vh (which overflows under mobile browser
+      # chrome), and no unbounded fixed width. The e2e `mobile` project covers behaviour; this
+      # covers the rules that are about to break it.
+      - name: Verify responsive layout invariants
+        run: npm run check:responsive
+      # `--ion-color-*-contrast` is a literal white, so the fill beside it decides whether button
+      # and badge labels are readable. #587 fixed that ratio and a later commit on the same branch
+      # reverted it, shipping every primary CTA at 3.15:1, because no check asserted it (#613).
+      - name: Verify theme contrast floors
+        run: npm run check:theme-contrast
+      # Nothing else type-checks e2e/: `npm run lint` covers src, and tsconfig.app.json excludes
+      # the suite. A helper referencing an identifier that no longer exists therefore compiled
+      # fine and failed only when CI ran the browser — which is a slow, expensive way to find a
+      # typo.
+      - name: Type-check the e2e suite
+        run: npm run typecheck:e2e
+      # Rejects 0.0.0 and anything that is not SemVer, and on a tag build asserts the tag names
+      # the same version package.json does.
+      - name: Verify the declared version
+        run: npm run check:version
   test:
     name: Unit Tests
     needs: dependencies
@@ -144,15 +227,44 @@ jobs:
           node-version: 'lts/*'
           cache: 'npm'
       - run: npm ci
-      - name: Run Tests with Coverage
-        run: npm run test -- --watch=false --browsers=ChromeHeadless --code-coverage
-      - name: Upload Coverage Report
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
+      # Angular's build cache, which angular.json now enables under CI (`cli.cache.environment:
+      # all`).
+      #
+      # Keyed on the lockfile *only*, deliberately. The obvious key includes a hash of `src/**`,
+      # and that is a trap: it writes a new entry on every push that touches a source file —
+      # which is every push — so three job-kinds' worth of a few hundred megabytes each would
+      # churn through the repository's 10 GB cache budget in days and evict the Playwright and
+      # buildx entries that the rest of CI depends on. Cache eviction is not free: it converts a
+      # warm job into a cold one somewhere else in the matrix.
+      #
+      # Keying on the lockfile costs nothing in hit rate, because `.angular/cache` is
+      # content-addressed internally: an entry built from older sources still hits for every
+      # file whose content has not changed, which is almost all of them. So the entry is
+      # rewritten when dependencies move and read the rest of the time, and the number of
+      # entries stays bounded at one per job-kind.
+      - name: Cache Angular build output
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          name: coverage-report
-          path: coverage/fineract-backoffice-ui/
-          retention-days: 7
+          path: .angular/cache
+          key: ${{ runner.os }}-angular-test-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-angular-test-
+      - name: Run unit tests on Vitest
+        run: npm run test:unit
+      # The runner's clock is UTC and playwright.config.ts pins Asia/Kolkata, so every timezone
+      # this project tests at is at or east of Greenwich — and a local/UTC date mix-up is
+      # invisible at a non-negative offset. That is how #496 shipped: a bare `YYYY-MM-DD` read as
+      # UTC midnight and printed back with local getters submitted the day before, for users the
+      # suite never simulated.
+      #
+      # A second pass costs about a minute and covers the whole application rather than the one
+      # helper, which no assertion running only at UTC can do.
+      - name: Run unit tests west of Greenwich
+        run: npm run test:unit
+        env:
+          TZ: America/New_York
+      - name: Run microfrontend tests on Vitest
+        run: npm run test:mfe
 
   api-client-drift:
     name: API Client Drift Check
@@ -168,11 +280,18 @@ jobs:
         with:
           node-version: 'lts/*'
           cache: 'npm'
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           java-version: '17'
           distribution: 'temurin'
       - run: npm ci
+      # openapi-generator-cli downloads its ~25 MB generator jar on first use. The version is
+      # pinned in openapitools.json, so the download is the same bytes on every run.
+      - name: Cache the OpenAPI generator
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.openapi-generator
+          key: ${{ runner.os }}-openapi-generator-${{ hashFiles('openapitools.json') }}
       - name: Verify generated API client matches the committed spec
         run: npm run verify-api-client
 
@@ -191,7 +310,65 @@ jobs:
           node-version: 'lts/*'
           cache: 'npm'
       - run: npm ci
+      # Angular's build cache, which angular.json now enables under CI (`cli.cache.environment:
+      # all`).
+      #
+      # Keyed on the lockfile *only*, deliberately. The obvious key includes a hash of `src/**`,
+      # and that is a trap: it writes a new entry on every push that touches a source file —
+      # which is every push — so three job-kinds' worth of a few hundred megabytes each would
+      # churn through the repository's 10 GB cache budget in days and evict the Playwright and
+      # buildx entries that the rest of CI depends on. Cache eviction is not free: it converts a
+      # warm job into a cold one somewhere else in the matrix.
+      #
+      # Keying on the lockfile costs nothing in hit rate, because `.angular/cache` is
+      # content-addressed internally: an entry built from older sources still hits for every
+      # file whose content has not changed, which is almost all of them. So the entry is
+      # rewritten when dependencies move and read the rest of the time, and the number of
+      # entries stays bounded at one per job-kind.
+      - name: Cache Angular build output
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .angular/cache
+          key: ${{ runner.os }}-angular-build-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-angular-build-
       - run: npm run build
+
+  # Nothing above proves the production build can run with no network access — `build` always
+  # has it, so a step that quietly starts depending on a remote fetch would pass CI unnoticed.
+  # That is exactly how the Google Fonts dependency in #362 survived: found by an audit, not by
+  # a check. See #363.
+  offline-build:
+    name: Offline Production Build
+    needs: dependencies
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+      # Both steps run inside the same node:24-alpine image deploy/Dockerfile builds from
+      # (pinned to the same digest), rather than installing on the runner's own Node and mounting
+      # the result into a container. `npm ci` resolves platform-specific native optional
+      # dependencies — lightningcss ships separate glibc and musl builds — so installing on the
+      # runner (glibc) and then running the build against that install inside Alpine (musl) would
+      # load the wrong binary. Installing where the build runs is what makes this a build of the
+      # release image's actual environment, not an approximation of it.
+      - name: 'Install dependencies (network allowed: registry only)'
+        run: |
+          docker run --rm -v "$PWD":/workspace -w /workspace \
+            node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 \
+            npm ci
+      # `--network none` gives the container only a loopback interface — no registry, no CDN, no
+      # font host, nothing. A build step that reaches for any of those fails here instead of
+      # shipping. See DOCS/CI_CHECKS.md for why `npm ci` above does not run under the same
+      # restriction.
+      - name: Build with no network access
+        run: |
+          docker run --rm --network none -v "$PWD":/workspace -w /workspace \
+            node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 \
+            npm run build -- --configuration production
 
   compliance:
     name: License Compliance
@@ -210,8 +387,200 @@ jobs:
       - run: npm ci
       - name: Check Apache license headers (Custom Script)
         run: ./scripts/check-license.sh
+      # An allow-list over what ships. Kept alongside the categorised scan below rather than
+      # replaced by it: the two read npm's metadata by different routes, so a package whose
+      # licence one of them misreads is still caught by the other.
       - name: Check dependency licenses
         run: npx --no-install license-checker --production --onlyAllow "MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD"
+      # The tree is clean today, so a green scan proves nothing on its own about whether the
+      # classifier still classifies. This is what proves it — including that LGPL-3.0 still
+      # resolves to Category X, which is the case that removed eslint-plugin-sonarjs.
+      - name: Verify the licence classifier still blocks what it must
+        run: npm run check:licenses:selftest
+      # ASF policy, enforced: Category A passes, Category B is reported for PMC awareness,
+      # Category X and any licence nobody has classified fail the build. Runs over the whole
+      # tree, not just what ships: devDependencies are named in package.json, and package.json
+      # travels in a source release.
+      - name: Classify every dependency licence against ASF policy
+        run: npm run check:licenses
+
+  container:
+    name: Container Image
+    needs: dependencies
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+
+      # Deliberately a plain `docker build`, with no layer cache.
+      #
+      # The obvious speed-up is buildx with `cache-to: type=gha`, which would cache this
+      # image's first stage — `npm ci` plus a production Angular build. It is not available
+      # here: the ASF enterprise restricts workflows to an allow-list of actions, and
+      # `docker/setup-buildx-action` and `docker/build-push-action` are not on it. A run using
+      # them fails before any job starts, so this is a hard constraint rather than a
+      # preference.
+      #
+      # The remaining route would be the buildx CLI, which ubuntu-latest already ships, with
+      # `--cache-to type=local` behind `actions/cache`. That was judged not worth it: only the
+      # dependency stage is cacheable — every source change invalidates the build stage
+      # regardless — so it buys roughly a minute, in exchange for the docker-container driver,
+      # an export step to get the image back into the daemon, and a local cache that grows
+      # without bound unless it is pruned by hand. Worth revisiting if this job becomes the
+      # critical path.
+      - name: Build the image
+        run: docker build -f deploy/Dockerfile -t fineract-backoffice-ui:ci .
+
+      # The reason this job exists. The image built and served its landing page for months while
+      # answering every single API call with the application's own HTML, because nginx had no
+      # /api/ proxy and `try_files` fell through to index.html. A 200 on `/` proves nothing; the
+      # assertions below are the ones that would have caught it.
+      - name: Start Fineract for the container to talk to
+        run: |
+          docker compose -f deploy/docker-compose-e2e.yml up -d --wait fineract-db
+          docker exec -i fineract-db psql -U postgres < deploy/init-db.sql
+          docker compose -f deploy/docker-compose-e2e.yml up -d fineract-backend
+          for _ in $(seq 1 60); do
+            if [ "$(curl -k -s -o /dev/null -w '%{http_code}' --max-time 5 \
+                  https://localhost:8443/fineract-provider/actuator/info || true)" = "200" ]; then
+              echo "Fineract is up"; exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Fineract did not come up"; exit 1
+
+      - name: Run the image against it
+        run: |
+          NET=$(docker inspect fineract-backend \
+            --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}{{end}}')
+          docker run -d --name backoffice-ui --network "$NET" -p 18080:80 \
+            -e FINERACT_API_URL=https://fineract-backend:8443/fineract-provider/api \
+            -e FINERACT_PROXY_SSL_VERIFY=off \
+            fineract-backoffice-ui:ci
+          for _ in $(seq 1 30); do
+            curl -sf -o /dev/null http://localhost:18080/ && break
+            sleep 2
+          done
+
+      - name: The application is served
+        run: |
+          set -eu
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:18080/)
+          [ "$code" = "200" ] || { echo "::error::GET / answered $code"; exit 1; }
+
+      - name: Production HTML does not depend on a blocked inline event handler
+        run: |
+          set -eu
+          page=$(curl -s http://localhost:18080/)
+          if printf '%s' "$page" | grep -q 'onload='; then
+            echo "::error::index.html contains an inline onload handler that script-src blocks"
+            exit 1
+          fi
+
+      - name: config.json carries every key the application reads
+        run: |
+          set -eu
+          body=$(curl -s http://localhost:18080/config.json)
+          echo "$body"
+          for key in fineractApiUrl defaultTenant rbacEnabled institutionType developerToolsEnabled; do
+            echo "$body" | grep -q "\"$key\"" || {
+              echo "::error::config.json is missing $key — the entrypoint dropped it"; exit 1; }
+          done
+
+      - name: The API is proxied, and answers as Fineract rather than as the application
+        run: |
+          set -eu
+          type=$(curl -s -o /dev/null -w '%{content_type}' \
+            -u mifos:password -H 'Fineract-Platform-TenantId: default' \
+            http://localhost:18080/api/v1/offices)
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -u mifos:password -H 'Fineract-Platform-TenantId: default' \
+            http://localhost:18080/api/v1/offices)
+          echo "GET /api/v1/offices -> $code $type"
+          case "$type" in
+            text/html*) echo "::error::/api/v1/offices returned HTML — the SPA shell, not Fineract. \
+              deploy/nginx.conf.template has lost its /api/ proxy."; exit 1 ;;
+          esac
+          [ "$code" = "200" ] || { echo "::error::/api/v1/offices answered $code, expected 200"; exit 1; }
+
+      # `location ^~ /api/` is what stops the static-asset regex block claiming this. Without the
+      # `^~` nginx still evaluates the regex, and any API path ending in .js is served off the
+      # filesystem — a 404 for a request that should have reached the backend.
+      - name: An API path ending in .js is proxied, not served from disk
+        run: |
+          set -eu
+          type=$(curl -s -o /dev/null -w '%{content_type}' http://localhost:18080/api/v1/probe.js)
+          echo "GET /api/v1/probe.js -> $type"
+          case "$type" in
+            text/html*|application/javascript*) \
+              echo "::error::/api/v1/probe.js was served locally instead of proxied"; exit 1 ;;
+          esac
+
+      - name: Security headers survive on a proxied response
+        run: |
+          set -eu
+          headers=$(curl -s -D - -o /dev/null \
+            -u mifos:password -H 'Fineract-Platform-TenantId: default' \
+            http://localhost:18080/api/v1/offices)
+          for header in Content-Security-Policy X-Content-Type-Options X-Frame-Options; do
+            echo "$headers" | grep -qi "^$header:" || {
+              echo "::error::$header missing from the proxied response"; exit 1; }
+          done
+
+      - name: CSP admits only the script sources native federation needs
+        run: |
+          set -eu
+          headers=$(curl -s -D - -o /dev/null http://localhost:18080/)
+          csp=$(printf '%s\n' "$headers" | tr -d '\r' | grep -i '^Content-Security-Policy:' | head -n 1)
+          echo "$csp" | grep -Eiq "script-src 'self' blob:;" || {
+            echo "::error::CSP script-src does not contain the required self and blob sources"
+            exit 1
+          }
+          if echo "$csp" | grep -Eiq "script-src[^;]*(unsafe-inline|unsafe-eval)"; then
+            echo "::error::CSP script-src contains an unsafe execution source"
+            exit 1
+          fi
+
+      - name: Container logs
+        if: always()
+        run: docker logs backoffice-ui 2>&1 | tail -30
+
+  diagram:
+    name: Change Sequence Diagram
+    needs: dependencies
+    # Only a pull request has somewhere to publish the diagram to.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+          # The diagram is drawn from the files this pull request changed, so the merge base
+          # has to be reachable. `fetch-depth: 0` is blunt but reliable; a shallow fetch of the
+          # base ref alone breaks whenever the branch is behind by more than the fetch depth.
+          fetch-depth: 0
+      # No npm install: the script is dependency-free Node, and this job exists to be cheap.
+      - name: Render the diagram
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/pr-sequence-diagram.mjs "$BASE_SHA" > /tmp/pr-diagram.md
+      - name: Show it in the run summary
+        run: cat /tmp/pr-diagram.md >> "$GITHUB_STEP_SUMMARY"
+      # Uploaded rather than posted from here, for the same reason the E2E summaries are: this
+      # job runs on a fork's `pull_request` with a read-only token. pr-comments.yml publishes it.
+      - name: Upload the diagram for the commenter
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: pr-comment-diagram
+          path: /tmp/pr-diagram.md
+          if-no-files-found: warn
+          retention-days: 1
 
   rat-scan:
     name: Apache RAT Scan
@@ -223,13 +592,24 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up JDK
-        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           java-version: '17'
           distribution: 'temurin'
+      # The jar is immutable at a pinned version, so it is fetched once and read from the cache
+      # afterwards. The checksum is still verified on every run, cache hit included: a cache is
+      # writable from any branch, so trusting its contents unverified would be the more
+      # interesting half of a supply-chain problem rather than a saving.
+      - name: Cache Apache RAT
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apache-rat-0.17.jar
+          key: ${{ runner.os }}-apache-rat-0.17
       - name: Download Apache RAT
         run: |
-          curl -sL https://repo1.maven.org/maven2/org/apache/rat/apache-rat/0.17/apache-rat-0.17.jar -o apache-rat-0.17.jar
+          if [ ! -f apache-rat-0.17.jar ]; then
+            curl -sL https://repo1.maven.org/maven2/org/apache/rat/apache-rat/0.17/apache-rat-0.17.jar -o apache-rat-0.17.jar
+          fi
           echo "401939ebe5a52c6ed524029897bf914eaaba503d36c069ebcdbd8847a9e7cf93  apache-rat-0.17.jar" | sha256sum --check --status || {
             echo "::error::Apache RAT jar checksum verification failed. Aborting."
             exit 1
@@ -258,6 +638,30 @@ jobs:
       # are never deployed and have no upstream fix available.
       - run: npm audit --audit-level=high --omit=dev
 
+  ga-gate:
+    name: GA Readiness Gate
+    needs: dependencies
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+      - run: npm ci
+      # The generated API surface the application actually calls, against the reviewed manifest.
+      # Recorded separately from ga:check so a drift here names the operations that moved.
+      - name: Verify the called API surface matches the manifest
+        run: npm run api:surface
+      # `scripts/ga-check.mjs` has existed, and failed, without CI ever running it. A release
+      # gate nobody runs is not a gate. Blocking failures fail this job; advisory ones report.
+      - name: Run the GA readiness gate
+        run: npm run ga:check
+
   summary:
     name: Build Summary
     runs-on: ubuntu-latest
@@ -271,9 +675,12 @@ jobs:
         api-client-drift,
         test,
         build,
+        offline-build,
         compliance,
+        container,
         rat-scan,
         security,
+        ga-gate,
       ]
     if: always()
     permissions:
@@ -292,9 +699,12 @@ jobs:
           echo "| Formatting | ${{ needs.format.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Translation Check | ${{ needs.i18n-check.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| API Client Drift | ${{ needs.api-client-drift.result == 'success' && '✅ In Sync' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| GA Readiness Gate | ${{ needs.ga-gate.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Unit Tests | ${{ needs.test.result == 'success' && '✅ Pass (Artifact Uploaded)' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Prod Build | ${{ needs.build.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Offline Build | ${{ needs.offline-build.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Compliance | ${{ needs.compliance.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Container Image | ${{ needs.container.result == 'success' && '✅ Builds and proxies the API' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| RAT Scan | ${{ needs.rat-scan.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Security Audit | ${{ needs.security.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

@@ -18,12 +18,19 @@
  */
 
 export * from './components/help-icon/help-icon.component';
+export * from './components/stepper/stepper.component';
 export * from './components/status-badge/status-badge.component';
 export * from './components/search-filter/search-filter.component';
 export * from './components/data-table/data-table.component';
 export * from './components/data-table/cell-template.directive';
+export * from './components/load-error/load-error.component';
 export * from './components/paginator/paginator.component';
 export * from './models/table.model';
 export * from './components/client-search/client-search.component';
 export * from './directives/has-permission.directive';
+export * from './directives/requires-permission.directive';
+export * from './pipes/permission-summary.pipe';
 export * from './components/guidance-tour/guidance-tour.component';
+export * from './components/entity-notes/entity-notes.component';
+export * from './components/entity-documents/entity-documents.component';
+export * from './components/entity-datatables/entity-datatables.component';

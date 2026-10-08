@@ -21,7 +21,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../core/adapters';
 import { ClientSearchComponent } from '../../shared/components/client-search/client-search.component';
 import {
   LoansService,
@@ -62,11 +62,13 @@ import {
   IonSpinner,
 } from '@ionic/angular/standalone';
 import {
+  formatArrayDate,
   formatDateToFineract,
   FINERACT_DATE_FORMAT,
   FINERACT_LOCALE,
   toIsoDate,
 } from '../../core/utils/date-formatter';
+import { createPickersReady } from '../../shared/utils/pickers-ready';
 
 const OPERATION_FAILED_MESSAGE = 'Operation failed. Please try again.';
 
@@ -75,7 +77,7 @@ const OPERATION_FAILED_MESSAGE = 'Operation failed. Please try again.';
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     ClientSearchComponent,
     IonIcon,
     IonButton,
@@ -101,396 +103,443 @@ const OPERATION_FAILED_MESSAGE = 'Operation failed. Please try again.';
       <ion-card>
         <ion-card-header>
           <ion-card-title>
-            {{ isEditMode() ? ('LOANS.EDIT_LOAN' | translate) : ('LOANS.CREATE_LOAN' | translate) }}
+            {{
+              isEditMode()
+                ? ('LOANS.EDIT_LOAN' | appTranslate)
+                : ('LOANS.CREATE_LOAN' | appTranslate)
+            }}
           </ion-card-title>
         </ion-card-header>
 
         <ion-card-content>
-          <form #loanForm="ngForm" (ngSubmit)="onSubmit()" class="loan-form">
-            <div class="form-grid">
-              <!-- Client Search with Create Option -->
-              <div class="field-container-row">
-                <app-client-search
-                  [label]="'COMMON.CLIENT_ID' | translate"
-                  [required]="true"
-                  [initialClientId]="loan().clientId || null"
-                  (clientSelected)="loan().clientId = $event"
-                  class="flex-grow"
-                >
-                </app-client-search>
-                <ion-button
-                  fill="clear"
-                  type="button"
-                  [appTooltip]="'CLIENTS.CREATE_CLIENT' | translate"
-                  (click)="onCreateClient()"
-                  style="margin-top: 4px;"
-                >
-                  <ion-icon color="primary" name="add-circle-outline"></ion-icon>
-                </ion-button>
-              </div>
+          @if (!isModelReady()) {
+            <ion-spinner data-testid="loan-form-loading"></ion-spinner>
+          } @else {
+            <form #loanForm="ngForm" (ngSubmit)="onSubmit()" class="loan-form">
+              <div class="form-grid">
+                <!-- Client Search with Create Option -->
+                <div class="field-container-row">
+                  <app-client-search
+                    [label]="'COMMON.CLIENT_ID' | appTranslate"
+                    [required]="true"
+                    [initialClientId]="loan().clientId || null"
+                    (clientSelected)="loan().clientId = $event"
+                    class="flex-grow"
+                  >
+                  </app-client-search>
+                  <ion-button
+                    fill="clear"
+                    type="button"
+                    [attr.aria-label]="'CLIENTS.CREATE_CLIENT' | appTranslate"
+                    [appTooltip]="'CLIENTS.CREATE_CLIENT' | appTranslate"
+                    (click)="onCreateClient()"
+                    style="margin-top: 4px;"
+                  >
+                    <ion-icon color="primary" name="add-circle-outline"></ion-icon>
+                  </ion-button>
+                </div>
 
-              <!-- Product Selection with Create Option -->
-              <div class="field-container-row">
-                <ion-item
-                  fill="outline"
-                  [appTooltip]="'HELP.LOAN_PRODUCT_DESC' | translate"
-                  class="flex-grow"
-                >
-                  <ion-label position="stacked">{{ 'LOANS.PRODUCT' | translate }}</ion-label>
-                  <ion-select
-                    [attr.aria-label]="'LOANS.PRODUCT' | translate"
-                    interface="popover"
-                    name="productId"
-                    [(ngModel)]="loan().productId"
-                    (ngModelChange)="onProductSelected($event)"
-                    required
+                <!-- Product Selection with Create Option -->
+                <div class="field-container-row">
+                  <ion-item
+                    fill="outline"
+                    [appTooltip]="'HELP.LOAN_PRODUCT_DESC' | appTranslate"
+                    class="flex-grow"
+                  >
+                    <ion-label position="stacked">{{ 'LOANS.PRODUCT' | appTranslate }}</ion-label>
+                    <ion-select
+                      [attr.aria-label]="'LOANS.PRODUCT' | appTranslate"
+                      interface="popover"
+                      name="productId"
+                      [(ngModel)]="loan().productId"
+                      (ngModelChange)="onProductSelected($event)"
+                      required
+                      [disabled]="isEditMode()"
+                    >
+                      @for (product of products(); track product.id) {
+                        <ion-select-option [value]="product.id">{{
+                          product.name
+                        }}</ion-select-option>
+                      }
+                    </ion-select>
+                  </ion-item>
+                  <ion-button
+                    fill="clear"
+                    type="button"
+                    [attr.aria-label]="'PRODUCTS.CREATE_LOAN_PRODUCT' | appTranslate"
+                    [appTooltip]="'PRODUCTS.CREATE_LOAN_PRODUCT' | appTranslate"
+                    (click)="onCreateProduct()"
+                    style="margin-top: 4px;"
                     [disabled]="isEditMode()"
                   >
-                    @for (product of products(); track product.id) {
-                      <ion-select-option [value]="product.id">{{ product.name }}</ion-select-option>
-                    }
+                    <ion-icon color="primary" name="add-circle-outline"></ion-icon>
+                  </ion-button>
+                </div>
+
+                @if (selectedProductDetails()?.loanScheduleType?.value; as scheduleType) {
+                  <div class="field-container-row full-width">
+                    <div>
+                      <ion-chip [appTooltip]="'HELP.LOAN_SCHEDULE_TYPE_DESC' | appTranslate">
+                        {{ 'PRODUCTS.LOAN_SCHEDULE_TYPE' | appTranslate }}: {{ scheduleType }}
+                      </ion-chip>
+                    </div>
+                  </div>
+                }
+
+                <!-- Principal -->
+                <ion-item fill="outline" [appTooltip]="'HELP.PRINCIPAL_DESC' | appTranslate">
+                  <ion-label position="stacked">{{ 'LOANS.PRINCIPAL' | appTranslate }}</ion-label>
+                  <ion-input
+                    [attr.aria-label]="'LOANS.PRINCIPAL' | appTranslate"
+                    type="number"
+                    name="principal"
+                    [(ngModel)]="loan().principal"
+                    required
+                  ></ion-input>
+                </ion-item>
+
+                <!-- External ID -->
+                <ion-item fill="outline" [appTooltip]="'HELP.EXTERNAL_ID_DESC' | appTranslate">
+                  <ion-label position="stacked">{{
+                    'COMMON.EXTERNAL_ID' | appTranslate
+                  }}</ion-label>
+                  <ion-input
+                    [attr.aria-label]="'COMMON.EXTERNAL_ID' | appTranslate"
+                    name="externalId"
+                    [(ngModel)]="loan().externalId"
+                  ></ion-input>
+                </ion-item>
+
+                <!-- Submitted On -->
+                <ion-item fill="outline" [appTooltip]="'HELP.SUBMITTED_ON_DESC' | appTranslate">
+                  <ion-label position="stacked">{{
+                    'COMMON.SUBMITTED_ON' | appTranslate
+                  }}</ion-label>
+                  @if (pickersReady()) {
+                    <ion-datetime-button datetime="submittedOnDate-picker"></ion-datetime-button>
+                  }
+                  <ion-modal [keepContentsMounted]="true">
+                    <ng-template>
+                      <ion-datetime
+                        id="submittedOnDate-picker"
+                        data-testid="submittedOnDate-picker"
+                        presentation="date"
+                        name="submittedOnDate"
+                        [ngModel]="submittedOnDate()"
+                        (ngModelChange)="submittedOnDate.set($event)"
+                        required
+                      ></ion-datetime>
+                    </ng-template>
+                  </ion-modal>
+                </ion-item>
+
+                <!-- Expected Disbursement -->
+                <ion-item
+                  fill="outline"
+                  [appTooltip]="'HELP.EXPECTED_DISBURSEMENT_DESC' | appTranslate"
+                >
+                  <ion-label position="stacked">{{
+                    'LOANS.EXPECTED_DISBURSEMENT' | appTranslate
+                  }}</ion-label>
+                  @if (pickersReady()) {
+                    <ion-datetime-button
+                      datetime="expectedDisbursementDate-picker"
+                    ></ion-datetime-button>
+                  }
+                  <ion-modal [keepContentsMounted]="true">
+                    <ng-template>
+                      <ion-datetime
+                        id="expectedDisbursementDate-picker"
+                        data-testid="expectedDisbursementDate-picker"
+                        presentation="date"
+                        name="expectedDisbursementDate"
+                        [ngModel]="expectedDisbursementDate()"
+                        (ngModelChange)="expectedDisbursementDate.set($event)"
+                        required
+                      ></ion-datetime>
+                    </ng-template>
+                  </ion-modal>
+                </ion-item>
+
+                <!-- Term Frequency -->
+                <ion-item fill="outline" [appTooltip]="'HELP.TERM_FREQUENCY_DESC' | appTranslate">
+                  <ion-label position="stacked">{{
+                    'LOANS.TERM_FREQUENCY' | appTranslate
+                  }}</ion-label>
+                  <ion-input
+                    [attr.aria-label]="'LOANS.TERM_FREQUENCY' | appTranslate"
+                    type="number"
+                    name="loanTermFrequency"
+                    [(ngModel)]="loan().loanTermFrequency"
+                    required
+                  ></ion-input>
+                </ion-item>
+
+                <!-- Term Type -->
+                <ion-item fill="outline" [appTooltip]="'HELP.TERM_TYPE_DESC' | appTranslate">
+                  <ion-label position="stacked">{{ 'LOANS.TERM_TYPE' | appTranslate }}</ion-label>
+                  <ion-select
+                    [attr.aria-label]="'LOANS.TERM_TYPE' | appTranslate"
+                    interface="popover"
+                    name="loanTermFrequencyType"
+                    [(ngModel)]="loan().loanTermFrequencyType"
+                    required
+                  >
+                    <ion-select-option [value]="0">{{
+                      'COMMON.DAYS' | appTranslate
+                    }}</ion-select-option>
+                    <ion-select-option [value]="1">{{
+                      'COMMON.WEEKS' | appTranslate
+                    }}</ion-select-option>
+                    <ion-select-option [value]="2">{{
+                      'COMMON.MONTHS' | appTranslate
+                    }}</ion-select-option>
+                    <ion-select-option [value]="3">{{
+                      'COMMON.YEARS' | appTranslate
+                    }}</ion-select-option>
                   </ion-select>
                 </ion-item>
-                <ion-button
-                  fill="clear"
-                  type="button"
-                  [appTooltip]="'PRODUCTS.CREATE_LOAN_PRODUCT' | translate"
-                  (click)="onCreateProduct()"
-                  style="margin-top: 4px;"
-                  [disabled]="isEditMode()"
-                >
-                  <ion-icon color="primary" name="add-circle-outline"></ion-icon>
-                </ion-button>
+
+                <!-- Number of Repayments -->
+                <ion-item fill="outline" [appTooltip]="'HELP.REPAYMENTS_COUNT_DESC' | appTranslate">
+                  <ion-label position="stacked">{{
+                    'LOANS.REPAYMENTS_COUNT' | appTranslate
+                  }}</ion-label>
+                  <ion-input
+                    [attr.aria-label]="'LOANS.REPAYMENTS_COUNT' | appTranslate"
+                    type="number"
+                    name="numberOfRepayments"
+                    [(ngModel)]="loan().numberOfRepayments"
+                    required
+                  ></ion-input>
+                </ion-item>
+
+                <!-- Repayment Every -->
+                <ion-item fill="outline" [appTooltip]="'HELP.REPAYMENT_EVERY_DESC' | appTranslate">
+                  <ion-label position="stacked">{{
+                    'LOANS.REPAYMENT_EVERY' | appTranslate
+                  }}</ion-label>
+                  <ion-input
+                    [attr.aria-label]="'LOANS.REPAYMENT_EVERY' | appTranslate"
+                    type="number"
+                    name="repaymentEvery"
+                    [(ngModel)]="loan().repaymentEvery"
+                    required
+                  ></ion-input>
+                </ion-item>
+
+                <!-- Repayment Frequency Type -->
+                <ion-item fill="outline">
+                  <ion-label position="stacked">{{ 'COMMON.FREQUENCY' | appTranslate }}</ion-label>
+                  <ion-select
+                    [attr.aria-label]="'COMMON.FREQUENCY' | appTranslate"
+                    interface="popover"
+                    name="repaymentFrequencyType"
+                    [(ngModel)]="loan().repaymentFrequencyType"
+                    required
+                  >
+                    <ion-select-option [value]="0">{{
+                      'COMMON.DAYS' | appTranslate
+                    }}</ion-select-option>
+                    <ion-select-option [value]="1">{{
+                      'COMMON.WEEKS' | appTranslate
+                    }}</ion-select-option>
+                    <ion-select-option [value]="2">{{
+                      'COMMON.MONTHS' | appTranslate
+                    }}</ion-select-option>
+                  </ion-select>
+                </ion-item>
+
+                <!-- Interest Rate Per Period -->
+                <ion-item fill="outline">
+                  <ion-label position="stacked">{{
+                    'COMMON.INTEREST_RATE' | appTranslate
+                  }}</ion-label>
+                  <ion-input
+                    [attr.aria-label]="'COMMON.INTEREST_RATE' | appTranslate"
+                    type="number"
+                    name="interestRatePerPeriod"
+                    [(ngModel)]="loan().interestRatePerPeriod"
+                    required
+                  ></ion-input>
+                </ion-item>
+
+                <!-- Interest Type -->
+                <ion-item fill="outline">
+                  <ion-label position="stacked">{{
+                    'PRODUCTS.INTEREST_TYPE' | appTranslate
+                  }}</ion-label>
+                  <ion-select
+                    [attr.aria-label]="'PRODUCTS.INTEREST_TYPE' | appTranslate"
+                    interface="popover"
+                    name="interestType"
+                    [(ngModel)]="loan().interestType"
+                    required
+                  >
+                    <ion-select-option [value]="0">{{
+                      'LOANS.DECLINING_BALANCE' | appTranslate
+                    }}</ion-select-option>
+                    <ion-select-option [value]="1">{{
+                      'LOANS.FLAT' | appTranslate
+                    }}</ion-select-option>
+                  </ion-select>
+                </ion-item>
+
+                <!-- Amortization Type -->
+                <ion-item fill="outline">
+                  <ion-label position="stacked">{{
+                    'PRODUCTS.AMORTIZATION_TYPE' | appTranslate
+                  }}</ion-label>
+                  <ion-select
+                    [attr.aria-label]="'PRODUCTS.AMORTIZATION_TYPE' | appTranslate"
+                    interface="popover"
+                    name="amortizationType"
+                    [(ngModel)]="loan().amortizationType"
+                    required
+                  >
+                    <ion-select-option [value]="1">{{
+                      'LOANS.EQUAL_INSTALLMENTS' | appTranslate
+                    }}</ion-select-option>
+                    <ion-select-option [value]="0">{{
+                      'LOANS.EQUAL_PRINCIPAL' | appTranslate
+                    }}</ion-select-option>
+                  </ion-select>
+                </ion-item>
+
+                <!-- Interest Calculation Period Type -->
+                <ion-item fill="outline">
+                  <ion-label position="stacked">{{
+                    'PRODUCTS.INTEREST_CALCULATION_PERIOD_TYPE' | appTranslate
+                  }}</ion-label>
+                  <ion-select
+                    [attr.aria-label]="'PRODUCTS.INTEREST_CALCULATION_PERIOD_TYPE' | appTranslate"
+                    interface="popover"
+                    name="interestCalculationPeriodType"
+                    [(ngModel)]="loan().interestCalculationPeriodType"
+                    required
+                  >
+                    <ion-select-option [value]="0">{{
+                      'LOANS.DAILY' | appTranslate
+                    }}</ion-select-option>
+                    <ion-select-option [value]="1">{{
+                      'LOANS.SAME_AS_REPAYMENT' | appTranslate
+                    }}</ion-select-option>
+                  </ion-select>
+                </ion-item>
+
+                <!-- Grace on Principal Payment -->
+                <ion-item fill="outline">
+                  <ion-label position="stacked">{{
+                    'LOANS.GRACE_ON_PRINCIPAL_PAYMENT' | appTranslate
+                  }}</ion-label>
+                  <ion-input
+                    [attr.aria-label]="'LOANS.GRACE_ON_PRINCIPAL_PAYMENT' | appTranslate"
+                    type="number"
+                    name="graceOnPrincipalPayment"
+                    [(ngModel)]="loan().graceOnPrincipalPayment"
+                  ></ion-input>
+                </ion-item>
+
+                <!-- Grace on Interest Payment -->
+                <ion-item fill="outline">
+                  <ion-label position="stacked">{{
+                    'LOANS.GRACE_ON_INTEREST_PAYMENT' | appTranslate
+                  }}</ion-label>
+                  <ion-input
+                    [attr.aria-label]="'LOANS.GRACE_ON_INTEREST_PAYMENT' | appTranslate"
+                    type="number"
+                    name="graceOnInterestPayment"
+                    [(ngModel)]="loan().graceOnInterestPayment"
+                  ></ion-input>
+                </ion-item>
+
+                <!-- Grace on Interest Charged -->
+                <ion-item fill="outline">
+                  <ion-label position="stacked">{{
+                    'LOANS.GRACE_ON_INTEREST_CHARGED' | appTranslate
+                  }}</ion-label>
+                  <ion-input
+                    [attr.aria-label]="'LOANS.GRACE_ON_INTEREST_CHARGED' | appTranslate"
+                    type="number"
+                    name="graceOnInterestCharged"
+                    [(ngModel)]="loan().graceOnInterestCharged"
+                  ></ion-input>
+                </ion-item>
+
+                <!-- In Arrears Tolerance -->
+                <ion-item fill="outline">
+                  <ion-label position="stacked">{{
+                    'LOANS.IN_ARREARS_TOLERANCE' | appTranslate
+                  }}</ion-label>
+                  <ion-input
+                    [attr.aria-label]="'LOANS.IN_ARREARS_TOLERANCE' | appTranslate"
+                    type="number"
+                    name="inArrearsTolerance"
+                    [(ngModel)]="loan().inArrearsTolerance"
+                  ></ion-input>
+                </ion-item>
+
+                <!-- Repayments Starting From Date -->
+                <ion-item fill="outline">
+                  <ion-label position="stacked">{{
+                    'LOANS.REPAYMENTS_STARTING_FROM_DATE' | appTranslate
+                  }}</ion-label>
+                  @if (pickersReady()) {
+                    <ion-datetime-button
+                      datetime="repaymentsStartingFromDate-picker"
+                    ></ion-datetime-button>
+                  }
+                  <ion-modal [keepContentsMounted]="true">
+                    <ng-template>
+                      <ion-datetime
+                        id="repaymentsStartingFromDate-picker"
+                        data-testid="repaymentsStartingFromDate-picker"
+                        presentation="date"
+                        name="repaymentsStartingFromDate"
+                        [(ngModel)]="repaymentsStartingFromDate"
+                      ></ion-datetime>
+                    </ng-template>
+                  </ion-modal>
+                </ion-item>
+
+                @if (isProgressive()) {
+                  <ion-checkbox
+                    name="interestRecognitionOnDisbursementDate"
+                    [(ngModel)]="loan().interestRecognitionOnDisbursementDate"
+                  >
+                    {{ 'LOANS.INTEREST_RECOGNITION_ON_DISBURSEMENT_DATE' | appTranslate }}
+                  </ion-checkbox>
+                }
+
+                @if (isProgressive() && selectedProductDetails()?.multiDisburseLoan) {
+                  <ion-checkbox
+                    name="allowFullTermForTranche"
+                    [(ngModel)]="loan().allowFullTermForTranche"
+                  >
+                    {{ 'LOANS.ALLOW_FULL_TERM_FOR_TRANCHE' | appTranslate }}
+                  </ion-checkbox>
+                }
               </div>
 
-              @if (selectedProductDetails()?.loanScheduleType?.value; as scheduleType) {
-                <div class="field-container-row full-width">
-                  <div>
-                    <ion-chip [appTooltip]="'HELP.LOAN_SCHEDULE_TYPE_DESC' | translate">
-                      {{ 'PRODUCTS.LOAN_SCHEDULE_TYPE' | translate }}: {{ scheduleType }}
-                    </ion-chip>
-                  </div>
-                </div>
-              }
-
-              <!-- Principal -->
-              <ion-item fill="outline" [appTooltip]="'HELP.PRINCIPAL_DESC' | translate">
-                <ion-label position="stacked">{{ 'LOANS.PRINCIPAL' | translate }}</ion-label>
-                <ion-input
-                  [attr.aria-label]="'LOANS.PRINCIPAL' | translate"
-                  type="number"
-                  name="principal"
-                  [(ngModel)]="loan().principal"
-                  required
-                ></ion-input>
-              </ion-item>
-
-              <!-- External ID -->
-              <ion-item fill="outline" [appTooltip]="'HELP.EXTERNAL_ID_DESC' | translate">
-                <ion-label position="stacked">{{ 'COMMON.EXTERNAL_ID' | translate }}</ion-label>
-                <ion-input
-                  [attr.aria-label]="'COMMON.EXTERNAL_ID' | translate"
-                  name="externalId"
-                  [(ngModel)]="loan().externalId"
-                ></ion-input>
-              </ion-item>
-
-              <!-- Submitted On -->
-              <ion-item fill="outline" [appTooltip]="'HELP.SUBMITTED_ON_DESC' | translate">
-                <ion-label position="stacked">{{ 'COMMON.SUBMITTED_ON' | translate }}</ion-label>
-                <ion-datetime-button datetime="submittedOnDate-picker"></ion-datetime-button>
-                <ion-modal [keepContentsMounted]="true">
-                  <ng-template>
-                    <ion-datetime
-                      id="submittedOnDate-picker"
-                      data-testid="submittedOnDate-picker"
-                      presentation="date"
-                      name="submittedOnDate"
-                      [ngModel]="submittedOnDate()"
-                      (ngModelChange)="submittedOnDate.set($event)"
-                      required
-                    ></ion-datetime>
-                  </ng-template>
-                </ion-modal>
-              </ion-item>
-
-              <!-- Expected Disbursement -->
-              <ion-item fill="outline" [appTooltip]="'HELP.EXPECTED_DISBURSEMENT_DESC' | translate">
-                <ion-label position="stacked">{{
-                  'LOANS.EXPECTED_DISBURSEMENT' | translate
-                }}</ion-label>
-                <ion-datetime-button
-                  datetime="expectedDisbursementDate-picker"
-                ></ion-datetime-button>
-                <ion-modal [keepContentsMounted]="true">
-                  <ng-template>
-                    <ion-datetime
-                      id="expectedDisbursementDate-picker"
-                      data-testid="expectedDisbursementDate-picker"
-                      presentation="date"
-                      name="expectedDisbursementDate"
-                      [ngModel]="expectedDisbursementDate()"
-                      (ngModelChange)="expectedDisbursementDate.set($event)"
-                      required
-                    ></ion-datetime>
-                  </ng-template>
-                </ion-modal>
-              </ion-item>
-
-              <!-- Term Frequency -->
-              <ion-item fill="outline" [appTooltip]="'HELP.TERM_FREQUENCY_DESC' | translate">
-                <ion-label position="stacked">{{ 'LOANS.TERM_FREQUENCY' | translate }}</ion-label>
-                <ion-input
-                  [attr.aria-label]="'LOANS.TERM_FREQUENCY' | translate"
-                  type="number"
-                  name="loanTermFrequency"
-                  [(ngModel)]="loan().loanTermFrequency"
-                  required
-                ></ion-input>
-              </ion-item>
-
-              <!-- Term Type -->
-              <ion-item fill="outline" [appTooltip]="'HELP.TERM_TYPE_DESC' | translate">
-                <ion-label position="stacked">{{ 'LOANS.TERM_TYPE' | translate }}</ion-label>
-                <ion-select
-                  [attr.aria-label]="'LOANS.TERM_TYPE' | translate"
-                  interface="popover"
-                  name="loanTermFrequencyType"
-                  [(ngModel)]="loan().loanTermFrequencyType"
-                  required
+              <div class="form-actions">
+                <ion-button fill="clear" type="button" (click)="onCancel()" [disabled]="isSaving()">
+                  {{ 'COMMON.CANCEL' | appTranslate }}
+                </ion-button>
+                <ion-button
+                  color="primary"
+                  type="submit"
+                  [disabled]="loanForm.invalid || isSaving()"
                 >
-                  <ion-select-option [value]="0">{{ 'COMMON.DAYS' | translate }}</ion-select-option>
-                  <ion-select-option [value]="1">{{
-                    'COMMON.WEEKS' | translate
-                  }}</ion-select-option>
-                  <ion-select-option [value]="2">{{
-                    'COMMON.MONTHS' | translate
-                  }}</ion-select-option>
-                  <ion-select-option [value]="3">{{
-                    'COMMON.YEARS' | translate
-                  }}</ion-select-option>
-                </ion-select>
-              </ion-item>
-
-              <!-- Number of Repayments -->
-              <ion-item fill="outline" [appTooltip]="'HELP.REPAYMENTS_COUNT_DESC' | translate">
-                <ion-label position="stacked">{{ 'LOANS.REPAYMENTS_COUNT' | translate }}</ion-label>
-                <ion-input
-                  [attr.aria-label]="'LOANS.REPAYMENTS_COUNT' | translate"
-                  type="number"
-                  name="numberOfRepayments"
-                  [(ngModel)]="loan().numberOfRepayments"
-                  required
-                ></ion-input>
-              </ion-item>
-
-              <!-- Repayment Every -->
-              <ion-item fill="outline" [appTooltip]="'HELP.REPAYMENT_EVERY_DESC' | translate">
-                <ion-label position="stacked">{{ 'LOANS.REPAYMENT_EVERY' | translate }}</ion-label>
-                <ion-input
-                  [attr.aria-label]="'LOANS.REPAYMENT_EVERY' | translate"
-                  type="number"
-                  name="repaymentEvery"
-                  [(ngModel)]="loan().repaymentEvery"
-                  required
-                ></ion-input>
-              </ion-item>
-
-              <!-- Repayment Frequency Type -->
-              <ion-item fill="outline">
-                <ion-label position="stacked">{{ 'COMMON.FREQUENCY' | translate }}</ion-label>
-                <ion-select
-                  [attr.aria-label]="'COMMON.FREQUENCY' | translate"
-                  interface="popover"
-                  name="repaymentFrequencyType"
-                  [(ngModel)]="loan().repaymentFrequencyType"
-                  required
-                >
-                  <ion-select-option [value]="0">{{ 'COMMON.DAYS' | translate }}</ion-select-option>
-                  <ion-select-option [value]="1">{{
-                    'COMMON.WEEKS' | translate
-                  }}</ion-select-option>
-                  <ion-select-option [value]="2">{{
-                    'COMMON.MONTHS' | translate
-                  }}</ion-select-option>
-                </ion-select>
-              </ion-item>
-
-              <!-- Interest Rate Per Period -->
-              <ion-item fill="outline">
-                <ion-label position="stacked">{{ 'COMMON.INTEREST_RATE' | translate }}</ion-label>
-                <ion-input
-                  [attr.aria-label]="'COMMON.INTEREST_RATE' | translate"
-                  type="number"
-                  name="interestRatePerPeriod"
-                  [(ngModel)]="loan().interestRatePerPeriod"
-                  required
-                ></ion-input>
-              </ion-item>
-
-              <!-- Interest Type -->
-              <ion-item fill="outline">
-                <ion-label position="stacked">{{ 'PRODUCTS.INTEREST_TYPE' | translate }}</ion-label>
-                <ion-select
-                  [attr.aria-label]="'PRODUCTS.INTEREST_TYPE' | translate"
-                  interface="popover"
-                  name="interestType"
-                  [(ngModel)]="loan().interestType"
-                  required
-                >
-                  <ion-select-option [value]="0">{{
-                    'LOANS.DECLINING_BALANCE' | translate
-                  }}</ion-select-option>
-                  <ion-select-option [value]="1">{{ 'LOANS.FLAT' | translate }}</ion-select-option>
-                </ion-select>
-              </ion-item>
-
-              <!-- Amortization Type -->
-              <ion-item fill="outline">
-                <ion-label position="stacked">{{
-                  'PRODUCTS.AMORTIZATION_TYPE' | translate
-                }}</ion-label>
-                <ion-select
-                  [attr.aria-label]="'PRODUCTS.AMORTIZATION_TYPE' | translate"
-                  interface="popover"
-                  name="amortizationType"
-                  [(ngModel)]="loan().amortizationType"
-                  required
-                >
-                  <ion-select-option [value]="1">{{
-                    'LOANS.EQUAL_INSTALLMENTS' | translate
-                  }}</ion-select-option>
-                  <ion-select-option [value]="0">{{
-                    'LOANS.EQUAL_PRINCIPAL' | translate
-                  }}</ion-select-option>
-                </ion-select>
-              </ion-item>
-
-              <!-- Interest Calculation Period Type -->
-              <ion-item fill="outline">
-                <ion-label position="stacked">{{
-                  'PRODUCTS.INTEREST_CALCULATION_PERIOD_TYPE' | translate
-                }}</ion-label>
-                <ion-select
-                  [attr.aria-label]="'PRODUCTS.INTEREST_CALCULATION_PERIOD_TYPE' | translate"
-                  interface="popover"
-                  name="interestCalculationPeriodType"
-                  [(ngModel)]="loan().interestCalculationPeriodType"
-                  required
-                >
-                  <ion-select-option [value]="0">{{ 'LOANS.DAILY' | translate }}</ion-select-option>
-                  <ion-select-option [value]="1">{{
-                    'LOANS.SAME_AS_REPAYMENT' | translate
-                  }}</ion-select-option>
-                </ion-select>
-              </ion-item>
-
-              <!-- Grace on Principal Payment -->
-              <ion-item fill="outline">
-                <ion-label position="stacked">{{
-                  'LOANS.GRACE_ON_PRINCIPAL_PAYMENT' | translate
-                }}</ion-label>
-                <ion-input
-                  [attr.aria-label]="'LOANS.GRACE_ON_PRINCIPAL_PAYMENT' | translate"
-                  type="number"
-                  name="graceOnPrincipalPayment"
-                  [(ngModel)]="loan().graceOnPrincipalPayment"
-                ></ion-input>
-              </ion-item>
-
-              <!-- Grace on Interest Payment -->
-              <ion-item fill="outline">
-                <ion-label position="stacked">{{
-                  'LOANS.GRACE_ON_INTEREST_PAYMENT' | translate
-                }}</ion-label>
-                <ion-input
-                  [attr.aria-label]="'LOANS.GRACE_ON_INTEREST_PAYMENT' | translate"
-                  type="number"
-                  name="graceOnInterestPayment"
-                  [(ngModel)]="loan().graceOnInterestPayment"
-                ></ion-input>
-              </ion-item>
-
-              <!-- Grace on Interest Charged -->
-              <ion-item fill="outline">
-                <ion-label position="stacked">{{
-                  'LOANS.GRACE_ON_INTEREST_CHARGED' | translate
-                }}</ion-label>
-                <ion-input
-                  [attr.aria-label]="'LOANS.GRACE_ON_INTEREST_CHARGED' | translate"
-                  type="number"
-                  name="graceOnInterestCharged"
-                  [(ngModel)]="loan().graceOnInterestCharged"
-                ></ion-input>
-              </ion-item>
-
-              <!-- In Arrears Tolerance -->
-              <ion-item fill="outline">
-                <ion-label position="stacked">{{
-                  'LOANS.IN_ARREARS_TOLERANCE' | translate
-                }}</ion-label>
-                <ion-input
-                  [attr.aria-label]="'LOANS.IN_ARREARS_TOLERANCE' | translate"
-                  type="number"
-                  name="inArrearsTolerance"
-                  [(ngModel)]="loan().inArrearsTolerance"
-                ></ion-input>
-              </ion-item>
-
-              <!-- Repayments Starting From Date -->
-              <ion-item fill="outline">
-                <ion-label position="stacked">{{
-                  'LOANS.REPAYMENTS_STARTING_FROM_DATE' | translate
-                }}</ion-label>
-                <ion-datetime-button
-                  datetime="repaymentsStartingFromDate-picker"
-                ></ion-datetime-button>
-                <ion-modal [keepContentsMounted]="true">
-                  <ng-template>
-                    <ion-datetime
-                      id="repaymentsStartingFromDate-picker"
-                      data-testid="repaymentsStartingFromDate-picker"
-                      presentation="date"
-                      name="repaymentsStartingFromDate"
-                      [(ngModel)]="repaymentsStartingFromDate"
-                    ></ion-datetime>
-                  </ng-template>
-                </ion-modal>
-              </ion-item>
-
-              @if (isProgressive()) {
-                <ion-checkbox
-                  name="interestRecognitionOnDisbursementDate"
-                  [(ngModel)]="loan().interestRecognitionOnDisbursementDate"
-                >
-                  {{ 'LOANS.INTEREST_RECOGNITION_ON_DISBURSEMENT_DATE' | translate }}
-                </ion-checkbox>
-              }
-
-              @if (isProgressive() && selectedProductDetails()?.multiDisburseLoan) {
-                <ion-checkbox
-                  name="allowFullTermForTranche"
-                  [(ngModel)]="loan().allowFullTermForTranche"
-                >
-                  {{ 'LOANS.ALLOW_FULL_TERM_FOR_TRANCHE' | translate }}
-                </ion-checkbox>
-              }
-            </div>
-
-            <div class="form-actions">
-              <ion-button fill="clear" type="button" (click)="onCancel()" [disabled]="isSaving()">
-                {{ 'COMMON.CANCEL' | translate }}
-              </ion-button>
-              <ion-button color="primary" type="submit" [disabled]="loanForm.invalid || isSaving()">
-                @if (isSaving()) {
-                  <ion-spinner name="crescent"></ion-spinner>
-                  {{ 'COMMON.SAVING' | translate }}
-                } @else {
-                  {{ 'COMMON.SAVE' | translate }}
-                }
-              </ion-button>
-            </div>
-          </form>
+                  @if (isSaving()) {
+                    <ion-spinner name="crescent"></ion-spinner>
+                    {{ 'COMMON.SAVING' | appTranslate }}
+                  } @else {
+                    {{ 'COMMON.SAVE' | appTranslate }}
+                  }
+                </ion-button>
+              </div>
+            </form>
+          }
         </ion-card-content>
       </ion-card>
     </div>
@@ -509,7 +558,7 @@ const OPERATION_FAILED_MESSAGE = 'Operation failed. Please try again.';
       }
       .form-grid {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
         gap: 16px;
       }
       .field-container-row {
@@ -524,6 +573,9 @@ const OPERATION_FAILED_MESSAGE = 'Operation failed. Please try again.';
   ],
 })
 export class LoanFormComponent implements OnInit {
+  /** See `createPickersReady` — the date buttons must not outrun their pickers. */
+  readonly pickersReady = createPickersReady();
+
   private readonly loansService = inject(LoansService);
   private readonly productService = inject(LoanProductsService);
   private readonly router = inject(Router);
@@ -539,6 +591,18 @@ export class LoanFormComponent implements OnInit {
   readonly loan = signal<PostLoansRequest>({
     loanType: 'individual',
   });
+
+  /**
+   * Whether the model the form binds to is final.
+   *
+   * In edit mode the record arrives after the view would otherwise have been created, and
+   * `[(ngModel)]` writes its value back in a microtask — so the first change-detection pass read
+   * `undefined` and the verification pass read the loaded value, which is
+   * ExpressionChangedAfterItHasBeenChecked (NG0100), logged on every visit to an existing loan.
+   * Holding the form back until the record is in place removes the cause rather than the symptom,
+   * and stops an edit form flashing empty defaults over a real loan.
+   */
+  readonly isModelReady = signal(false);
   readonly submittedOnDate = signal(toIsoDate(new Date()));
   readonly expectedDisbursementDate = signal(toIsoDate(new Date()));
   repaymentsStartingFromDate: string | null = null;
@@ -561,6 +625,9 @@ export class LoanFormComponent implements OnInit {
         this.loanId = +id;
         this.isEditMode.set(true);
         this.loadLoanData();
+      } else {
+        // Nothing to wait for when creating: the model is already the empty one the form binds to.
+        this.isModelReady.set(true);
       }
     });
   }
@@ -588,8 +655,57 @@ export class LoanFormComponent implements OnInit {
     }
     if (!productId) return;
     this.productService.getLoanproductsProductId(productId).subscribe({
-      next: (data: GetLoanProductsProductIdResponse) => this.selectedProductDetails.set(data),
+      next: (data: GetLoanProductsProductIdResponse) => {
+        this.selectedProductDetails.set(data);
+        // Editing an existing loan already has its own values; only a new application is filled in.
+        if (!this.isEditMode()) {
+          this.applyProductDefaults(data);
+        }
+      },
       error: () => this.notifications.error(OPERATION_FAILED_MESSAGE),
+    });
+  }
+
+  /**
+   * Seeds the terms from the product the user just picked.
+   *
+   * The product response was previously kept only for the schedule-type chip, which left every
+   * term field empty after selection — the officer retyped the product's own defaults by hand,
+   * and a slip booked the loan on terms the product never described. This is the same mapping
+   * {@link loadLoanData} performs, sourced from the product rather than from an existing loan.
+   *
+   * Anything the operator has already typed is left alone, so this cannot overwrite deliberate
+   * input when the product is changed after the fact.
+   */
+  private applyProductDefaults(product: GetLoanProductsProductIdResponse): void {
+    const loan = this.loan();
+    const keep = <T>(current: T | undefined, fallback: T | undefined): T | undefined =>
+      current === undefined || current === null || (current as unknown) === '' ? fallback : current;
+
+    this.loan.set({
+      ...loan,
+      principal: keep(loan.principal, product.principal),
+      numberOfRepayments: keep(loan.numberOfRepayments, product.numberOfRepayments),
+      repaymentEvery: keep(loan.repaymentEvery, product.repaymentEvery),
+      repaymentFrequencyType: keep(loan.repaymentFrequencyType, product.repaymentFrequencyType?.id),
+      interestRatePerPeriod: keep(loan.interestRatePerPeriod, product.interestRatePerPeriod),
+      interestType: keep(loan.interestType, product.interestType?.id),
+      amortizationType: keep(loan.amortizationType, product.amortizationType?.id),
+      interestCalculationPeriodType: keep(
+        loan.interestCalculationPeriodType,
+        product.interestCalculationPeriodType?.id,
+      ),
+      transactionProcessingStrategyCode: keep(
+        loan.transactionProcessingStrategyCode,
+        product.transactionProcessingStrategyCode,
+      ),
+      inArrearsTolerance: keep(loan.inArrearsTolerance, product.inArrearsTolerance),
+      graceOnPrincipalPayment: keep(loan.graceOnPrincipalPayment, product.graceOnPrincipalPayment),
+      graceOnInterestPayment: keep(loan.graceOnInterestPayment, product.graceOnInterestPayment),
+      // The loan term defaults to covering every repayment, which is what the product implies
+      // when it states a count and a period but no separate term.
+      loanTermFrequency: keep(loan.loanTermFrequency, product.numberOfRepayments),
+      loanTermFrequencyType: keep(loan.loanTermFrequencyType, product.repaymentFrequencyType?.id),
     });
   }
 
@@ -603,15 +719,11 @@ export class LoanFormComponent implements OnInit {
       next: (data: GetLoansLoanIdResponse) => {
         const subDateArray = data.timeline?.submittedOnDate as unknown as number[];
         if (subDateArray) {
-          this.submittedOnDate.set(
-            toIsoDate(new Date(subDateArray[0], subDateArray[1] - 1, subDateArray[2])),
-          );
+          this.submittedOnDate.set(formatArrayDate(subDateArray));
         }
         const expDisbDateArray = data.timeline?.expectedDisbursementDate as unknown as number[];
         if (expDisbDateArray) {
-          this.expectedDisbursementDate.set(
-            toIsoDate(new Date(expDisbDateArray[0], expDisbDateArray[1] - 1, expDisbDateArray[2])),
-          );
+          this.expectedDisbursementDate.set(formatArrayDate(expDisbDateArray));
         }
 
         this.loan.set({
@@ -635,8 +747,13 @@ export class LoanFormComponent implements OnInit {
         if (data.loanProductId) {
           this.onProductSelected(data.loanProductId, false);
         }
+        this.isModelReady.set(true);
       },
-      error: () => this.notifications.error(OPERATION_FAILED_MESSAGE),
+      error: () => {
+        this.notifications.error(OPERATION_FAILED_MESSAGE);
+        // Show the form anyway: a failed load must not leave a spinner with no way forward.
+        this.isModelReady.set(true);
+      },
     });
   }
 

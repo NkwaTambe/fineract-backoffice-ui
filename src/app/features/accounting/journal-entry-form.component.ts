@@ -21,7 +21,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../core/adapters';
 import {
   JournalEntriesService,
   JournalEntryCommand,
@@ -54,6 +54,7 @@ import {
   IonTextarea,
 } from '@ionic/angular/standalone';
 import { toIsoDate } from '../../core/utils/date-formatter';
+import { createPickersReady } from '../../shared/utils/pickers-ready';
 
 /**
  * Component for creating manual accounting journal entries.
@@ -65,7 +66,7 @@ import { toIsoDate } from '../../core/utils/date-formatter';
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     HelpIconComponent,
     IonIcon,
     IonButton,
@@ -89,7 +90,7 @@ import { toIsoDate } from '../../core/utils/date-formatter';
       <ion-card>
         <ion-card-header>
           <ion-card-title>
-            Add Journal Entry
+            {{ 'JOURNAL_ENTRIES.CREATE' | appTranslate }}
             <app-help-icon [helpTextKey]="'HELP.JOURNAL_ENTRIES_DESC'"></app-help-icon>
           </ion-card-title>
         </ion-card-header>
@@ -133,8 +134,12 @@ import { toIsoDate } from '../../core/utils/date-formatter';
 
               <!-- Transaction Date -->
               <ion-item fill="outline">
-                <ion-label position="stacked">Transaction Date</ion-label>
-                <ion-datetime-button datetime="transactionDate-picker"></ion-datetime-button>
+                <ion-label position="stacked">{{
+                  'JOURNAL_ENTRIES.TRANSACTION_DATE' | appTranslate
+                }}</ion-label>
+                @if (pickersReady()) {
+                  <ion-datetime-button datetime="transactionDate-picker"></ion-datetime-button>
+                }
                 <ion-modal [keepContentsMounted]="true">
                   <ng-template>
                     <ion-datetime
@@ -151,9 +156,11 @@ import { toIsoDate } from '../../core/utils/date-formatter';
 
               <!-- Reference Number -->
               <ion-item fill="outline">
-                <ion-label position="stacked">Reference Number</ion-label>
+                <ion-label position="stacked">{{
+                  'JOURNAL_ENTRIES.REFERENCE_NUMBER' | appTranslate
+                }}</ion-label>
                 <ion-input
-                  aria-label="Reference Number"
+                  [attr.aria-label]="'JOURNAL_ENTRIES.REFERENCE_NUMBER' | appTranslate"
                   name="referenceNumber"
                   [(ngModel)]="command.referenceNumber"
                 ></ion-input>
@@ -196,13 +203,15 @@ import { toIsoDate } from '../../core/utils/date-formatter';
                     type="button"
                     (click)="removeDebit($index)"
                     [disabled]="debits.length === 1"
+                    [attr.aria-label]="'JOURNAL_ENTRIES.REMOVE_DEBIT' | appTranslate"
                   >
                     <ion-icon name="trash-outline"></ion-icon>
                   </ion-button>
                 </div>
               }
               <ion-button fill="clear" color="primary" type="button" (click)="addDebit()">
-                <ion-icon name="add-outline"></ion-icon> Add Debit
+                <ion-icon name="add-outline"></ion-icon>
+                {{ 'JOURNAL_ENTRIES.ADD_DEBIT' | appTranslate }}
               </ion-button>
             </div>
 
@@ -242,13 +251,15 @@ import { toIsoDate } from '../../core/utils/date-formatter';
                     type="button"
                     (click)="removeCredit($index)"
                     [disabled]="credits.length === 1"
+                    [attr.aria-label]="'JOURNAL_ENTRIES.REMOVE_CREDIT' | appTranslate"
                   >
                     <ion-icon name="trash-outline"></ion-icon>
                   </ion-button>
                 </div>
               }
               <ion-button fill="clear" color="primary" type="button" (click)="addCredit()">
-                <ion-icon name="add-outline"></ion-icon> Add Credit
+                <ion-icon name="add-outline"></ion-icon>
+                {{ 'JOURNAL_ENTRIES.ADD_CREDIT' | appTranslate }}
               </ion-button>
             </div>
 
@@ -302,7 +313,7 @@ import { toIsoDate } from '../../core/utils/date-formatter';
       }
       .form-grid {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
         gap: 16px;
       }
       .entries-section {
@@ -334,6 +345,9 @@ import { toIsoDate } from '../../core/utils/date-formatter';
   ],
 })
 export class JournalEntryFormComponent implements OnInit {
+  /** See `createPickersReady` — the date buttons must not outrun their pickers. */
+  readonly pickersReady = createPickersReady();
+
   private readonly journalService = inject(JournalEntriesService);
   private readonly glAccountService = inject(GeneralLedgerAccountService);
   private readonly officeService = inject(OfficesService);

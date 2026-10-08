@@ -19,7 +19,7 @@
 
 import { computed, input, model, Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../core/adapters';
 import {
   IonCard,
   IonCardHeader,
@@ -41,7 +41,7 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     IonCard,
     IonCardHeader,
     IonCardTitle,
@@ -58,8 +58,8 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
   template: `
     <ion-card class="allocation-card">
       <ion-card-header>
-        <ion-card-title [appTooltip]="'HELP.PAYMENT_ALLOCATION_DESC' | translate">
-          {{ 'PRODUCTS.PAYMENT_ALLOCATION' | translate }}
+        <ion-card-title [appTooltip]="'HELP.PAYMENT_ALLOCATION_DESC' | appTranslate">
+          {{ 'PRODUCTS.PAYMENT_ALLOCATION' | appTranslate }}
         </ion-card-title>
       </ion-card-header>
       <ion-card-content>
@@ -73,7 +73,7 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
                 fill="clear"
                 type="button"
                 color="danger"
-                [attr.aria-label]="'COMMON.DELETE' | translate"
+                [attr.aria-label]="'COMMON.DELETE' | appTranslate"
                 (click)="removePaymentTransactionType(ruleIndex)"
               >
                 <ion-icon name="trash-outline" slot="icon-only"></ion-icon>
@@ -82,10 +82,10 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
 
             <ion-item fill="outline" class="future-installment-field form-item">
               <ion-label position="stacked">{{
-                'PRODUCTS.FUTURE_INSTALLMENT_ALLOCATION_RULE' | translate
+                'PRODUCTS.FUTURE_INSTALLMENT_ALLOCATION_RULE' | appTranslate
               }}</ion-label>
               <ion-select
-                [attr.aria-label]="'PRODUCTS.FUTURE_INSTALLMENT_ALLOCATION_RULE' | translate"
+                [attr.aria-label]="'PRODUCTS.FUTURE_INSTALLMENT_ALLOCATION_RULE' | appTranslate"
                 interface="popover"
                 [(ngModel)]="rule.futureInstallmentAllocationRule"
                 [name]="'futureInstallmentRule' + ruleIndex"
@@ -113,6 +113,7 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
                     type="button"
                     [disabled]="orderIndex === 0"
                     (click)="moveOrderEntry(rule.paymentAllocationOrder!, orderIndex, -1)"
+                    [attr.aria-label]="'COMMON.MOVE_UP' | appTranslate"
                   >
                     <ion-icon name="arrow-up-outline" slot="icon-only"></ion-icon>
                   </ion-button>
@@ -121,6 +122,7 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
                     type="button"
                     [disabled]="orderIndex === rule.paymentAllocationOrder!.length - 1"
                     (click)="moveOrderEntry(rule.paymentAllocationOrder!, orderIndex, 1)"
+                    [attr.aria-label]="'COMMON.MOVE_DOWN' | appTranslate"
                   >
                     <ion-icon name="arrow-down-outline" slot="icon-only"></ion-icon>
                   </ion-button>
@@ -134,10 +136,10 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
           <div class="add-transaction-type-row">
             <ion-item fill="outline" class="form-item flex-1">
               <ion-label position="stacked">{{
-                'PRODUCTS.ADD_TRANSACTION_TYPE' | translate
+                'PRODUCTS.ADD_TRANSACTION_TYPE' | appTranslate
               }}</ion-label>
               <ion-select
-                [attr.aria-label]="'PRODUCTS.ADD_TRANSACTION_TYPE' | translate"
+                [attr.aria-label]="'PRODUCTS.ADD_TRANSACTION_TYPE' | appTranslate"
                 interface="popover"
                 name="newPaymentTransactionType"
                 [(ngModel)]="newPaymentTransactionType"
@@ -154,7 +156,7 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
               (click)="addPaymentTransactionType()"
             >
               <ion-icon name="add-outline" slot="start"></ion-icon>
-              {{ 'COMMON.ADD' | translate }}
+              {{ 'COMMON.ADD' | appTranslate }}
             </ion-button>
           </div>
         }
@@ -163,8 +165,8 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
 
     <ion-card class="allocation-card">
       <ion-card-header>
-        <ion-card-title [appTooltip]="'HELP.CREDIT_ALLOCATION_DESC' | translate">
-          {{ 'PRODUCTS.CREDIT_ALLOCATION' | translate }}
+        <ion-card-title [appTooltip]="'HELP.CREDIT_ALLOCATION_DESC' | appTranslate">
+          {{ 'PRODUCTS.CREDIT_ALLOCATION' | appTranslate }}
         </ion-card-title>
       </ion-card-header>
       <ion-card-content>
@@ -178,7 +180,7 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
                 fill="clear"
                 type="button"
                 color="danger"
-                [attr.aria-label]="'COMMON.DELETE' | translate"
+                [attr.aria-label]="'COMMON.DELETE' | appTranslate"
                 (click)="removeCreditTransactionType(ruleIndex)"
               >
                 <ion-icon name="trash-outline" slot="icon-only"></ion-icon>
@@ -201,6 +203,7 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
                     type="button"
                     [disabled]="orderIndex === 0"
                     (click)="moveOrderEntry(rule.creditAllocationOrder!, orderIndex, -1)"
+                    [attr.aria-label]="'COMMON.MOVE_UP' | appTranslate"
                   >
                     <ion-icon name="arrow-up-outline" slot="icon-only"></ion-icon>
                   </ion-button>
@@ -209,6 +212,7 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
                     type="button"
                     [disabled]="orderIndex === rule.creditAllocationOrder!.length - 1"
                     (click)="moveOrderEntry(rule.creditAllocationOrder!, orderIndex, 1)"
+                    [attr.aria-label]="'COMMON.MOVE_DOWN' | appTranslate"
                   >
                     <ion-icon name="arrow-down-outline" slot="icon-only"></ion-icon>
                   </ion-button>
@@ -222,10 +226,10 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
           <div class="add-transaction-type-row">
             <ion-item fill="outline" class="form-item flex-1">
               <ion-label position="stacked">{{
-                'PRODUCTS.ADD_TRANSACTION_TYPE' | translate
+                'PRODUCTS.ADD_TRANSACTION_TYPE' | appTranslate
               }}</ion-label>
               <ion-select
-                [attr.aria-label]="'PRODUCTS.ADD_TRANSACTION_TYPE' | translate"
+                [attr.aria-label]="'PRODUCTS.ADD_TRANSACTION_TYPE' | appTranslate"
                 interface="popover"
                 name="newCreditTransactionType"
                 [(ngModel)]="newCreditTransactionType"
@@ -242,7 +246,7 @@ import { TooltipDirective } from '../../shared/directives/tooltip.directive';
               (click)="addCreditTransactionType()"
             >
               <ion-icon name="add-outline" slot="start"></ion-icon>
-              {{ 'COMMON.ADD' | translate }}
+              {{ 'COMMON.ADD' | appTranslate }}
             </ion-button>
           </div>
         }

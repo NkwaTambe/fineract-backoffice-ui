@@ -21,7 +21,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../core/adapters';
 import {
   IonCard,
   IonCardHeader,
@@ -46,12 +46,21 @@ import {
 } from '../../api';
 import { ProductAccountingSectionComponent } from './accounting/product-accounting-section.component';
 import {
+  AdvancedAccountingMappingsComponent,
+  ChargeOption,
+  PaymentTypeOption,
+} from './accounting/advanced-accounting-mappings.component';
+import {
   ACCOUNTING_RULE,
   AccountingMappings,
   GlAccountOptions,
   SAVINGS_ACCOUNTING_FIELDS,
   mappingsForRule,
   mappingsFromResponse,
+  AdvancedAccountingMappings,
+  advancedMappingsForRequest,
+  advancedMappingsFromResponse,
+  emptyAdvancedMappings,
 } from './accounting/product-accounting.model';
 
 @Component({
@@ -59,8 +68,9 @@ import {
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     ProductAccountingSectionComponent,
+    AdvancedAccountingMappingsComponent,
     IonCard,
     IonCardHeader,
     IonCardTitle,
@@ -84,8 +94,8 @@ import {
           <ion-card-title>
             {{
               isEditMode()
-                ? ('PRODUCTS.EDIT_SAVINGS_PRODUCT' | translate)
-                : ('PRODUCTS.CREATE_SAVINGS_PRODUCT' | translate)
+                ? ('PRODUCTS.EDIT_SAVINGS_PRODUCT' | appTranslate)
+                : ('PRODUCTS.CREATE_SAVINGS_PRODUCT' | appTranslate)
             }}
           </ion-card-title>
         </ion-card-header>
@@ -96,9 +106,9 @@ import {
               <ion-row>
                 <ion-col size="12" size-md="6">
                   <ion-item fill="outline" class="form-item">
-                    <ion-label position="stacked">{{ 'COMMON.NAME' | translate }}</ion-label>
+                    <ion-label position="stacked">{{ 'COMMON.NAME' | appTranslate }}</ion-label>
                     <ion-input
-                      [attr.aria-label]="'COMMON.NAME' | translate"
+                      [attr.aria-label]="'COMMON.NAME' | appTranslate"
                       id="savings-product-name"
                       data-testid="savings-product-name"
                       name="name"
@@ -111,10 +121,10 @@ import {
                 <ion-col size="12" size-md="6">
                   <ion-item fill="outline" class="form-item">
                     <ion-label position="stacked">{{
-                      'PRODUCTS.SHORT_NAME' | translate
+                      'PRODUCTS.SHORT_NAME' | appTranslate
                     }}</ion-label>
                     <ion-input
-                      [attr.aria-label]="'PRODUCTS.SHORT_NAME' | translate"
+                      [attr.aria-label]="'PRODUCTS.SHORT_NAME' | appTranslate"
                       id="savings-product-short-name"
                       data-testid="savings-product-short-name"
                       name="shortName"
@@ -128,10 +138,10 @@ import {
                 <ion-col size="12">
                   <ion-item fill="outline" class="form-item">
                     <ion-label position="stacked">{{
-                      'PRODUCTS.DESCRIPTION' | translate
+                      'PRODUCTS.DESCRIPTION' | appTranslate
                     }}</ion-label>
                     <ion-textarea
-                      [attr.aria-label]="'PRODUCTS.DESCRIPTION' | translate"
+                      [attr.aria-label]="'PRODUCTS.DESCRIPTION' | appTranslate"
                       id="savings-product-description"
                       data-testid="savings-product-description"
                       name="description"
@@ -143,9 +153,11 @@ import {
 
                 <ion-col size="12" size-md="6">
                   <ion-item fill="outline" class="form-item">
-                    <ion-label position="stacked">{{ 'PRODUCTS.CURRENCY' | translate }}</ion-label>
+                    <ion-label position="stacked">{{
+                      'PRODUCTS.CURRENCY' | appTranslate
+                    }}</ion-label>
                     <ion-select
-                      [attr.aria-label]="'PRODUCTS.CURRENCY' | translate"
+                      [attr.aria-label]="'PRODUCTS.CURRENCY' | appTranslate"
                       interface="popover"
                       id="savings-product-currency-code"
                       data-testid="savings-product-currency-code"
@@ -163,10 +175,10 @@ import {
                 <ion-col size="12" size-md="6">
                   <ion-item fill="outline" class="form-item">
                     <ion-label position="stacked">{{
-                      'PRODUCTS.DECIMAL_PLACES' | translate
+                      'PRODUCTS.DECIMAL_PLACES' | appTranslate
                     }}</ion-label>
                     <ion-input
-                      [attr.aria-label]="'PRODUCTS.DECIMAL_PLACES' | translate"
+                      [attr.aria-label]="'PRODUCTS.DECIMAL_PLACES' | appTranslate"
                       id="savings-product-decimal-places"
                       data-testid="savings-product-decimal-places"
                       type="number"
@@ -180,10 +192,10 @@ import {
                 <ion-col size="12" size-md="6">
                   <ion-item fill="outline" class="form-item">
                     <ion-label position="stacked">{{
-                      'PRODUCTS.NOMINAL_ANNUAL_INTEREST_RATE' | translate
+                      'PRODUCTS.NOMINAL_ANNUAL_INTEREST_RATE' | appTranslate
                     }}</ion-label>
                     <ion-input
-                      [attr.aria-label]="'PRODUCTS.NOMINAL_ANNUAL_INTEREST_RATE' | translate"
+                      [attr.aria-label]="'PRODUCTS.NOMINAL_ANNUAL_INTEREST_RATE' | appTranslate"
                       id="savings-product-interest-rate"
                       data-testid="savings-product-interest-rate"
                       type="number"
@@ -206,6 +218,15 @@ import {
               (mappingsChange)="accountingMappings.set($event)"
             ></app-product-accounting-section>
 
+            <app-advanced-accounting-mappings
+              [accountingRule]="product().accountingRule"
+              [accountOptions]="accountingMappingOptions()"
+              [paymentTypeOptions]="paymentTypeOptions()"
+              [charges]="productCharges()"
+              [mappings]="advancedMappings()"
+              (mappingsChange)="advancedMappings.set($event)"
+            ></app-advanced-accounting-mappings>
+
             <div class="form-actions">
               <ion-button
                 id="savings-product-cancel-btn"
@@ -216,7 +237,7 @@ import {
                 (click)="onCancel()"
                 [disabled]="isSaving()"
               >
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               <ion-button
                 id="savings-product-submit-btn"
@@ -227,9 +248,9 @@ import {
               >
                 @if (isSaving()) {
                   <ion-spinner name="crescent" slot="start"></ion-spinner>
-                  {{ 'COMMON.SAVING' | translate }}
+                  {{ 'COMMON.SAVING' | appTranslate }}
                 } @else {
-                  {{ 'COMMON.SAVE' | translate }}
+                  {{ 'COMMON.SAVE' | appTranslate }}
                 }
               </ion-button>
             </div>
@@ -278,6 +299,12 @@ export class SavingsProductFormComponent implements OnInit {
   readonly accountingRuleOptions = signal<{ id?: number; value?: string }[]>([]);
   readonly accountingMappings = signal<AccountingMappings>({});
 
+  /** The advanced overrides — see the loan form for why these are held apart from the base ids. */
+  readonly advancedMappings = signal<AdvancedAccountingMappings>(emptyAdvancedMappings());
+  readonly paymentTypeOptions = signal<PaymentTypeOption[]>([]);
+  /** Charges the product carries; the tenant catalogue would invite mappings that never fire. */
+  readonly productCharges = signal<ChargeOption[]>([]);
+
   readonly product = signal<PostSavingsProductsRequest>({
     currencyCode: 'USD',
     digitsAfterDecimal: 2,
@@ -296,6 +323,9 @@ export class SavingsProductFormComponent implements OnInit {
       );
       this.accountingRuleOptions.set(
         Array.from((raw['accountingRuleOptions'] as { id?: number; value?: string }[]) ?? []),
+      );
+      this.paymentTypeOptions.set(
+        Array.from((raw['paymentTypeOptions'] as PaymentTypeOption[]) ?? []),
       );
     });
 
@@ -335,6 +365,10 @@ export class SavingsProductFormComponent implements OnInit {
           (data as unknown as Record<string, unknown>)['accountingMappings'] as object,
         ),
       );
+      this.advancedMappings.set(advancedMappingsFromResponse(data));
+      this.productCharges.set(
+        ((data as unknown as Record<string, unknown>)['charges'] as ChargeOption[]) ?? [],
+      );
     });
   }
 
@@ -342,6 +376,7 @@ export class SavingsProductFormComponent implements OnInit {
   private buildRequest(): PostSavingsProductsRequest {
     return {
       ...this.product(),
+      ...advancedMappingsForRequest(this.product().accountingRule, this.advancedMappings()),
       ...mappingsForRule(
         this.accountingFields,
         this.product().accountingRule ?? ACCOUNTING_RULE.NONE,

@@ -1,0 +1,71 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+name: Welcome New Contributors
+
+# Greets a first-time contributor on the pull request they just opened: the code of conduct,
+# the mailing list and Matrix rooms, and the handful of requirements that most often block a
+# first change. The wording and the reasoning behind what is and is not included live in
+# .github/scripts/welcome-contributor.js.
+#
+# `pull_request_target` because a fork's `pull_request` run gets a read-only token and so
+# cannot comment — which would exclude exactly the people this is for. Nothing here checks
+# out or executes the pull request's code; the greeting is assembled from the base branch's
+# copy of the script and one field of the event payload.
+
+on:
+  # zizmor: ignore[dangerous-triggers] — required to comment on fork pull requests, and safe
+  # here: no checkout of the pull request's code and nothing from the fork is executed.
+  pull_request_target:
+    types: [opened, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  welcome:
+    name: Post the welcome comment
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Cheap pre-filter so the job does not even start for the common case. The script checks
+    # this again, since it is the half that must stay correct if this condition is edited.
+    if: >-
+      github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR' ||
+      github.event.pull_request.author_association == 'FIRST_TIMER'
+    permissions:
+      contents: read # ref-less checkout of this repository's base branch
+      pull-requests: write # the greeting itself
+    steps:
+      # No `ref:`. On `pull_request_target` this is the base branch of *this* repository, not
+      # the pull request's head — which is what makes the writable token above safe to hold.
+      - name: Check out this repository's scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+
+      - name: Welcome the contributor
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const welcome = require('./.github/scripts/welcome-contributor.js');
+            await welcome({ github, context, core });

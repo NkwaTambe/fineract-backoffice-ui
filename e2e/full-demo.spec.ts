@@ -228,10 +228,12 @@ test.describe('Full feature demo recording', () => {
     // 6. Create a client, in the office created above
     await page.goto('/clients/create', { waitUntil: 'networkidle' });
     await selectOption(page, 'Office', officeName);
+    await page.getByRole('button', { name: 'Next' }).click();
     const clientSuffix = uniqueSuffix();
     const firstName = `DemoClient${clientSuffix}`;
     await page.getByRole('textbox', { name: 'First Name' }).fill(firstName);
     await page.getByRole('textbox', { name: 'Last Name' }).fill('Tester');
+    await page.getByRole('button', { name: 'Next' }).click();
     await page.getByRole('button', { name: 'Save' }).click();
     await expect(page).toHaveURL(/\/clients$/, { timeout: 15000 });
     await beat(page);

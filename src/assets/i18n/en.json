@@ -2,6 +2,7 @@
   "license": "Apache-2.0",
   "app": {
     "title": "Fineract Backoffice UI",
+    "shortTitle": "Fineract",
     "welcome": "Welcome to Fineract Backoffice UI!",
     "logout": "Logout",
     "language": {
@@ -15,7 +16,6 @@
     "main": "Main Navigation",
     "dashboard": "Dashboard",
     "clients": "Clients",
-    "clientSearchV2": "Advanced Client Search",
     "groups": "Groups",
     "centers": "Centers",
     "loans": "Loans",
@@ -85,7 +85,6 @@
     "provisioningCriteria": "Provisioning Criteria",
     "provisioningEntries": "Provisioning Entries",
     "runAccruals": "Run Accruals",
-    "cashierJournals": "Cashier Journals",
     "hooks": "Hooks",
     "adhocQuery": "Ad-Hoc Query",
     "sms": "SMS Messages",
@@ -105,11 +104,11 @@
     "fieldConfiguration": "Entity Field Configuration",
     "loanProductDetails": "Loan Product Details",
     "creditBureauConfig": "Credit Bureau Config",
-    "spmMix": "SPM & MIX",
+    "spm": "SPM",
+    "campaigns": "Campaigns",
+    "interop": "Interop",
+    "admin": "Admin",
     "spmSurveys": "SPM Surveys",
-    "mixMapping": "MIX Mapping",
-    "mixReport": "MIX Report",
-    "mixTaxonomy": "MIX Taxonomy",
     "povertyLine": "Poverty Line",
     "likelihood": "Likelihood",
     "notifications": "Notifications",
@@ -119,7 +118,16 @@
     "codes": "Codes",
     "businessDates": "Business Dates",
     "accountNumberFormats": "Account Number Formats",
-    "templates": "Templates"
+    "templates": "Templates",
+    "frequentPostings": "Frequent Postings",
+    "openingBalances": "Opening Balances",
+    "reportDefinitions": "Report Definitions",
+    "workQueues": "Approval Queues",
+    "opensInNewTab": "Opens in a new tab",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "toggleSidebar": "Toggle sidebar",
+    "moreActions": "More actions"
   },
   "SIDEBAR": {
     "SEARCH": "Search",
@@ -129,8 +137,10 @@
     "TITLE": "Currency Configuration",
     "AVAILABLE": "Available Currencies",
     "SELECTED": "Selected Currencies",
-    "ADD": "Add →",
-    "REMOVE": "← Remove",
+    "ADD": "Add",
+    "REMOVE": "Remove",
+    "FILTER": "Filter currencies",
+    "NO_MATCH": "No currencies match your filter.",
     "SAVE": "Save",
     "SAVED_SUCCESS": "Currency configuration saved successfully"
   },
@@ -176,6 +186,7 @@
     "CLIENT_ID": "Client ID",
     "CLOSE": "Close",
     "CLOSED": "Closed",
+    "OPEN": "Open",
     "COMMENT": "Comment",
     "CONFIRM": "Confirm",
     "CREATE": "Create",
@@ -195,12 +206,17 @@
       "FORBIDDEN": "You do not have permission to perform this action. Contact an administrator if you believe this is a mistake.",
       "NETWORK": "Unable to connect to the server. Please check your network or CORS settings.",
       "UNEXPECTED": "Something went wrong. The action was not completed — please try again.",
-      "LOAD_FAILED": "This list could not be loaded."
+      "LOAD_FAILED": "This list could not be loaded.",
+      "LOAD_FORBIDDEN": "Your role does not cover this list. Contact an administrator if you believe this is a mistake."
     },
     "EVERY": "every",
+    "EXIT": "Exit",
+    "EXPORT_CSV": "Export CSV",
     "EXTERNAL_ID": "External ID",
     "FILTERS": "Filters",
+    "FINISH": "Finish",
     "FIRST_PAGE": "First page",
+    "FRIDAY": "Friday",
     "FREQUENCY": "Frequency",
     "FROM_DATE": "From Date",
     "HASH": "#",
@@ -216,12 +232,17 @@
     "MANY": "many",
     "MATURITY_AMOUNT": "Maturity Amount",
     "MOBILE_NO": "Mobile No",
+    "MONDAY": "Monday",
     "MONTHS": "Months",
+    "MOVE_DOWN": "Move down",
+    "MOVE_UP": "Move up",
     "NAME": "Name",
+    "NEXT": "Next",
     "NEXT_PAGE": "Next page",
     "NO": "No",
     "NOTE": "Note",
     "NO_DATA": "No records found.",
+    "NO_RESULTS_FOUND": "No results found.",
     "OF": "of",
     "OFFICE": "Office",
     "OVERPAID": "Overpaid",
@@ -237,10 +258,14 @@
     "PRODUCT": "Product",
     "RENDER_TIME": "Render Time",
     "REQUIRED": "This field is required",
+    "COMPLETE_REQUIRED_FIELDS": "Complete the required fields to continue",
     "RESET": "Reset",
+    "RESULTS_FOUND": "{{count}} result(s) found",
     "RETRY": "Try again",
+    "REVERSED": "Reversed",
     "RUN": "Run",
     "RUNNING_BALANCE": "Running Balance",
+    "SATURDAY": "Saturday",
     "SAVE": "Save",
     "SAVING": "Saving...",
     "SEARCH": "Search",
@@ -251,21 +276,36 @@
     "SUBMIT": "Submit",
     "SUBMITTED_BY": "Submitted By",
     "SUBMITTED_ON": "Submitted On",
+    "SUBMITTED_ON_DATE": "Submitted On Date",
     "SUCCESS": "Done.",
+    "SUNDAY": "Sunday",
     "TERM": "Term",
+    "THURSDAY": "Thursday",
     "TOGGLE_THEME": "Toggle Dark/Light Mode",
     "TOTAL": "Total",
     "TO_DATE": "To Date",
     "TRANSACTIONS": "Transactions",
     "TRANSACTION_AMOUNT": "Transaction Amount",
     "TRANSACTION_DATE": "Transaction Date",
+    "TUESDAY": "Tuesday",
     "TYPE": "Type",
     "VALUE": "Value",
     "VIEW": "View",
     "VIEW_DETAILS": "View Details",
+    "WEDNESDAY": "Wednesday",
     "WEEKS": "Weeks",
     "YEARS": "Years",
-    "YES": "Yes"
+    "YES": "Yes",
+    "GENERAL": "General",
+    "NOTES": "Notes",
+    "DATA_TABLES": "Data Tables",
+    "UNASSIGNED": "Unassigned",
+    "ACCOUNTS": "Accounts",
+    "CHECK_ALL": "Check All",
+    "UNCHECK_ALL": "Uncheck All",
+    "CHECKER": "Checker",
+    "CHECKED_DATE": "Checked Date",
+    "REASON": "Reason"
   },
   "ACTIONS": {
     "ACCOUNT_TRANSFER": "Account Transfer",
@@ -291,7 +331,9 @@
     "CONFIRM_POST_INTEREST": "Post the interest accrued on this account?",
     "CONFIRM_PREMATURE_CLOSE": "Close this account before its maturity date and pay out the balance? A pre-closure penalty may apply.",
     "CONFIRM_REJECT": "Reject this account? The application is closed and cannot be approved afterwards.",
+    "CONFIRM_RELEASE_AMOUNT": "Release the amount held against this transaction? The funds become available immediately.",
     "CONFIRM_UNDO_APPROVAL": "Return this account to pending approval?",
+    "CONFIRM_UNDO_TRANSACTION": "Reverse this transaction? It stays on the account marked as reversed.",
     "CONFIRM_WITHDRAWN_BY_CLIENT": "Record that the client withdrew this application?",
     "DISBURSEMENT_DATE": "Disbursement Date",
     "DISBURSE_FUNDS": "Disburse Funds",
@@ -309,16 +351,20 @@
     "REJECTION_DATE": "Rejection Date",
     "REJECTION_REASON": "Rejection Reason",
     "REJECT_CLIENT": "Reject Client",
+    "RELEASE_AMOUNT": "Release Held Amount",
     "SAVINGS_ACCOUNT": "Savings Account",
+    "CREATE_SAVINGS_ACCOUNT": "Create Savings Account",
     "UNASSIGNMENT_DATE": "Unassignment Date",
     "UNASSIGN_LOAN_OFFICER": "Unassign Loan Officer",
     "UNDO_APPROVAL": "Undo approval",
     "UNDO_REJECT_CLIENT": "Undo Reject",
+    "UNDO_TRANSACTION": "Undo Transaction",
     "UNDO_WITHDRAW_CLIENT": "Undo Withdraw",
     "WITHDRAWAL_DATE": "Withdrawal Date",
     "WITHDRAWAL_REASON": "Withdrawal Reason",
     "WITHDRAWN_BY_CLIENT": "Withdrawn by client",
-    "WITHDRAW_CLIENT": "Withdraw Client"
+    "WITHDRAW_CLIENT": "Withdraw Client",
+    "ACCOUNT_ACTION": "Account Action"
   },
   "PRODUCTS": {
     "LOAN_PRODUCTS": "Loan Products",
@@ -408,7 +454,13 @@
     "ENABLE_ACCRUAL_ACTIVITY_POSTING": "Post accrual activity entries",
     "INTEREST_CALC_PERIOD_LOCKED_NOTE": "Fixed to Daily because interest recalculation is on — Fineract only supports the two together. Turn recalculation off to choose a different period.",
     "ACCOUNTING": {
+      "ADD_MAPPING": "Add Mapping",
+      "ADVANCED_HINT": "Optional. Route individual payment channels and charges to their own accounts, overriding the mappings above.",
+      "ADVANCED_TITLE": "Advanced Accounting Rules",
+      "FEE": "Fee",
+      "FEE_INCOME_TITLE": "Map Fees to Specific Income Accounts",
       "FUND_SOURCE": "Fund source",
+      "INCOME_ACCOUNT": "Income Account",
       "INCOME_FROM_FEES": "Income from fees",
       "INCOME_FROM_INTEREST": "Income from interest",
       "INCOME_FROM_PENALTIES": "Income from penalties",
@@ -419,15 +471,25 @@
       "LOAN_PORTFOLIO": "Loan portfolio",
       "LOSSES_WRITTEN_OFF": "Losses written off",
       "NO_ACCOUNTS_OF_TYPE": "No general ledger accounts of this type exist yet. Create them under Accounting > Chart of Accounts before configuring this product.",
+      "NO_CHARGES_ON_PRODUCT": "Attach a charge to this product before it can be mapped to its own account.",
       "OVERDRAFT_PORTFOLIO": "Overdraft portfolio control",
       "OVERPAYMENT_LIABILITY": "Overpayment liability",
+      "PAYMENT_CHANNEL_TITLE": "Configure Fund Sources for Payment Channels",
+      "PAYMENT_TYPE": "Payment Type",
+      "PENALTY": "Penalty",
+      "PENALTY_INCOME_TITLE": "Map Penalties to Specific Income Accounts",
       "RECEIVABLE_FEE": "Fees receivable",
       "RECEIVABLE_INTEREST": "Interest receivable",
       "RECEIVABLE_PENALTY": "Penalties receivable",
       "RULE": "Accounting rule",
+      "RULE_CASH": "Cash",
+      "RULE_NONE": "None",
       "SAVINGS_CONTROL": "Savings control",
       "SAVINGS_REFERENCE": "Savings reference",
       "SELECT_ACCOUNT": "Select an account",
+      "SHARE_EQUITY": "Share Equity",
+      "SHARE_REFERENCE": "Share Reference",
+      "SHARE_SUSPENSE": "Share Suspense Control",
       "TITLE": "Accounting",
       "TRANSFERS_IN_SUSPENSE": "Transfers in suspense"
     },
@@ -438,7 +500,10 @@
   },
   "CHARGES": {
     "CREATE": "Create Charge",
-    "EDIT": "Edit Charge"
+    "EDIT": "Edit Charge",
+    "APPLIES_TO": "Applies To",
+    "TIME_TYPE": "Charge Time Type",
+    "CALCULATION_TYPE": "Calculation Type"
   },
   "LOANS": {
     "ACCOUNT_NO": "Account No",
@@ -449,6 +514,8 @@
     "PRINCIPAL": "Principal",
     "SUBMITTED_ON": "Submitted On",
     "EXPECTED_DISBURSEMENT": "Expected Disbursement",
+    "EXPECTED_DISBURSEMENT_REQUIRED": "Pick the tranche's expected disbursement date.",
+    "DISBURSEMENT_SAVED": "Disbursement updated.",
     "TERM_FREQUENCY": "Term Frequency",
     "TERM_TYPE": "Term Type",
     "REPAYMENTS_COUNT": "Number of Repayments",
@@ -472,6 +539,8 @@
     "CONFIRM_FORECLOSURE": "This will close the loan early by settling the full outstanding balance as of the transaction date. This action cannot be undone.",
     "CONFIRM_CLOSE": "This will mark the loan as closed. This action cannot be undone.",
     "CONFIRM_UNDO_DISBURSAL": "This will reverse the disbursement and return the loan to Approved status.",
+    "CONFIRM_CONTRACT_TERMINATION": "This will terminate the progressive loan contract and make the outstanding balance immediately due. Continue?",
+    "CONFIRM_UNDO_CONTRACT_TERMINATION": "This will reverse the contract termination and recalculate the original repayment schedule. Continue?",
     "CONFIRM_DELETE_LOAN": "Are you sure you want to delete this loan application? This action cannot be undone.",
     "CONFIRM_DELETE_COLLATERAL": "Are you sure you want to delete this collateral? This action cannot be undone.",
     "CONFIRM_ADJUST_TRANSACTION": "This will reverse the original transaction and record a new one with the corrected details. This action cannot be undone.",
@@ -484,10 +553,12 @@
     "REQUEST_RESCHEDULE": "Request Reschedule",
     "RESCHEDULE_FROM": "Reschedule From",
     "RESCHEDULE_REQUEST_DETAILS": "Reschedule Request Details",
+    "RESCHEDULE_REQUESTS": "Loan Reschedule Requests",
     "OVERVIEW": "Overview",
     "REPAYMENT_SCHEDULE": "Repayment Schedule",
     "TRANSACTIONS": "Transactions",
     "CHARGES": "Charges",
+    "CHARGE_REFUND_CHARGE": "Charge to refund",
     "LOAN_TERMS": "Loan Terms",
     "PRINCIPAL_AMOUNT": "Principal Amount",
     "ANNUAL_INTEREST_RATE": "Annual Interest Rate",
@@ -543,12 +614,16 @@
       "FORECLOSURE": "Foreclosure",
       "PREPAY_LOAN": "Prepay Loan",
       "CLOSE": "Close",
+      "CONTRACT_TERMINATION": "Terminate Contract",
+      "UNDO_CONTRACT_TERMINATION": "Undo Contract Termination",
       "ADJUST_TRANSACTION": "Adjust Transaction",
       "CHARGE_OFF": "Charge Off",
       "UNDO_CHARGE_OFF": "Undo Charge Off",
       "CHARGED_OFF": "Charged Off",
       "MERCHANT_ISSUED_REFUND": "Merchant Issued Refund",
       "PAYOUT_REFUND": "Payout Refund",
+      "REFUND_BY_CASH": "Refund by Cash",
+      "CHARGE_REFUND": "Charge Refund",
       "GOODWILL_CREDIT": "Goodwill Credit",
       "DOWN_PAYMENT": "Record Down Payment",
       "INTEREST_PAYMENT_WAIVER": "Waive Interest Payment",
@@ -560,8 +635,11 @@
       "UNDO_APPROVAL": "Undo Approval",
       "CLOSE_AS_RESCHEDULED": "Close as Rescheduled",
       "DISBURSE_TO_SAVINGS": "Disburse to Savings",
+      "CHARGEBACK": "Chargeback",
       "UNASSIGN_LOAN_OFFICER": "Unassign Loan Officer",
-      "UNDO_LAST_DISBURSAL": "Undo Last Disbursal"
+      "UNDO_LAST_DISBURSAL": "Undo Last Disbursal",
+      "REVISE_APPROVED_AMOUNT": "Revise Approved Amount",
+      "REVISE_AVAILABLE_DISBURSEMENT_AMOUNT": "Revise Available Disbursement Amount"
     },
     "CREATE_LOAN_ACCOUNT": "Create Loan Account",
     "EDIT_LOAN_APPLICATION": "Edit Loan Application",
@@ -584,8 +662,11 @@
     "BUY_DOWN_FEE_AMOUNT": "Buy Down Fee Amount",
     "NOT_YET_AMORTIZED_AMOUNT": "Not Yet Amortized Amount",
     "UNRECOGNIZED_AMOUNT": "Unrecognized Amount",
+    "AMOUNT_ADJUSTMENT": "Amount Adjustment",
+    "CHARGED_OFF_AMOUNT": "Charged Off Amount",
     "NOTES": "Notes",
     "ADD_NOTE": "Add a note",
+    "DELETE_NOTE": "Delete note",
     "NO_NOTES": "No notes recorded for this loan yet.",
     "CONFIRM_DELETE_NOTE": "Are you sure you want to delete this note? This action cannot be undone.",
     "DOCUMENTS": "Documents",
@@ -607,6 +688,16 @@
     "CONFIRM_UNDO_APPROVAL": "This returns the loan to pending approval. The approved amount and approval date are cleared, and the loan has to be approved again before it can be disbursed.",
     "UNDO_APPROVAL_REASON": "Reason (optional)",
     "APPROVAL_UNDONE": "Loan approval undone.",
+    "CURRENT_APPROVED_AMOUNT": "Current Approved Amount",
+    "NEW_APPROVED_AMOUNT": "New Approved Amount",
+    "NEW_AVAILABLE_DISBURSEMENT_AMOUNT": "New Available Disbursement Amount",
+    "AVAILABLE_DISBURSEMENT_AMOUNT_HINT": "How much of the approved amount may still be drawn. Changing it also changes the approved amount to match.",
+    "APPROVED_AMOUNT_REVISED": "Approved amount updated.",
+    "AVAILABLE_DISBURSEMENT_AMOUNT_REVISED": "Available disbursement amount updated.",
+    "CONFIRM_CHARGEBACK": "Charge back this repayment? A separate Chargeback transaction is recorded and the amount is added back to the loan balance.",
+    "CHARGEBACK_RECORDED": "Chargeback recorded.",
+    "CHARGEBACK_REPAYMENT_AMOUNT": "Repayment amount",
+    "CHARGEBACK_AMOUNT_EXCEEDS": "The amount cannot be more than the repayment being charged back.",
     "DELINQUENCY": "Delinquency",
     "DELINQUENCY_SUMMARY": "Delinquency Summary",
     "DELINQUENCY_TAGS": "Delinquency Tags",
@@ -622,6 +713,16 @@
     "LIFTED_ON": "Lifted On",
     "PAUSE_START": "Pause Start",
     "PAUSE_END": "Pause End",
+    "PAUSE_IN_EFFECT": "In effect",
+    "PAUSE_NOT_IN_EFFECT": "Not in effect",
+    "PAUSE_DELINQUENCY": "Pause Delinquency",
+    "PAUSE_DELINQUENCY_HINT": "While delinquency is paused, the loan's delinquency classification is not re-evaluated, so its arrears stop ageing. Use it for an agreed payment holiday or moratorium.",
+    "PAUSE_END_AFTER_START": "The pause must end after it starts.",
+    "DELINQUENCY_PAUSED": "Delinquency paused.",
+    "RESUME_DELINQUENCY": "Resume Delinquency",
+    "CONFIRM_RESUME_DELINQUENCY": "Resume delinquency now? The pause ends on the current business date, and delinquency is evaluated again at the next close of business.",
+    "RESUME_DATE": "Resumes on",
+    "DELINQUENCY_RESUMED": "Delinquency resumed.",
     "TERM_VARIATIONS": "Term Variations",
     "TERM_VARIATION_TYPE": "Variation Type",
     "APPLICABLE_FROM": "Applicable From",
@@ -648,7 +749,18 @@
     "OWNER": "Owner",
     "PURCHASE_PRICE_RATIO": "Purchase Price Ratio",
     "SETTLEMENT_DATE": "Settlement Date",
-    "EFFECTIVE_FROM": "Effective From"
+    "EFFECTIVE_FROM": "Effective From",
+    "RESCHEDULE_FORM": {
+      "TITLE": "Request Loan Reschedule",
+      "FROM_DATE": "Reschedule From Date",
+      "FROM_DATE_HINT": "Must be an existing installment date",
+      "REASON_NAME_MANUAL": "Reason Name (Manual)",
+      "ADJUSTED_DUE_DATE": "Adjusted Due Date (Optional)",
+      "GRACE_ON_PRINCIPAL": "Grace on Principal",
+      "GRACE_ON_INTEREST": "Grace on Interest",
+      "EXTRA_TERMS": "Extra Terms",
+      "NEW_INTEREST_RATE": "New Interest Rate"
+    }
   },
   "TEMPLATES": {
     "TITLE": "Document Templates",
@@ -664,7 +776,8 @@
     "TYPE_SMS": "SMS",
     "SAVE": "Save",
     "CANCEL": "Cancel",
-    "DELETE_CONFIRM": "Are you sure you want to delete this template?"
+    "DELETE_CONFIRM": "Delete the template “{{name}}”? Anything generating a document from it no longer finds it.",
+    "DELETE": "Delete Template"
   },
   "TELLERS": {
     "CREATE_TELLER": "Create Teller",
@@ -694,6 +807,11 @@
   "CLIENTS": {
     "CREATE_CLIENT": "Create Client",
     "EDIT_CLIENT": "Edit Client",
+    "WIZARD": {
+      "STEP_TYPE": "Client Type",
+      "STEP_PERSONAL": "Personal Details",
+      "STEP_CONTACT": "Contact Details"
+    },
     "LEGAL_FORM": "Legal Form",
     "PERSON": "Person",
     "ENTITY": "Entity",
@@ -710,6 +828,7 @@
     "CONTACT_STATUS": "Contact & Status",
     "TIMELINE_SUBMITTED": "Timeline (Submitted)",
     "ADD_NEW_OFFICE": "Add New Office",
+    "SELECT_OFFICE": "Select an office",
     "COMPANY_NAME": "Company/Entity Name",
     "MIDDLE_NAME": "Middle Name",
     "DATE_OF_BIRTH": "Date of Birth",
@@ -795,7 +914,23 @@
     "CONFIRM_REJECT_TRANSFER": "The transfer will be refused and the client placed on hold at their current office.",
     "CONFIRM_WITHDRAW_TRANSFER": "The transfer will be cancelled and the client returned to active at their current office.",
     "CONFIRM_UNASSIGN_STAFF": "This client will no longer be assigned to a member of staff.",
-    "SAVINGS_ACCOUNT": "Savings Account"
+    "SAVINGS_ACCOUNT": "Savings Account",
+    "DEPOSIT_ACCOUNTS": "Deposits",
+    "SHARE_ACCOUNTS": "Shares",
+    "FIXED_DEPOSITS": "Fixed Deposits",
+    "RECURRING_DEPOSITS": "Recurring Deposits",
+    "NO_FIXED_DEPOSITS": "This client holds no fixed deposits.",
+    "NO_RECURRING_DEPOSITS": "This client holds no recurring deposits.",
+    "NO_SHARE_ACCOUNTS": "This client holds no share accounts.",
+    "SEARCH_BY_NAME": "Search by client name...",
+    "NAME_SEARCH_HINT": "When a status is selected, search matches client names.",
+    "LOAD_FAILED": "This client could not be loaded.",
+    "BACK_TO_CLIENTS": "Back to clients",
+    "ERRORS": {
+      "NOT_FOUND": "This client doesn't exist, or you don't have permission to view it."
+    },
+    "TRANSFER_TYPE_ACCOUNT_TRANSFER": "Account Transfer",
+    "TRANSFER_TYPE_LOAN_REPAYMENT": "Loan Repayment"
   },
   "SAVINGS": {
     "CREATE_ACCOUNT": "Create Savings Account",
@@ -813,6 +948,10 @@
     "WITHDRAW_CASH": "Withdraw Cash",
     "APPROVE": "Approve Savings Account",
     "ACTIVATE": "Activate Savings Account",
+    "UNDOAPPROVAL": "Undo Approval",
+    "CONFIRM_UNDOAPPROVAL": "Undo the approval of this savings account? It returns to pending approval.",
+    "UNDOAPPROVAL_REASON": "Reason",
+    "POST_INTEREST_AS_ON": "Post Interest As On",
     "CLOSE": "Close Savings Account",
     "CALCULATE_INTEREST": "Calculate Interest",
     "POST_INTEREST": "Post Interest",
@@ -850,7 +989,23 @@
     "CONFIRM_WITHDRAWN_BY_APPLICANT": "Record that the applicant withdrew this application? Use Decline instead if the institution turned it down.",
     "CONFIRM_ASSIGN_OFFICER": "Choose the officer who will look after this account.",
     "CONFIRM_UNASSIGN_SAVINGS_OFFICER": "Remove the officer from this account? It will be unassigned until someone else takes it on.",
-    "CONFIRM_HOLD_AMOUNT": "Hold part of the balance so it cannot be withdrawn — for a disputed transaction or a court order. The rest of the account keeps working normally, unlike freezing it."
+    "CONFIRM_HOLD_AMOUNT": "Hold part of the balance so it cannot be withdrawn — for a disputed transaction or a court order. The rest of the account keeps working normally, unlike freezing it.",
+    "NOTES": "Notes",
+    "DOCUMENTS": "Documents",
+    "STANDING_INSTRUCTIONS": "Standing Instructions",
+    "NO_STANDING_INSTRUCTIONS": "No standing instructions transfer from this account.",
+    "TRANSFER_IN": "Into this account",
+    "TRANSFER_OUT": "Out of this account",
+    "ACCOUNT_DETAILS": "Savings Account Details",
+    "TRANSACTION": "Savings Transaction",
+    "INTEREST_SETTINGS": "Interest Settings",
+    "NOMINAL_ANNUAL_INTEREST_RATE": "Nominal Annual Interest Rate",
+    "COMPOUNDING_PERIOD": "Compounding Period",
+    "POSTING_PERIOD": "Posting Period",
+    "INTEREST_CALC_DAYS_IN_YEAR": "Interest Calculation Day-in-Year",
+    "TIMELINE_AND_BALANCE": "Timeline & Balance",
+    "ACTIVATED_ON_DATE": "Activated On Date",
+    "FIELD_OFFICER": "Field Officer"
   },
   "USERS": {
     "CREATE": "Create User",
@@ -867,10 +1022,40 @@
     "STAFF": "Staff",
     "CREATE_STAFF": "Create Staff Member",
     "EDIT_STAFF": "Edit Staff Member",
-    "IS_LOAN_OFFICER": "Is Loan Officer"
+    "IS_LOAN_OFFICER": "Is Loan Officer",
+    "FORCE_STATUS": "Force Status",
+    "LOAN_PORTFOLIO_SUMMARY": "Loan Portfolio Summary",
+    "LOAN_STATUS": "Loan Status",
+    "LOAN_STATUS_CLOSED": "Closed (Obligations Met)",
+    "LOAN_STATUS_OVERPAID": "Overpaid",
+    "LOAN_STATUS_WRITTEN_OFF": "Closed (Written-Off)",
+    "LOAN_PRODUCTS": "Loan Products",
+    "LOAN_DATE_OPTION": "Date Type",
+    "APPROVAL_DATE": "Approval Date",
+    "CREATION_DATE": "Creation Date",
+    "FROM_DATE": "From Date",
+    "TO_DATE": "To Date",
+    "OUTSTANDING_PERCENTAGE": "Outstanding Percentage",
+    "OUTSTANDING_AMOUNT": "Outstanding Amount",
+    "COMPARISON_CONDITION": "Comparison Condition",
+    "MINIMUM_VALUE": "Minimum Value",
+    "MAXIMUM_VALUE": "Maximum Value",
+    "COMPARISON_VALUE": "Comparison Value",
+    "EDIT_PARAMETERS": "Edit Parameters",
+    "COUNT": "Count",
+    "PERCENTAGE": "Percentage",
+    "TEMPLATE_LOAD_FAILED": "Failed to load search parameters. Please try again.",
+    "SEARCH_FAILED": "Search failed. Please try again."
   },
   "SECURITY": {
-    "AUDIT_LOGS": "Audit Logs"
+    "AUDIT_LOGS": "Audit Logs",
+    "RESOURCE_ID": "Resource ID",
+    "ACTION_NAME": "Action Name",
+    "ENTITY_NAME": "Entity Name",
+    "MAKER_ID": "Maker ID",
+    "MAKER_DATE_FROM": "Maker Date From",
+    "MAKER_DATE_TO": "Maker Date To",
+    "PROCESSING_RESULT": "Processing Result"
   },
   "SYSTEM": {
     "DATA_TABLES": "Data Tables",
@@ -881,6 +1066,7 @@
     "MULTI_ROW": "Multi Row",
     "COLUMNS": "Columns",
     "ADD_COLUMN": "Add Column",
+    "REMOVE_COLUMN": "Remove column",
     "LENGTH": "Length",
     "CODE": "Code",
     "MANDATORY": "Mandatory",
@@ -897,13 +1083,35 @@
     "IMPORT_TIME": "Import Time",
     "CREATED_BY": "Created By",
     "DOWNLOAD_RESULT": "Download Result",
+    "BULK_IMPORT_LOAN_REPAYMENTS": "Loan Repayments",
+    "BULK_IMPORT_SAVINGS_TRANSACTIONS": "Savings Transactions",
+    "BULK_IMPORT_FIXED_DEPOSIT_TRANSACTIONS": "Fixed Deposit Transactions",
+    "BULK_IMPORT_RECURRING_DEPOSIT_TRANSACTIONS": "Recurring Deposit Transactions",
+    "BULK_IMPORT_GUARANTORS": "Guarantors",
+    "BULK_IMPORT_LOAN_ID": "Loan ID",
+    "BULK_IMPORT_LOAN_ID_REQUIRED": "Enter the loan account this guarantors file applies to before downloading or uploading a template.",
     "DELINQUENCY_RANGES": "Delinquency Ranges",
     "DELINQUENCY_BUCKETS": "Delinquency Buckets",
     "CREATE_RANGE": "Create Range",
+    "EDIT_RANGE": "Edit Range",
+    "RANGE_CLASSIFICATION": "Classification",
+    "RANGE_MIN_AGE_DAYS": "Minimum Age (Days)",
+    "RANGE_MAX_AGE_DAYS": "Maximum Age (Days)",
     "CREATE_BUCKET": "Create Bucket",
+    "EDIT_BUCKET": "Edit Bucket",
+    "BUCKET_NAME": "Name",
+    "BUCKET_TYPE": "Bucket Type",
+    "BUCKET_RANGES": "Ranges",
+    "BUCKET_NO_RANGES": "No delinquency ranges exist yet. Create a range before a bucket can group any.",
     "MIN_AGE_DAYS": "Min Age Days",
     "MAX_AGE_DAYS": "Max Age Days",
-    "RANGES": "Ranges"
+    "RANGES": "Ranges",
+    "DELETE_DELINQUENCY_RANGE": "Delete Delinquency Range",
+    "CONFIRM_DELETE_DELINQUENCY_RANGE": "Delete the delinquency range “{{classification}}”? Buckets built from it lose that band, and the next classification run uses whatever is left.",
+    "DELETE_DELINQUENCY_BUCKET": "Delete Delinquency Bucket",
+    "CONFIRM_DELETE_DELINQUENCY_BUCKET": "Delete the delinquency bucket “{{name}}”? Loan products using it need a different bucket before they classify again.",
+    "DELETE_DATA_TABLE": "Delete Data Table",
+    "CONFIRM_DELETE_DATA_TABLE": "Delete the data table “{{name}}”? The table and everything recorded in it are removed."
   },
   "ACCOUNTING_RULES": {
     "CREATE": "Create Accounting Rule",
@@ -911,13 +1119,38 @@
     "NAME": "Rule Name",
     "OFFICE": "Office",
     "DEBITS": "Debit Accounts",
-    "CREDITS": "Credit Accounts"
+    "CREDITS": "Credit Accounts",
+    "DEBIT_DETAILS": "Debit Details",
+    "CREDIT_DETAILS": "Credit Details",
+    "FIXED_ACCOUNT": "Fixed Account",
+    "ACCOUNT_TAGS": "Account Tags",
+    "ACCOUNT_TO_DEBIT": "Account to Debit",
+    "DEBIT_TAGS": "Debit Tags",
+    "ALLOW_MULTIPLE_DEBIT_ENTRIES": "Allow Multiple Debit Entries",
+    "ACCOUNT_TO_CREDIT": "Account to Credit",
+    "CREDIT_TAGS": "Credit Tags",
+    "ALLOW_MULTIPLE_CREDIT_ENTRIES": "Allow Multiple Credit Entries"
   },
   "ROLES": {
     "CREATE": "Create Role",
     "CREATE_ROLE": "Create Role",
     "EDIT_ROLE": "Edit Role",
-    "PERMISSIONS": "Granular Permissions"
+    "PERMISSIONS": "Granular Permissions",
+    "PERMISSIONS_AFTER_CREATE": "A new role starts with no permissions. Save it first — you will land on its permission matrix next.",
+    "FILTER_PERMISSIONS": "Filter permissions",
+    "NO_PERMISSIONS_MATCH": "No permission code matches that filter.",
+    "IMPACT_TITLE": "Impact of your changes",
+    "IMPACT_NO_CHANGES": "No permission has changed yet.",
+    "IMPACT_RBAC_DISABLED": "This deployment does not gate navigation on permissions, so the sidebar shows every entry regardless. Permission changes still apply on the server.",
+    "IMPACT_PERMISSIONS_ADDED": "{{count}} permission(s) added",
+    "IMPACT_PERMISSIONS_REMOVED": "{{count}} permission(s) removed",
+    "IMPACT_ADDED": "Permissions added",
+    "IMPACT_REMOVED": "Permissions removed",
+    "IMPACT_NAV_GAINED": "Screens this role gains",
+    "IMPACT_NAV_LOST": "Screens this role loses",
+    "IMPACT_NAV_UNCHANGED": "No screen appears or disappears from the sidebar — these permissions gate actions within screens the role already reaches.",
+    "CONFIRM_PERMISSIONS_TITLE": "Apply permission changes",
+    "CONFIRM_PERMISSIONS_MESSAGE": "Save these permissions for the role “{{name}}”? Everyone holding it is affected the next time they sign in, and no one is told."
   },
   "HELP": {
     "SEARCH_DESC": "Use this field to search or filter the table records.",
@@ -1025,6 +1258,7 @@
     "DATE_OF_BIRTH_DESC": "The client's date of birth.",
     "LOAN_PRODUCT_DESC": "Select the loan product this application is based on.",
     "FUNDS_DESC": "Funds are sources of money that can be linked to loans for tracking and reporting.",
+    "LOAN_PORTFOLIO_SUMMARY_DESC": "Search the loan portfolio by status, product, office and date range, optionally filtering by outstanding amount or percentage, and see the result grouped by office and product.",
     "WC_BREACH_DESC": "Covenant breach definitions set the amount and frequency thresholds that flag a working-capital loan as breached.",
     "WC_NEAR_BREACH_DESC": "Near-breach definitions trigger early-warning alerts before a working-capital covenant is fully breached.",
     "WC_LOANS_DESC": "Manage working-capital loan applications: create new loans and view loan details, charges, transactions, and delinquency information.",
@@ -1103,7 +1337,11 @@
     "FIXED_LENGTH_DESC": "Force every loan on this product to run for the same number of periods, regardless of the amount borrowed. Leave empty for a term set per loan.",
     "ACCRUAL_ACTIVITY_POSTING_DESC": "Post an accounting entry each time interest or fees accrue, rather than only when they are charged or paid. Gives finance a running view at the cost of more journal entries.",
     "CHARGE_OFF_DESC": "Charging off moves the outstanding balance out of performing assets for reporting, while the institution carries on trying to collect. It is not the same as a write-off, which means giving up on recovery. A charged-off loan stays active.",
-    "CHARGE_OFF_REASON_DESC": "Why the loan is being charged off. Recorded against the transaction for audit and reporting. Optional, and only offered when your institution has configured reasons."
+    "CHARGE_OFF_REASON_DESC": "Why the loan is being charged off. Recorded against the transaction for audit and reporting. Optional, and only offered when your institution has configured reasons.",
+    "OPENING_BALANCES_DESC": "Carry the balances from your previous ledger into this one. Only available before the first journal entry is posted for the office.",
+    "FREQUENT_POSTINGS_DESC": "Post a journal entry from a saved accounting rule, so recurring postings need only an amount and a date.",
+    "REPORT_DEFINITIONS_DESC": "The catalogue behind the Reporting section: the SQL each report runs, the parameters it takes, and whether it is offered to users.",
+    "WORK_QUEUES_DESC": "The approvals a branch works through together: pending loans, loans awaiting disbursal, pending clients and reschedule requests. Each action is sent as one batch, and any record the platform refuses is named."
   },
   "REPORTS": {
     "NAME": "Report Name",
@@ -1117,7 +1355,11 @@
     "PARAMETERS_LOADING": "Loading report parameters...",
     "PARAMETERS_LOAD_FAILED": "This report cannot be run because its parameters could not be loaded.",
     "PARAMETERS_UNSUPPORTED": "This report cannot be run because these parameters use unsupported control types",
-    "PARAMETERS_INCOMPLETE": "Complete every report parameter before running the report."
+    "PARAMETERS_INCOMPLETE": "Complete every report parameter before running the report.",
+    "PARAMETER_SELECT_PARENT_FIRST": "Choose {{parameter}} first.",
+    "PARAMETER_OPTIONS_LOADING": "Loading options...",
+    "PARAMETER_OPTIONS_FAILED": "The options for this parameter could not be loaded.",
+    "CHART_UNAVAILABLE": "This report is defined as a chart, but its results contain no numeric column to plot. Showing the results as a table instead."
   },
   "SETTINGS": {
     "CONFIG_NAME": "Configuration Name",
@@ -1135,23 +1377,57 @@
     "RESCHEDULING_TYPE": "Rescheduling Type",
     "ACTIVATE": "Activate Holiday",
     "ACTIVATE_TITLE": "Activate Holiday",
-    "ACTIVATE_CONFIRM": "Are you sure you want to activate the holiday '{{name}}'?"
+    "ACTIVATE_CONFIRM": "Are you sure you want to activate the holiday '{{name}}'?",
+    "DELETE_TITLE": "Delete Holiday",
+    "DELETE_CONFIRM": "Delete the holiday “{{name}}”? Repayment dates it moved return to their original schedule."
+  },
+  "WORKING_DAYS": {
+    "TITLE": "Working Days & Reschedule Rules",
+    "REPAYMENTS_RESCHEDULING_RULE": "Repayments Rescheduling Rule",
+    "EXTEND_TERM_DAILY_REPAYMENTS": "Extend Term for Daily Repayments",
+    "EXTEND_TERM_HOLIDAY_REPAYMENTS": "Extend Term for Repayments on Holidays"
   },
   "ACCOUNTING_CLOSURES": {
     "CREATE": "Close Period",
     "REOPEN": "Re-open Period",
     "CLOSING_DATE": "Closing Date",
-    "IS_CLOSED": "Is Closed"
+    "IS_CLOSED": "Is Closed",
+    "COMMENTS": "Comments",
+    "CLOSE_ACCOUNTING_PERIOD": "Close Accounting Period"
   },
   "JOURNAL_ENTRIES": {
     "CREATE": "Add Journal Entry",
     "DEBITS": "Debits",
+    "REMOVE_DEBIT": "Remove debit line",
     "CREDITS": "Credits",
+    "REMOVE_CREDIT": "Remove credit line",
     "TRANSACTION_DATE": "Transaction Date",
     "REFERENCE_NUMBER": "Reference Number",
     "OFFICE": "Office",
     "CURRENCY": "Currency",
-    "BALANCED_ERROR": "Total debits must equal total credits."
+    "BALANCED_ERROR": "Total debits must equal total credits.",
+    "TRANSACTION": "Transaction",
+    "ACCOUNT": "Account",
+    "ENTRY_TYPE": "Entry Type",
+    "MANUAL": "Manual entry",
+    "SYSTEM_GENERATED": "System generated",
+    "CREATED_BY": "Created By",
+    "PAYMENT_TYPE": "Payment Type",
+    "REVERSE": "Reverse Transaction",
+    "REVERSE_CONFIRM": "This posts an offsetting transaction. The original entries stay on the ledger, marked as reversed.",
+    "REVERSED": "Reversed",
+    "REVERSED_SUCCESS": "Transaction reversed",
+    "SYSTEM_ENTRY_NOT_REVERSIBLE": "This entry was created by the platform from a portfolio transaction. Reverse the transaction that produced it instead.",
+    "NOT_FOUND": "That journal entry could not be found.",
+    "GL_ACCOUNT": "GL Account",
+    "MANUAL_ENTRIES_ONLY": "Entry Type",
+    "ALL_OFFICES": "All Offices",
+    "ALL_ACCOUNTS": "All Accounts",
+    "ALL_ENTRIES": "All Entries",
+    "MANUAL_ENTRIES": "Manual Entries Only",
+    "LEDGER_ACCOUNT": "Ledger Account",
+    "ADD_DEBIT": "Add Debit",
+    "ADD_CREDIT": "Add Credit"
   },
   "OFFICES": {
     "CREATE_OFFICE": "Create Office",
@@ -1159,12 +1435,43 @@
     "NAME": "Office Name",
     "PARENT": "Parent Office",
     "EXTERNAL_ID": "External ID",
-    "OPENING_DATE": "Opening Date"
+    "OPENING_DATE": "Opening Date",
+    "STAFF": "Staff",
+    "HIERARCHY": "Hierarchy",
+    "NO_STAFF": "No staff are assigned to this office.",
+    "NOT_FOUND": "That office could not be found."
   },
   "CENTERS": {
     "CREATE_CENTER": "Create Center",
     "EDIT_CENTER": "Edit Center",
-    "NAME": "Center Name"
+    "NAME": "Center Name",
+    "ACTIVATE": "Activate Center",
+    "CLOSE": "Close Center",
+    "ACTIVATION_DATE": "Activation Date",
+    "CLOSURE_DATE": "Closure Date",
+    "CLOSURE_REASON": "Closure Reason",
+    "NO_CLOSURE_REASONS": "No closure reasons have been configured, so this center cannot be closed. Add values to the CenterClosureReason code first.",
+    "ASSIGN_STAFF": "Assign Staff",
+    "UNASSIGN_STAFF": "Unassign Staff",
+    "CONFIRM_UNASSIGN_STAFF": "Unassign the member of staff currently responsible for this center?",
+    "NO_STAFF_IN_OFFICE": "No staff are available in this center’s office.",
+    "ATTACH_GROUPS": "Attach Groups",
+    "DETACH_GROUPS": "Detach Groups",
+    "SEARCH_GROUPS": "Search groups",
+    "NO_GROUPS_FOUND": "No unattached groups were found in this office.",
+    "NO_GROUPS": "This center has no groups.",
+    "GROUPS": "Groups",
+    "GROUP_COUNT": "Groups",
+    "LOAD_FAILED": "This center could not be loaded.",
+    "MEETING": "Meeting",
+    "ATTACH_MEETING": "Attach Meeting",
+    "EDIT_MEETING": "Edit Meeting",
+    "MEETING_TITLE": "Meeting Title",
+    "MEETING_START": "Starts On",
+    "MEETING_FREQUENCY": "Repeats",
+    "MEETING_INTERVAL": "Every",
+    "MEETING_TYPE": "Meeting Type",
+    "MEETING_DAY": "Repeats On"
   },
   "GROUPS": {
     "ACTIVATE": "Activate Group",
@@ -1194,6 +1501,7 @@
     "EDIT_NOTE": "Edit Note",
     "EXTERNAL_ID": "External Id",
     "GENERAL": "General",
+    "GROUP_DETAILS": "Group Details",
     "LOAD_FAILED": "The group could not be loaded.",
     "MEMBER": "Member",
     "MEMBERS": "Members",
@@ -1214,7 +1522,11 @@
     "SUMMARY": "Group Summary",
     "UNASSIGNED": "Unassigned",
     "UNASSIGN_ROLE": "Unassign Role",
-    "UNASSIGN_STAFF": "Unassign Staff"
+    "UNASSIGN_STAFF": "Unassign Staff",
+    "LOAN_ACCOUNTS": "Loan Accounts",
+    "SAVINGS_ACCOUNTS": "Savings Accounts",
+    "NO_LOAN_ACCOUNTS": "This group has no loan accounts.",
+    "NO_SAVINGS_ACCOUNTS": "This group has no savings accounts."
   },
   "ACCOUNT_NUMBER_FORMATS": {
     "TITLE": "Account Number Formats",
@@ -1224,7 +1536,9 @@
     "PREFIX_TYPE": "Prefix Type",
     "SAVE": "Save",
     "CANCEL": "Cancel",
-    "DELETE_CONFIRM": "Are you sure you want to delete this format?"
+    "DELETE": "Delete",
+    "DELETE_CONFIRM": "Are you sure you want to delete this format?",
+    "CONFIRM_DELETE": "Delete the account number format for “{{name}}”? Already issued identifiers keep their current shape."
   },
   "ACCOUNTING": {
     "CREATE_GL_ACCOUNT": "Create GL Account",
@@ -1232,6 +1546,7 @@
     "ADD_LEDGER_ACCOUNT": "Add Ledger Account",
     "EDIT_ACCOUNT": "Edit Account",
     "DEFINE_MAPPING": "Define Mapping",
+    "EDIT_MAPPING": "Edit Financial Activity Mapping",
     "GL_CODE": "GL Code",
     "ACCOUNT_TYPE": "Account Type",
     "ACCOUNT_USAGE": "Account Usage",
@@ -1242,7 +1557,10 @@
     "INCOME": "Income",
     "EXPENSE": "Expense",
     "HEADER": "Header",
-    "DETAIL": "Detail"
+    "DETAIL": "Detail",
+    "ACCOUNT_NAME": "Account Name",
+    "FINANCIAL_ACTIVITY": "Financial Activity",
+    "GL_ACCOUNT": "GL Account"
   },
   "MODULES": {
     "CLIENTS_CONTRACTS": "Clients & Contracts",
@@ -1252,6 +1570,8 @@
     "APPLICATION_DATE": "Application Date",
     "APPLY_SHARES": "Apply for more shares",
     "CREATE": "Create Share Account",
+    "CREATE_CLIENT": "Create client",
+    "CREATE_PRODUCT": "Create share product",
     "DIVIDENDS": "Dividends",
     "EDIT": "Edit Share Account",
     "LINKED_SAVINGS": "Linked savings account",
@@ -1273,18 +1593,21 @@
     "SHARES": "Shares",
     "SHARES_HELD": "Shares held",
     "TOTAL_SHARES": "Total Shares",
-    "UNIT_PRICE": "Unit price"
+    "UNIT_PRICE": "Unit price",
+    "ACCOUNT_DETAILS": "Share Account Details"
   },
   "RECURRING_DEPOSITS": {
     "CREATE": "Create Recurring Deposit Account",
     "EDIT": "Edit Recurring Deposit Account",
     "INHERIT_CALENDAR": "Inherit Calendar",
     "RECURRING_FREQUENCY": "Recurring Frequency",
-    "FREQUENCY_TYPE": "Frequency Type"
+    "FREQUENCY_TYPE": "Frequency Type",
+    "ACCOUNT_DETAILS": "Recurring Deposit Account Details"
   },
   "FIXED_DEPOSITS": {
     "CREATE": "Create Fixed Deposit Account",
-    "EDIT": "Edit Fixed Deposit Account"
+    "EDIT": "Edit Fixed Deposit Account",
+    "ACCOUNT_DETAILS": "Fixed Deposit Account Details"
   },
   "GUIDE": {
     "DASHBOARD_WELCOME_TITLE": "Welcome to Fineract Backoffice",
@@ -1336,7 +1659,60 @@
     "SHARES_PRODUCT_TITLE": "Select Share Product",
     "SHARES_PRODUCT_DESC": "Choose the share product. This determines the unit price, currency, and rules. Savings accounts will be filtered to match the product currency.",
     "SHARES_SAVINGS_TITLE": "Link Savings Account",
-    "SHARES_SAVINGS_DESC": "Select the client's savings account for dividend payments and share purchase funding. Only accounts matching the product currency are shown."
+    "SHARES_SAVINGS_DESC": "Select the client's savings account for dividend payments and share purchase funding. Only accounts matching the product currency are shown.",
+    "OPEN": "Open the guided tour for this screen",
+    "OPEN_SHORT": "Guide",
+    "STEP_OF": "Step {{current}} of {{total}}",
+    "SHELL_TITLE": "Finding your way around",
+    "SHELL_DESC": "This screen has no tour of its own yet, so here is the frame every screen shares. Press Next to walk through it, or Exit to carry on.",
+    "SHELL_NAV_TITLE": "The main menu",
+    "SHELL_NAV_DESC": "Everything the application can do hangs off this menu. On a narrow screen it opens as a drawer from this button; on a wide one the button narrows the column to give the page more room.",
+    "SHELL_SEARCH_TITLE": "Search across the office",
+    "SHELL_SEARCH_DESC": "Look up a client, group, centre or account by name or account number from anywhere. Results are limited to the offices your role can see.",
+    "SHELL_BUSINESS_DATE_TITLE": "The business date",
+    "SHELL_BUSINESS_DATE_DESC": "Transactions are dated against the business date, not your device clock. It is shown in the header on a wide screen and under this menu on a narrow one. If it is not what you expect, check it before posting anything.",
+    "SHELL_GUIDE_TITLE": "This button",
+    "SHELL_GUIDE_DESC": "Press Guide on any screen for the tour that belongs to it — under this menu on a narrow screen. Every screen has one; where there is nothing specific to say, the tour is built from the controls the screen actually has.",
+    "GROUPS_TITLE": "Groups",
+    "GROUPS_DESC": "Groups let several clients borrow and save together. Open one to see its members, its accounts and its meeting schedule.",
+    "GROUPS_CREATE_TITLE": "Creating a group",
+    "GROUPS_CREATE_DESC": "A group needs an office and a name to start with; members and accounts are added afterwards, from the group itself.",
+    "GROUPS_VIEW_TITLE": "This group",
+    "GROUPS_VIEW_DESC": "The summary at the top carries the status every action is gated on: a group has to be active before it can hold accounts.",
+    "GROUPS_VIEW_TABS_TITLE": "What is on this group",
+    "GROUPS_VIEW_TABS_DESC": "Members, committee, accounts, documents and notes each have a tab. Nothing here is lost when you switch between them.",
+    "CENTERS_TITLE": "Centres",
+    "CENTERS_DESC": "A centre groups several groups under one meeting schedule, which is what the collection sheet is built from.",
+    "CENTERS_CREATE_TITLE": "Creating a centre",
+    "CENTERS_CREATE_DESC": "Pick the office and a name. Groups are attached afterwards, and the meeting schedule is set on the centre once it is active.",
+    "LOANS_VIEW_ACTIONS_TITLE": "What you can do to this loan",
+    "LOANS_VIEW_ACTIONS_DESC": "The actions offered depend on the loan: an approved loan can be disbursed, an active one can take a repayment. Anything the loan is not eligible for is not shown rather than shown and refused.",
+    "PRODUCTS_TITLE": "Products",
+    "PRODUCTS_DESC": "Products define the terms every account is opened on — interest, charges, schedule and accounting. Changing a product does not rewrite accounts already opened under it.",
+    "ACCOUNTING_TITLE": "Accounting",
+    "ACCOUNTING_DESC": "The chart of accounts, journal entries and closures. Entries the platform posts from loan and savings activity appear here alongside anything entered by hand.",
+    "REPORTING_TITLE": "Reports",
+    "REPORTING_DESC": "Run any report your role can see, fill in its parameters, and export the result. Parameters that depend on another are filled in as you go.",
+    "ORGANIZATION_TITLE": "Organization",
+    "ORGANIZATION_DESC": "Offices, staff, holidays, funds and currencies — the structure everything else is recorded against.",
+    "SYSTEM_TITLE": "System",
+    "SYSTEM_DESC": "Configuration, data tables, jobs and audit. Changes here affect every user of this tenant, so most of it is gated on an administrative permission.",
+    "SCREEN_TITLE": "This screen",
+    "SCREEN_DESC": "A short tour of what is on it. Each step points at one control and explains what it is for; only controls this screen actually has are included.",
+    "SCREEN_SEARCH_TITLE": "Narrowing the list",
+    "SCREEN_SEARCH_DESC": "Search and filter apply to the whole list, not just the page you are looking at, and the result is what an export would contain.",
+    "SCREEN_FILTER_TITLE": "Filters",
+    "SCREEN_FILTER_DESC": "Choose what the list should show. Filters combine, so each one you add narrows the result further rather than replacing the last.",
+    "SCREEN_TABS_TITLE": "Sections of this record",
+    "SCREEN_TABS_DESC": "Each tab is a different part of the same record. Moving between them loads what that section needs and leaves the rest untouched.",
+    "SCREEN_ACTIONS_TITLE": "What you can do here",
+    "SCREEN_ACTIONS_DESC": "Only actions this record is currently eligible for are offered. An action the platform would refuse is left out rather than shown and rejected.",
+    "SCREEN_CREATE_TITLE": "Adding a record",
+    "SCREEN_CREATE_DESC": "Starts a new record of the kind this screen lists. It appears here once saved, subject to whatever filter is set.",
+    "SCREEN_TABLE_TITLE": "Moving through the list",
+    "SCREEN_TABLE_DESC": "Change the page size or step between pages here. Sorting is on the column headers above.",
+    "SCREEN_FORM_TITLE": "Filling this in",
+    "SCREEN_FORM_DESC": "Required fields are marked, and the form is checked as you type. Dates are recorded against the business date shown in the header, not your device clock."
   },
   "login": {
     "title": "Fineract Login",
@@ -1357,7 +1733,31 @@
     "proxyOption": "Local proxy (same origin)",
     "customOption": "Custom URL…",
     "errors": {
-      "endpointNotAllowed": "That API endpoint is not permitted by this deployment. Ask your administrator to add it to the allowed list."
+      "endpointNotAllowed": "That API endpoint is not permitted by this deployment. Ask your administrator to add it to the allowed list.",
+      "invalidCredentials": "The username or password was not accepted.",
+      "endpointNotFound": "No sign-in endpoint was found at this address. Check the API endpoint selected above.",
+      "serverUnreachable": "The server could not be reached. Check the API endpoint selected above and your connection.",
+      "failed": "Sign-in failed. Check your credentials and the API endpoint selected above."
+    },
+    "twoFactor": {
+      "title": "Two-step verification",
+      "chooseLede": "Choose where to send your one-time code.",
+      "loadingMethods": "Looking up how to reach you…",
+      "noMethods": "No delivery method is configured for your account. Ask an administrator to add one before you can sign in.",
+      "sentTo": "We sent a one-time code to {{target}}.",
+      "codeLabel": "One-time code",
+      "verify": "Verify",
+      "verifying": "Verifying…",
+      "resend": "Send another code",
+      "cancel": "Back to sign in",
+      "invalidCode": "That code was not accepted. Request another and try again.",
+      "requestFailed": "The code could not be sent. Try another method, or contact an administrator."
+    },
+    "signedOutForInactivity": "You were signed out after a period of inactivity. Please sign in again.",
+    "sso": {
+      "button": "Sign in with your identity provider",
+      "divider": "or",
+      "notImplemented": "Sign-in through your identity provider is not available yet. Use your username and password below."
     }
   },
   "idle": {
@@ -1380,7 +1780,9 @@
     "FREQUENCY": "Frequency",
     "FREQUENCY_TYPE": "Frequency Type",
     "CREATE": "Create Breach Definition",
-    "EDIT": "Edit Breach Definition"
+    "EDIT": "Edit Breach Definition",
+    "DELETE": "Delete",
+    "CONFIRM_DELETE": "Delete breach definition “{{name}}”?"
   },
   "WC_NEAR_BREACH": {
     "NAME": "Name",
@@ -1388,7 +1790,9 @@
     "FREQUENCY": "Frequency",
     "FREQUENCY_TYPE": "Frequency Type",
     "CREATE": "Create Near-Breach Definition",
-    "EDIT": "Edit Near-Breach Definition"
+    "EDIT": "Edit Near-Breach Definition",
+    "DELETE": "Delete",
+    "CONFIRM_DELETE": "Delete near-breach definition “{{name}}”?"
   },
   "WC_LOAN_PRODUCTS": {
     "CREATE": "Create Loan Product",
@@ -1416,7 +1820,9 @@
     "FUND": "Fund",
     "START_DATE": "Start Date",
     "CLOSE_DATE": "Close Date",
-    "EXTERNAL_ID": "External ID"
+    "EXTERNAL_ID": "External ID",
+    "DELETE": "Delete",
+    "CONFIRM_DELETE": "Delete working-capital loan product “{{name}}”?"
   },
   "WC_LOANS": {
     "CREATE": "Create Working Capital Loan",
@@ -1447,7 +1853,13 @@
       "TRANSACTIONS": "Transactions",
       "DELINQUENCY_ACTIONS": "Delinquency Actions",
       "DELINQUENCY_RANGE_SCHEDULE": "Delinquency Range Schedule",
-      "BREACH_SCHEDULE": "Breach Schedule"
+      "BREACH_SCHEDULE": "Breach Schedule",
+      "BREACH_ACTIONS": "Breach Actions",
+      "NEAR_BREACH_ACTIONS": "Near-Breach Actions",
+      "ORIGINATORS": "Originators",
+      "RATE_CHANGES": "Rate Changes",
+      "AMORTIZATION_SCHEDULE": "Amortization Schedule",
+      "DELINQUENCY_RANGE_TAGS": "Delinquency Range Tags"
     },
     "DELINQUENCY_BUCKET": "Delinquency Bucket",
     "FUND": "Fund",
@@ -1472,7 +1884,77 @@
       "DISCOUNT_AMOUNT": "Discount Amount",
       "REJECTED_ON_DATE": "Rejected On Date",
       "TRANSACTION_DATE": "Transaction Date",
-      "NOTE": "Note"
+      "NOTE": "Note",
+      "MARK_AS_FRAUD": "Mark as Fraud",
+      "APPLY_DISCOUNT": "Apply Discount",
+      "CHANGE_PAYMENT_RATE": "Change Payment Rate",
+      "EFFECTIVE_DATE": "Effective Date"
+    },
+    "DELINQUENCY_ACTION": {
+      "TITLE": "New Delinquency Action",
+      "NEW": "New Action",
+      "ACTION": "Action",
+      "START_DATE": "Start Date",
+      "END_DATE": "End Date",
+      "FREQUENCY": "Frequency",
+      "FREQUENCY_TYPE": "Frequency Type",
+      "MINIMUM_PAYMENT": "Minimum Payment",
+      "MINIMUM_PAYMENT_TYPE": "Minimum Payment Type",
+      "START_NEW_PERIOD": "Start new period"
+    },
+    "BREACH_ACTION": {
+      "TITLE": "New Breach Action",
+      "NEW": "New Action",
+      "ACTION": "Action",
+      "START_DATE": "Start Date",
+      "END_DATE": "End Date",
+      "FREQUENCY": "Frequency",
+      "FREQUENCY_TYPE": "Frequency Type",
+      "MINIMUM_PAYMENT": "Minimum Payment",
+      "MINIMUM_PAYMENT_TYPE": "Minimum Payment Type",
+      "RESTART_PERIOD": "Restart period from reset date"
+    },
+    "NEAR_BREACH_ACTION": {
+      "TITLE": "New Near-Breach Action",
+      "NEW": "New Action",
+      "FREQUENCY": "Frequency",
+      "FREQUENCY_TYPE": "Frequency Type",
+      "THRESHOLD": "Threshold %",
+      "CREATED_DATE": "Created Date"
+    },
+    "ORIGINATORS": {
+      "ATTACH": "Attach Originator",
+      "DETACH": "Detach",
+      "SELECT_ORIGINATOR": "Select Originator",
+      "NAME": "Name",
+      "TYPE": "Type",
+      "CHANNEL": "Channel",
+      "STATUS": "Status"
+    },
+    "CHARGE": {
+      "NEW": "Add Charge",
+      "ADD": "Add Charge",
+      "SELECT_CHARGE": "Select Charge",
+      "DUE_DATE": "Due Date",
+      "WAIVE": "Waive Charge"
+    },
+    "RATE_CHANGE": {
+      "EFFECTIVE_DATE": "Effective Date",
+      "PREVIOUS_RATE": "Previous Rate",
+      "NEW_RATE": "New Rate",
+      "REVERSED": "Reversed"
+    },
+    "AMORTIZATION": {
+      "NET_DISBURSEMENT_AMOUNT": "Net Disbursement Amount",
+      "PAYMENT_NO": "Payment No.",
+      "PAYMENT_DATE": "Payment Date",
+      "EXPECTED_PAYMENT_AMOUNT": "Expected Payment Amount"
+    },
+    "RANGE_TAG": {
+      "DELINQUENCY_RANGE": "Delinquency Range",
+      "DELINQUENT_DAYS": "Delinquent Days",
+      "DELINQUENT_AMOUNT": "Delinquent Amount",
+      "ADDED_ON_DATE": "Added On Date"
     }
   },
   "LOANS_POINT_IN_TIME": {
@@ -1480,7 +1962,11 @@
     "DATE": "As of Date",
     "LOAN_IDS": "Loan IDs (comma-separated, optional)",
     "SEARCH": "Search",
-    "NO_RESULTS": "No results found"
+    "NO_RESULTS": "No results found",
+    "LOAN_ID": "Loan ID",
+    "PRINCIPAL_DISBURSED": "Principal Disbursed",
+    "PRINCIPAL_OUTSTANDING": "Principal Outstanding",
+    "TOTAL_OUTSTANDING": "Total Outstanding"
   },
   "NOTIFICATIONS": {
     "TITLE": "Notifications",
@@ -1502,7 +1988,7 @@
     "SAVE": "Save",
     "CANCEL": "Cancel",
     "BACK": "Back to Loan",
-    "DELETE_CONFIRM": "Are you sure you want to delete this charge?"
+    "DELETE_CONFIRM": "Delete loan charge “{{name}}” for {{amount}}?"
   },
   "LOAN_ORIGINATORS": {
     "CREATE": "Create Loan Originator",
@@ -1511,7 +1997,9 @@
     "EXTERNAL_ID": "External ID",
     "ORIGINATOR_TYPE": "Originator Type",
     "CHANNEL_TYPE": "Channel Type",
-    "STATUS": "Status"
+    "STATUS": "Status",
+    "DELETE": "Delete Loan Originator",
+    "CONFIRM_DELETE": "Delete the loan originator “{{name}}”? It will no longer be selectable when attributing a loan to an originator."
   },
   "CODE_VALUES": {
     "TITLE": "Code Values",
@@ -1556,7 +2044,8 @@
     "GENERATE": "Generate",
     "SAVE": "Save Collection Sheet",
     "BACK": "Back",
-    "RESULTS": "Collection Results"
+    "RESULTS": "Collection Results",
+    "NOTHING_DUE": "Nothing is due for this office on this date."
   },
   "COLLATERAL_MANAGEMENT": {
     "CREATE": "Create Collateral",
@@ -1566,7 +2055,9 @@
     "UNIT_TYPE": "Unit Type",
     "BASE_PRICE": "Base Price",
     "PCT_TO_BASE": "Percentage to Base",
-    "CURRENCY": "Currency"
+    "CURRENCY": "Currency",
+    "DELETE": "Delete Collateral",
+    "CONFIRM_DELETE": "Delete the collateral “{{name}}” (quality {{quality}})? It will no longer be available when recording collateral against a loan."
   },
   "BULK_LOANS": {
     "TITLE": "Bulk Loan Reassignment",
@@ -1599,13 +2090,16 @@
     "SAVINGS_ID": "Savings Account ID",
     "CLIENT_RELATIONSHIP_TYPE_ID": "Client Relationship Type",
     "AMOUNT": "Guarantee Amount",
-    "DOB": "Date of Birth"
+    "DOB": "Date of Birth",
+    "CONFIRM_DELETE": "Delete guarantor “{{name}}”?"
   },
   "INTEREST_PAUSES": {
     "TITLE": "Interest Pauses",
     "CREATE": "Add Interest Pause",
+    "EDIT": "Edit Interest Pause",
     "START_DATE": "Start Date",
-    "END_DATE": "End Date"
+    "END_DATE": "End Date",
+    "CONFIRM_DELETE": "Delete the interest pause from {{startDate}} to {{endDate}}?"
   },
   "POST_DATED_CHECKS": {
     "TITLE": "Post-Dated Checks",
@@ -1613,7 +2107,8 @@
     "NAME": "Name",
     "AMOUNT": "Amount",
     "ACCOUNT_NO": "Account No.",
-    "DATE": "Date"
+    "DATE": "Date",
+    "CONFIRM_DELETE": "Delete post-dated check “{{name}}” for {{amount}} dated {{date}}?"
   },
   "CLIENT_CHARGES": {
     "TITLE": "Client Charges",
@@ -1623,7 +2118,8 @@
     "AMOUNT": "Amount",
     "DUE_DATE": "Due Date",
     "PAID": "Paid",
-    "OUTSTANDING": "Outstanding"
+    "OUTSTANDING": "Outstanding",
+    "CONFIRM_DELETE": "Delete client charge “{{name}}” for {{amount}} due {{dueDate}}?"
   },
   "CLIENT_COLLATERAL": {
     "TITLE": "Client Collateral",
@@ -1633,7 +2129,8 @@
     "NAME": "Name",
     "QUANTITY": "Quantity",
     "UNIT_PRICE": "Unit Price",
-    "TOTAL_COLLATERAL": "Total Collateral"
+    "TOTAL_COLLATERAL": "Total Collateral",
+    "CONFIRM_DELETE": "Delete collateral “{{name}}” with quantity {{quantity}}?"
   },
   "CLIENT_TRANSACTIONS": {
     "TITLE": "Client Transactions",
@@ -1641,7 +2138,8 @@
     "DATE": "Date",
     "AMOUNT": "Amount",
     "TYPE": "Type",
-    "UNDO": "Undo"
+    "UNDO": "Undo",
+    "CONFIRM_UNDO": "Undo transaction {{id}} for {{amount}} dated {{date}}? It will remain on the account marked as reversed."
   },
   "MEETINGS": {
     "TITLE": "Meetings",
@@ -1649,7 +2147,9 @@
     "EDIT": "Edit Meeting",
     "MEETING_DATE": "Meeting Date",
     "PRESENT_COUNT": "Attendance Recorded",
-    "CALENDAR_ID": "Calendar"
+    "CALENDAR_ID": "Calendar",
+    "DELETE": "Delete",
+    "CONFIRM_DELETE": "Delete meeting on \"{{name}}\"?"
   },
   "CALENDARS": {
     "TITLE": "Calendars",
@@ -1657,7 +2157,9 @@
     "CREATE": "Create Calendar",
     "EDIT": "Edit Calendar",
     "START_DATE": "Start Date",
-    "TYPE": "Type"
+    "TYPE": "Type",
+    "DELETE": "Delete",
+    "CONFIRM_DELETE": "Delete calendar \"{{name}}\"?"
   },
   "GROUP_LEVELS": {
     "LEVEL_NAME": "Level Name",
@@ -1689,12 +2191,27 @@
     "TO_PERIOD": "To Period",
     "AMOUNT_RANGE_FROM": "Amount Range From",
     "AMOUNT_RANGE_TO": "Amount Range To",
-    "ANNUAL_INTEREST_RATE": "Annual Interest Rate"
+    "ANNUAL_INTEREST_RATE": "Annual Interest Rate",
+    "DELETE": "Delete Interest Rate Chart",
+    "CONFIRM_DELETE": "Delete interest rate chart #{{id}} for {{product}}? Every slab defined under it goes with it.",
+    "DELETE_SLAB": "Delete Slab",
+    "CONFIRM_DELETE_SLAB": "Delete the slab paying {{rate}} over periods {{fromPeriod}} to {{toPeriod}}? The chart will no longer offer that band.",
+    "TAB_LABEL": "Interest Rate Chart",
+    "NO_CHART": "This account has no interest rate chart.",
+    "VIEW_INCENTIVES": "View Incentives",
+    "HIDE_INCENTIVES": "Hide Incentives",
+    "INCENTIVES": "Incentives",
+    "NO_INCENTIVES": "No incentives on this slab.",
+    "ATTRIBUTE_NAME": "Attribute Name",
+    "CONDITION_TYPE": "Condition Type",
+    "ATTRIBUTE_VALUE": "Attribute Value",
+    "INCENTIVE_TYPE": "Incentive Type"
   },
   "PRODUCT_MIX": {
     "TITLE": "Product Mix",
     "RESTRICTED_PRODUCTS": "Restricted Products",
-    "CLEAR": "Clear Mix"
+    "CLEAR": "Clear Mix",
+    "CONFIRM_CLEAR": "Clear the product mix for this loan product? All {{count}} restriction(s) are removed and the product can then be taken alongside any other."
   },
   "SAVINGS_CHARGES": {
     "TITLE": "Savings Charges",
@@ -1703,19 +2220,25 @@
     "AMOUNT": "Amount",
     "AMOUNT_OUTSTANDING": "Outstanding",
     "CHARGE": "Charge",
-    "DUE_DATE": "Due Date"
+    "DUE_DATE": "Due Date",
+    "DELETE": "Delete Charge",
+    "CONFIRM_DELETE": "Delete the charge “{{name}}” for {{amount}} from this savings account?"
   },
   "SHARE_DIVIDENDS": {
     "TITLE": "Share Dividends",
     "CREATE": "Declare Dividend",
     "AMOUNT": "Amount",
     "PERIOD_START_DATE": "Period Start Date",
-    "PERIOD_END_DATE": "Period End Date"
+    "PERIOD_END_DATE": "Period End Date",
+    "DELETE": "Delete Dividend",
+    "CONFIRM_DELETE": "Delete the dividend of {{amount}} declared for {{startDate}} to {{endDate}}?"
   },
   "FIXED_DEPOSIT_TRANSACTIONS": {
-    "TITLE": "Fixed Deposit Transactions",
-    "DATE": "Date",
     "AMOUNT": "Amount",
+    "DATE": "Date",
+    "DEPOSIT": "Deposit",
+    "PAYMENT_TYPE": "Payment Type",
+    "TITLE": "Fixed Deposit Transactions",
     "TYPE": "Type"
   },
   "RECURRING_DEPOSIT_TRANSACTIONS": {
@@ -1735,14 +2258,18 @@
     "CREATE": "Create Provisioning Category",
     "EDIT": "Edit Provisioning Category",
     "NAME": "Category Name",
-    "DESCRIPTION": "Description"
+    "DESCRIPTION": "Description",
+    "DELETE": "Delete",
+    "CONFIRM_DELETE": "Delete provisioning category “{{name}}”?"
   },
   "PROVISIONING_CRITERIA": {
     "CREATE": "Create Provisioning Criteria",
     "EDIT": "Edit Provisioning Criteria",
     "NAME": "Criteria Name",
     "CREATED_BY": "Created By",
-    "DEFINITIONS_NOTE": "Per-category provisioning definitions and loan-product mappings are managed through the API and are preserved when editing the criteria name."
+    "DEFINITIONS_NOTE": "Per-category provisioning definitions and loan-product mappings are managed through the API and are preserved when editing the criteria name.",
+    "DELETE": "Delete",
+    "CONFIRM_DELETE": "Delete provisioning criteria “{{name}}”?"
   },
   "PROVISIONING_ENTRIES": {
     "CREATE": "Create Entry",
@@ -1776,7 +2303,9 @@
     "EDIT": "Edit Hook",
     "NAME": "Hook Template",
     "DISPLAY_NAME": "Display Name",
-    "IS_ACTIVE": "Active"
+    "IS_ACTIVE": "Active",
+    "DELETE": "Delete Hook",
+    "CONFIRM_DELETE": "Delete the hook “{{name}}”? Outbound calls stop immediately, and anything listening on it goes quiet without further warning."
   },
   "ADHOC_QUERY": {
     "CREATE": "Create Ad-Hoc Query",
@@ -1785,14 +2314,18 @@
     "QUERY": "Query",
     "TABLE_NAME": "Table Name",
     "REPORT_RUN_FREQUENCY": "Report Run Frequency",
-    "IS_ACTIVE": "Active"
+    "IS_ACTIVE": "Active",
+    "DELETE": "Delete Ad-Hoc Query",
+    "CONFIRM_DELETE": "Delete the ad-hoc query “{{name}}” reading from {{tableName}}? The query definition is removed and stops running."
   },
   "SMS": {
     "CREATE": "Create SMS Message",
     "EDIT": "Edit SMS Message",
     "MESSAGE": "Message",
     "MOBILE_NO": "Mobile Number",
-    "CLIENT_ID": "Client ID"
+    "CLIENT_ID": "Client ID",
+    "DELETE": "Delete SMS Message",
+    "CONFIRM_DELETE": "Delete the SMS message to {{mobileNo}}? It is removed from the message list."
   },
   "REPORT_MAILING_JOBS": {
     "CREATE": "Create Report Mailing Job",
@@ -1801,15 +2334,26 @@
     "DESCRIPTION": "Description",
     "EMAIL_RECIPIENTS": "Email Recipients",
     "EMAIL_SUBJECT": "Email Subject",
-    "STRETCHY_REPORT_ID": "Report ID",
-    "IS_ACTIVE": "Active"
+    "STRETCHY_REPORT_ID": "Report",
+    "EMAIL_MESSAGE": "Email Message",
+    "ATTACHMENT_FORMAT": "Attachment Format",
+    "START_DATE_TIME": "Starts On",
+    "RECURRENCE": "Recurrence",
+    "RECURRENCE_HINT": "How often the report is mailed after the start date.",
+    "RECURRENCE_DAILY": "Daily",
+    "RECURRENCE_WEEKLY": "Weekly",
+    "RECURRENCE_MONTHLY": "Monthly",
+    "IS_ACTIVE": "Active",
+    "DELETE": "Delete Report-Mailing Job",
+    "CONFIRM_DELETE": "Delete the report-mailing job “{{name}}”? The report stops being sent to {{recipients}}, and no one on that list is told."
   },
   "REPORT_MAILING": {
     "RUN_HISTORY": "Run History",
     "SCHEDULED_FIRE_TIME": "Scheduled Fire Time",
     "TRIGGER_TYPE": "Trigger Type",
     "STATUS": "Status",
-    "ERROR_LOG": "Error Log"
+    "ERROR_LOG": "Error Log",
+    "LOAD_FAILED": "Report mailing jobs could not be loaded, so this list may be incomplete."
   },
   "ENTITY_DATA_TABLE_CHECKS": {
     "CREATE": "Create Data Table Check",
@@ -1817,7 +2361,9 @@
     "DATATABLE_NAME": "Data Table Name",
     "STATUS": "Status",
     "PRODUCT": "Product",
-    "PRODUCT_ID": "Product ID"
+    "PRODUCT_ID": "Product ID",
+    "DELETE": "Delete Data-Table Check",
+    "CONFIRM_DELETE": "Delete the check requiring {{datatable}} on {{entity}}? That data table stops being mandatory at this point in the workflow."
   },
   "ENTITY_MAPPING": {
     "CREATE": "Create Entity Mapping",
@@ -1825,12 +2371,23 @@
     "ID": "ID",
     "REL_ID": "Relationship ID",
     "FROM_ID": "From ID",
-    "TO_ID": "To ID"
+    "TO_ID": "To ID",
+    "DELETE": "Delete Entity Mapping",
+    "CONFIRM_DELETE": "Delete entity mapping #{{id}}, from {{fromId}} to {{toId}}? The pairing it defines no longer applies.",
+    "LOAD_FAILED": "Entity mappings could not be loaded, so this list may be incomplete."
   },
   "BUSINESS_STEPS": {
     "TITLE": "Business Step Configuration",
     "JOB": "Job",
     "NO_STEPS": "No steps configured for this job."
+  },
+  "CHECKER_INBOX": {
+    "VIEW_PAYLOAD": "View payload",
+    "REJECT_TITLE": "Reject task",
+    "CONFIRM_REJECT": "Are you sure you want to reject this task?",
+    "REJECT_SUCCESS": "Task rejected successfully",
+    "REJECT_ERROR": "Failed to reject task",
+    "COMMAND_PAYLOAD": "Command Payload"
   },
   "BUSINESS_DATES": {
     "TITLE": "Business Date Management",
@@ -1877,14 +2434,21 @@
     "START_TIME": "Start Time",
     "END_TIME": "End Time",
     "STATUS": "Status",
-    "TRIGGER_TYPE": "Trigger Type"
+    "TRIGGER_TYPE": "Trigger Type",
+    "SELECT_JOB": "Select job",
+    "SELECT_ALL": "Select All",
+    "RUN_SELECTED": "Run Selected",
+    "RUN_SELECTED_CONFIRM": "Run {{count}} selected job(s) now?"
   },
   "PERMISSIONS": {
     "TITLE": "Maker-Checker Permissions",
     "CODE": "Code",
     "ENTITY": "Entity",
     "ACTION": "Action",
-    "MAKER_CHECKER": "Maker-Checker Enabled"
+    "MAKER_CHECKER": "Maker-Checker Enabled",
+    "REQUIRES": "Requires {{codes}} — {{summary}}",
+    "JOIN_ANY": " or ",
+    "JOIN_ALL": " and "
   },
   "OIDC_CONFIG": {
     "TITLE": "Tenant OIDC Configuration",
@@ -1893,9 +2457,19 @@
     "ISSUER": "Issuer",
     "CLIENT_ID": "Client ID",
     "CLIENT_SECRET": "Client Secret",
-    "AUTH_ENDPOINT": "Authorization Endpoint",
-    "TOKEN_ENDPOINT": "Token Endpoint",
-    "JWKS_URL": "JWKS URL"
+    "PROVIDER_TYPE": "Provider type",
+    "JWKS_URI": "JWKS URI",
+    "USERNAME_CLAIM": "Username claim",
+    "SCOPES": "Scopes",
+    "POST_LOGOUT_URI": "Post-logout redirect URI",
+    "SECRET_HINT": "The client secret is stored by the platform and never sent back. Leave it blank to keep the current one.",
+    "SECRET_UNCHANGED": "Unchanged",
+    "SAVED": "OIDC configuration saved",
+    "DELETED": "OIDC configuration deleted",
+    "LOAD_FAILED": "Could not load the OIDC configuration",
+    "DELETE_TITLE": "Delete OIDC configuration",
+    "DELETE_MESSAGE": "Sign-in through this identity provider will stop working for the tenant. This cannot be undone.",
+    "JWKS_HINT": "Optional. Left blank, the platform discovers it from the issuer at /.well-known/openid-configuration."
   },
   "FIELD_CONFIG": {
     "TITLE": "Entity Field Configuration",
@@ -2030,9 +2604,14 @@
     "DESCRIPTION": "Description"
   },
   "ASSET_OWNERS": {
+    "TITLE": "External Asset Owners",
+    "DETAILS": "Asset Owner Details",
     "LOAN_PRODUCT_ATTRIBUTES": "Loan Product Attributes",
     "ATTRIBUTE_KEY": "Key",
-    "ATTRIBUTE_VALUE": "Value"
+    "ATTRIBUTE_VALUE": "Value",
+    "OWNER_ID": "Owner ID",
+    "PURCHASE_RATIO": "Purchase Ratio",
+    "VIEW_LOAN_ACCOUNT": "View Loan Account"
   },
   "SPM": {
     "LOOKUP_TABLES": "Lookup Tables",
@@ -2050,7 +2629,11 @@
     "ACCOUNT_NO": "Account No",
     "EXTERNAL_ID": "External ID",
     "PARENT": "Parent",
-    "NO_RESULTS": "No results found."
+    "NO_RESULTS": "No results found.",
+    "PAGES_SECTION": "Settings & Pages",
+    "ENTITIES_SECTION": "Entities",
+    "PAGE_TYPE": "Page",
+    "SECTION": "Section"
   },
   "EMAIL_CAMPAIGNS": {
     "TITLE": "Email Campaigns",
@@ -2089,7 +2672,8 @@
     "DELETE": "Delete",
     "SAVE": "Save",
     "SUCCESS": "Operation successful.",
-    "NO_DATA": "No data found."
+    "NO_DATA": "No data found.",
+    "PARAMETERIZED_MESSAGE": "Parameterized Message"
   },
   "EMAIL_MESSAGES": {
     "TITLE": "Email Messages",
@@ -2105,7 +2689,8 @@
     "SAVE_CONFIG": "Save Config",
     "DELETE": "Delete",
     "SUCCESS": "Operation successful.",
-    "SENT_DATE": "Sent Date"
+    "SENT_DATE": "Sent Date",
+    "CONFIGURATION_JSON": "Configuration JSON"
   },
   "OFFICE_TRANSACTIONS": {
     "TITLE": "Office Transactions",
@@ -2246,7 +2831,8 @@
     "TX_CODE": "Transaction Code",
     "QUOTE_CODE": "Quote Code",
     "CREATE_QUOTE": "Create Quote",
-    "QUOTE_BODY": "Quote Request (JSON)"
+    "QUOTE_BODY": "Quote Request (JSON)",
+    "DISBURSE_REPAY": "Disburse / Repay"
   },
   "FORGOT_PASSWORD": {
     "TITLE": "Forgot Password",
@@ -2262,7 +2848,13 @@
     "OFFICE": "Office",
     "EMAIL": "Email",
     "ROLES": "Roles",
-    "LOAD_ERROR": "Could not load your profile. Try again, or contact an administrator if it persists."
+    "LOAD_ERROR": "Could not load your profile. Try again, or contact an administrator if it persists.",
+    "CHANGE_PASSWORD": "Change Password",
+    "NEW_PASSWORD": "New Password",
+    "REPEAT_NEW_PASSWORD": "Repeat New Password",
+    "PASSWORDS_DO_NOT_MATCH": "Passwords do not match.",
+    "PASSWORD_POLICY": "Password policy",
+    "PASSWORD_CHANGED": "Password changed successfully."
   },
   "TWO_FACTOR_CONFIG": {
     "TITLE": "Two-Factor Authentication Config",
@@ -2283,24 +2875,90 @@
     "DELETE": "Delete",
     "SUCCESS": "Operation successful."
   },
-  "CLIENT_SEARCH_V2": {
-    "TITLE": "Advanced Client Search",
-    "QUERY": "Search Query",
-    "SEARCH": "Search",
-    "NAME": "Client Name",
-    "ACCOUNT_NO": "Account No.",
-    "STATUS": "Status",
-    "OFFICE": "Office",
-    "VIEW": "View Client",
-    "NO_RESULTS": "No clients found matching your search."
-  },
   "LOAN_SCHEDULE_MODIFY": {
     "TITLE": "Loan Schedule Modification",
     "LOAN_ID": "Loan ID",
     "COMMAND": "Command",
+    "CALCULATE_REPAYMENT_SCHEDULE": "Calculate Repayment Schedule",
+    "FORCE_RECALCULATE_REPAYMENT_SCHEDULE": "Force Recalculate Repayment Schedule",
     "BODY": "Request Body (JSON)",
     "BODY_PLACEHOLDER": "Optional JSON body, e.g. {}",
     "SUBMIT": "Submit",
     "RESPONSE": "Response"
+  },
+  "ACCESS_DENIED": {
+    "TITLE": "Access denied",
+    "MESSAGE": "You do not have permission to open this page.",
+    "HINT": "If you believe you should have access, ask an administrator to review the permissions on your role.",
+    "BACK_TO_DASHBOARD": "Back to dashboard",
+    "REQUIRES": "This page requires:"
+  },
+  "NOT_FOUND_PAGE": {
+    "TITLE": "Page not found",
+    "MESSAGE": "We could not find the page at {{path}}.",
+    "HINT": "The link may be outdated, or the address may have been typed incorrectly.",
+    "BACK_TO_DASHBOARD": "Back to dashboard",
+    "SEARCH": "Search"
+  },
+  "OPENING_BALANCES": {
+    "TITLE": "Define Opening Balances",
+    "CONTRA_NOT_MAPPED": "Opening balances need an equity account mapped to the opening-balances contra financial activity. Set that up under Financial Activity Mappings first.",
+    "LOAD_FAILED": "Opening balances could not be loaded for that office and currency.",
+    "SAVED": "Opening balances saved"
+  },
+  "FREQUENT_POSTINGS": {
+    "TITLE": "Frequent Postings",
+    "RULE": "Accounting Rule",
+    "NO_RULES": "No accounting rules have been defined yet. Create one to post from it here.",
+    "WILL_POST": "This will post",
+    "POST": "Post Entry",
+    "POSTED": "Journal entry posted",
+    "MULTI_ACCOUNT_RULE": "This rule names more than one account on a side. Use the full journal entry form so you can set each amount."
+  },
+  "REPORT_DEFINITIONS": {
+    "CREATE": "Create Report",
+    "EDIT": "Edit Report",
+    "CATEGORY": "Category",
+    "SUB_TYPE": "Chart Type",
+    "SQL": "Report SQL",
+    "IN_USE": "In Use",
+    "CORE": "Core",
+    "TENANT": "Tenant",
+    "CORE_NOT_DELETABLE": "Core reports cannot be deleted.",
+    "CORE_READ_ONLY": "This is a core report. The platform allows only the \"In Use\" setting to change; the rest of the definition is shown for reference.",
+    "DELETE_CONFIRM": "This removes the report definition. Reports already run from it are not affected.",
+    "DELETED": "Report definition deleted",
+    "SAVED": "Report definition saved",
+    "ORIGIN": "Origin"
+  },
+  "NOTES": {
+    "ADD": "Add a note",
+    "CONFIRM_DELETE": "Delete this note? Notes are an audit trail, so removing one leaves no trace of what it said."
+  },
+  "DOCUMENTS": {
+    "SELECT_FILE": "Select File",
+    "NO_FILE_SELECTED": "No file selected",
+    "UPLOAD": "Upload",
+    "NONE": "No documents attached.",
+    "FILE_NAME": "File Name",
+    "CONFIRM_DELETE": "Delete this document? The attached file is removed with it."
+  },
+  "WORK_QUEUES": {
+    "TITLE": "Approval Queues",
+    "LOAN_APPROVAL": "Loan Approval",
+    "LOAN_DISBURSAL": "Loan Disbursal",
+    "CLIENT_ACTIVATION": "Client Activation",
+    "RESCHEDULE_APPROVAL": "Reschedule Requests",
+    "EMPTY": "Nothing is waiting in this queue.",
+    "SELECT_ALL": "Select all",
+    "SELECTED": "Selected",
+    "APPROVE_SELECTED": "Approve Selected",
+    "DISBURSE_SELECTED": "Disburse Selected",
+    "ACTIVATE_SELECTED": "Activate Selected",
+    "REJECT_SELECTED": "Reject Selected",
+    "UNASSIGNED_OFFICE": "Unassigned",
+    "CONFIRM": "This applies the action to {{count}} record(s) in one request.",
+    "ALL_SUCCEEDED": "{{count}} record(s) processed successfully.",
+    "PARTIAL": "{{succeeded}} of {{total}} succeeded. These were refused: {{names}}"
   }
 }

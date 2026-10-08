@@ -19,7 +19,7 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import { NotificationService } from '../../../core/services/notification.service';
 import {
   IonButton,
@@ -46,13 +46,14 @@ import {
   FINERACT_LOCALE,
   toIsoDate,
 } from '../../../core/utils/date-formatter';
+import { createPickersReady } from '../../../shared/utils/pickers-ready';
 
 @Component({
   selector: 'app-business-dates',
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonSpinner,
     IonCardContent,
@@ -67,7 +68,7 @@ import {
   ],
   template: `
     <div class="page-header">
-      <h2>{{ 'BUSINESS_DATES.TITLE' | translate }}</h2>
+      <h2>{{ 'BUSINESS_DATES.TITLE' | appTranslate }}</h2>
     </div>
 
     @if (isLoading()) {
@@ -81,19 +82,25 @@ import {
         <!-- Business Date Card -->
         <ion-card>
           <ion-card-header>
-            <ion-card-title>{{ 'BUSINESS_DATES.BUSINESS_DATE_LABEL' | translate }}</ion-card-title>
+            <ion-card-title>{{
+              'BUSINESS_DATES.BUSINESS_DATE_LABEL' | appTranslate
+            }}</ion-card-title>
           </ion-card-header>
           <ion-card-content>
             @if (businessDateEntry()?.description; as description) {
               <p>{{ description }}</p>
             }
             <p>
-              <strong>{{ 'BUSINESS_DATES.CURRENT_DATE' | translate }}:</strong>
+              <strong>{{ 'BUSINESS_DATES.CURRENT_DATE' | appTranslate }}:</strong>
               {{ businessDateEntry()?.date }}
             </p>
             <ion-item fill="outline" class="full-width">
-              <ion-label position="stacked">{{ 'BUSINESS_DATES.NEW_DATE' | translate }}</ion-label>
-              <ion-datetime-button datetime="businessDate-picker"></ion-datetime-button>
+              <ion-label position="stacked">{{
+                'BUSINESS_DATES.NEW_DATE' | appTranslate
+              }}</ion-label>
+              @if (pickersReady()) {
+                <ion-datetime-button datetime="businessDate-picker"></ion-datetime-button>
+              }
               <ion-modal [keepContentsMounted]="true">
                 <ng-template>
                   <ion-datetime
@@ -114,7 +121,7 @@ import {
               (click)="updateDate('BUSINESS_DATE')"
               [disabled]="!businessDate()"
             >
-              {{ 'BUSINESS_DATES.UPDATE' | translate }}
+              {{ 'BUSINESS_DATES.UPDATE' | appTranslate }}
             </ion-button>
           </div>
         </ion-card>
@@ -122,19 +129,23 @@ import {
         <!-- COB Date Card -->
         <ion-card>
           <ion-card-header>
-            <ion-card-title>{{ 'BUSINESS_DATES.COB_DATE_LABEL' | translate }}</ion-card-title>
+            <ion-card-title>{{ 'BUSINESS_DATES.COB_DATE_LABEL' | appTranslate }}</ion-card-title>
           </ion-card-header>
           <ion-card-content>
             @if (cobDateEntry()?.description; as description) {
               <p>{{ description }}</p>
             }
             <p>
-              <strong>{{ 'BUSINESS_DATES.CURRENT_DATE' | translate }}:</strong>
+              <strong>{{ 'BUSINESS_DATES.CURRENT_DATE' | appTranslate }}:</strong>
               {{ cobDateEntry()?.date }}
             </p>
             <ion-item fill="outline" class="full-width">
-              <ion-label position="stacked">{{ 'BUSINESS_DATES.NEW_DATE' | translate }}</ion-label>
-              <ion-datetime-button datetime="cobDate-picker"></ion-datetime-button>
+              <ion-label position="stacked">{{
+                'BUSINESS_DATES.NEW_DATE' | appTranslate
+              }}</ion-label>
+              @if (pickersReady()) {
+                <ion-datetime-button datetime="cobDate-picker"></ion-datetime-button>
+              }
               <ion-modal [keepContentsMounted]="true">
                 <ng-template>
                   <ion-datetime
@@ -151,7 +162,7 @@ import {
           </ion-card-content>
           <div class="card-actions">
             <ion-button color="primary" (click)="updateDate('COB_DATE')" [disabled]="!cobDate()">
-              {{ 'BUSINESS_DATES.UPDATE' | translate }}
+              {{ 'BUSINESS_DATES.UPDATE' | appTranslate }}
             </ion-button>
           </div>
         </ion-card>
@@ -170,7 +181,7 @@ import {
       }
       .form-grid {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
         gap: 24px;
       }
       .full-width {
@@ -191,6 +202,9 @@ import {
   ],
 })
 export class BusinessDatesComponent implements OnInit {
+  /** See `createPickersReady` — the date buttons must not outrun their pickers. */
+  readonly pickersReady = createPickersReady();
+
   private businessDateService = inject(BusinessDateManagementService);
   private notifications = inject(NotificationService);
 

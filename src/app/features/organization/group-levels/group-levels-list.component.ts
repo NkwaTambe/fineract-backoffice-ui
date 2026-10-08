@@ -18,11 +18,10 @@
  */
 
 import { Component, OnInit, inject, signal } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
 import { ColumnDef, CellTemplateDirective } from '../../../shared';
 import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 import { GroupsLevelService, GroupLevelData } from '../../../api';
-import { IonIcon } from '@ionic/angular/standalone';
+import { IconComponent } from '../../../ui/icon/icon.component';
 
 /**
  * Read-only listing of the configured group levels (e.g. Center, Group). Group levels
@@ -31,7 +30,7 @@ import { IonIcon } from '@ionic/angular/standalone';
 @Component({
   selector: 'app-group-levels-list',
   standalone: true,
-  imports: [TranslateModule, DataTableComponent, CellTemplateDirective, IonIcon],
+  imports: [DataTableComponent, CellTemplateDirective, IconComponent],
   template: `
     <app-data-table
       title="nav.groupLevels"
@@ -43,7 +42,7 @@ import { IonIcon } from '@ionic/angular/standalone';
     >
       <ng-template appCellTemplate="canHaveClients" let-row>
         @if (row.canHaveClients) {
-          <ion-icon color="primary" name="checkmark-outline"></ion-icon>
+          <app-icon tone="success" name="checkmark-outline" />
         }
       </ng-template>
     </app-data-table>

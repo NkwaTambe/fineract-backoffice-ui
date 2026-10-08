@@ -19,13 +19,14 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { I18N, TranslatePipe } from '../../../core/adapters';
 import { ColumnDef, CellTemplateDirective } from '../../../shared';
 import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 import { ClientTransactionService, GetClientsPageItems } from '../../../api';
+import { DialogService } from '../../../core/services/dialog.service';
 import { formatArrayDate } from '../../../core/utils/date-formatter';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 /**
  * Lists the transactions for a single client. The client id is read from the route
@@ -36,11 +37,10 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
   selector: 'app-client-transactions-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
@@ -59,16 +59,16 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
         {{ row.type?.value }}
       </ng-template>
       <ng-template appCellTemplate="actions" let-row>
-        <ion-button
-          fill="clear"
-          color="danger"
-          [attr.aria-label]="'CLIENT_TRANSACTIONS.UNDO' | translate"
-          [appTooltip]="'CLIENT_TRANSACTIONS.UNDO' | translate"
+        <app-button
+          type="button"
+          intent="danger"
+          emphasis="quiet"
+          [label]="'CLIENT_TRANSACTIONS.UNDO' | appTranslate"
+          icon="arrow-undo-outline"
+          [appTooltip]="'CLIENT_TRANSACTIONS.UNDO' | appTranslate"
           [disabled]="row.reversed"
           (click)="onUndo(row)"
-        >
-          <ion-icon name="arrow-undo-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,
@@ -76,6 +76,8 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
 export class ClientTransactionsListComponent implements OnInit {
   private readonly transactionService = inject(ClientTransactionService);
   private readonly route = inject(ActivatedRoute);
+  private readonly dialogService = inject(DialogService);
+  private readonly i18n = inject(I18N);
 
   readonly columns: ColumnDef[] = [
     { key: 'id', label: 'CLIENT_TRANSACTIONS.ID', sortable: true },
@@ -108,8 +110,18 @@ export class ClientTransactionsListComponent implements OnInit {
     return formatArrayDate(value);
   }
 
-  onUndo(row: GetClientsPageItems): void {
-    if (!row.id || !window.confirm('Undo this transaction?')) return;
+  async onUndo(row: GetClientsPageItems): Promise<void> {
+    if (!row.id) return;
+    const confirmed = await this.dialogService.confirm({
+      title: this.i18n.translate('CLIENT_TRANSACTIONS.UNDO'),
+      message: this.i18n.translate('CLIENT_TRANSACTIONS.CONFIRM_UNDO', {
+        id: row.id,
+        amount: row.amount ?? '',
+        date: this.formatDate(row.date),
+      }),
+      destructive: true,
+    });
+    if (!confirmed) return;
     this.transactionService
       .postClientsClientIdTransactionsTransactionId(this.clientId, row.id, 'undo')
       .subscribe({

@@ -19,12 +19,13 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { I18N, TranslatePipe } from '../../../core/adapters';
 import { ColumnDef, CellTemplateDirective } from '../../../shared';
 import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 import { GuarantorsService, GuarantorData } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { DialogService } from '../../../core/services/dialog.service';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 /**
  * Lists the guarantors attached to a single loan. The loan id is read from the route
@@ -34,11 +35,10 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
   selector: 'app-guarantors-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
@@ -46,6 +46,7 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       title="GUARANTORS.TITLE"
       helpTextKey="HELP.GUARANTORS_DESC"
       createButtonLabel="GUARANTORS.CREATE"
+      createPermission="CREATE_GUARANTOR"
       [columns]="columns"
       [data]="guarantors()"
       [totalRecords]="guarantors().length"
@@ -59,27 +60,27 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
         {{ row.guarantorType?.value }}
       </ng-template>
       <ng-template appCellTemplate="status" let-row>
-        {{ row.status ? ('COMMON.ACTIVE' | translate) : ('COMMON.INACTIVE' | translate) }}
+        {{ row.status ? ('COMMON.ACTIVE' | appTranslate) : ('COMMON.INACTIVE' | appTranslate) }}
       </ng-template>
       <ng-template appCellTemplate="actions" let-row>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'COMMON.EDIT' | translate"
-          [appTooltip]="'COMMON.EDIT' | translate"
+        <app-button
+          type="button"
+          intent="primary"
+          emphasis="quiet"
+          [label]="'COMMON.EDIT' | appTranslate"
+          icon="create-outline"
+          [appTooltip]="'COMMON.EDIT' | appTranslate"
           (click)="onEdit(row)"
-        >
-          <ion-icon name="create-outline"></ion-icon>
-        </ion-button>
-        <ion-button
-          fill="clear"
-          color="danger"
-          [attr.aria-label]="'COMMON.DELETE' | translate"
-          [appTooltip]="'COMMON.DELETE' | translate"
+        />
+        <app-button
+          type="button"
+          intent="danger"
+          emphasis="quiet"
+          [label]="'COMMON.DELETE' | appTranslate"
+          icon="trash-outline"
+          [appTooltip]="'COMMON.DELETE' | appTranslate"
           (click)="onDelete(row)"
-        >
-          <ion-icon name="trash-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,
@@ -88,6 +89,8 @@ export class GuarantorsListComponent implements OnInit {
   private readonly guarantorsService = inject(GuarantorsService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly dialogService = inject(DialogService);
+  private readonly i18n = inject(I18N);
 
   readonly columns: ColumnDef[] = [
     { key: 'name', label: 'GUARANTORS.NAME', sortable: false },
@@ -125,8 +128,15 @@ export class GuarantorsListComponent implements OnInit {
     this.router.navigate(['/loans', this.loanId, 'guarantors', 'edit', row.id]);
   }
 
-  onDelete(row: GuarantorData): void {
-    if (!row.id || !window.confirm('Delete this guarantor?')) return;
+  async onDelete(row: GuarantorData): Promise<void> {
+    if (!row.id) return;
+    const name = `${row.firstname ?? ''} ${row.lastname ?? ''}`.trim();
+    const confirmed = await this.dialogService.confirm({
+      title: this.i18n.translate('COMMON.DELETE'),
+      message: this.i18n.translate('GUARANTORS.CONFIRM_DELETE', { name }),
+      destructive: true,
+    });
+    if (!confirmed) return;
     this.guarantorsService.deleteLoansLoanIdGuarantorsGuarantorId(this.loanId, row.id).subscribe({
       next: () => this.load(),
       error: (err: unknown) => console.error('Failed to delete guarantor', err),

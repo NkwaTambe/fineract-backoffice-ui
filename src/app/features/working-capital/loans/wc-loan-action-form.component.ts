@@ -20,13 +20,14 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import {
   IonButton,
   IonCard,
   IonCardContent,
   IonCardHeader,
   IonCardTitle,
+  IonCheckbox,
   IonDatetime,
   IonDatetimeButton,
   IonInput,
@@ -41,6 +42,8 @@ import {
   WorkingCapitalLoanTransactionsService,
   PostWorkingCapitalLoansLoanIdRequest,
   PostWorkingCapitalLoanTransactionsRequest,
+  PutWorkingCapitalLoansLoanIdDiscountRequest,
+  PutWorkingCapitalLoansLoanIdRateRequest,
 } from '../../../api';
 import {
   FINERACT_DATE_FORMAT,
@@ -48,6 +51,7 @@ import {
   formatDateToFineract,
   toIsoDate,
 } from '../../../core/utils/date-formatter';
+import { createPickersReady } from '../../../shared/utils/pickers-ready';
 
 /**
  * Handles WC loan lifecycle commands (approve, reject, undoapproval, disburse, undodisbursal)
@@ -59,9 +63,10 @@ import {
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonSpinner,
+    IonCheckbox,
     IonInput,
     IonTextarea,
     IonItem,
@@ -78,7 +83,7 @@ import {
     <div class="form-container">
       <ion-card>
         <ion-card-header>
-          <ion-card-title>{{ title | translate }}</ion-card-title>
+          <ion-card-title>{{ title | appTranslate }}</ion-card-title>
         </ion-card-header>
 
         <ion-card-content>
@@ -86,9 +91,11 @@ import {
             @if (command === 'approve') {
               <ion-item fill="outline">
                 <ion-label position="stacked">{{
-                  'WC_LOANS.ACTIONS.APPROVED_ON_DATE' | translate
+                  'WC_LOANS.ACTIONS.APPROVED_ON_DATE' | appTranslate
                 }}</ion-label>
-                <ion-datetime-button datetime="approvedOnDate-picker"></ion-datetime-button>
+                @if (pickersReady()) {
+                  <ion-datetime-button datetime="approvedOnDate-picker"></ion-datetime-button>
+                }
                 <ion-modal [keepContentsMounted]="true">
                   <ng-template>
                     <ion-datetime
@@ -104,10 +111,10 @@ import {
               </ion-item>
               <ion-item fill="outline">
                 <ion-label position="stacked">{{
-                  'WC_LOANS.ACTIONS.APPROVED_AMOUNT' | translate
+                  'WC_LOANS.ACTIONS.APPROVED_AMOUNT' | appTranslate
                 }}</ion-label>
                 <ion-input
-                  [attr.aria-label]="'WC_LOANS.ACTIONS.APPROVED_AMOUNT' | translate"
+                  [attr.aria-label]="'WC_LOANS.ACTIONS.APPROVED_AMOUNT' | appTranslate"
                   type="number"
                   name="approvedLoanAmount"
                   [(ngModel)]="lifecycle.approvedLoanAmount"
@@ -118,11 +125,13 @@ import {
             @if (command === 'disburse') {
               <ion-item fill="outline">
                 <ion-label position="stacked">{{
-                  'WC_LOANS.ACTIONS.EXPECTED_DISBURSEMENT_DATE' | translate
+                  'WC_LOANS.ACTIONS.EXPECTED_DISBURSEMENT_DATE' | appTranslate
                 }}</ion-label>
-                <ion-datetime-button
-                  datetime="expectedDisbursementDate-picker"
-                ></ion-datetime-button>
+                @if (pickersReady()) {
+                  <ion-datetime-button
+                    datetime="expectedDisbursementDate-picker"
+                  ></ion-datetime-button>
+                }
                 <ion-modal [keepContentsMounted]="true">
                   <ng-template>
                     <ion-datetime
@@ -137,9 +146,13 @@ import {
               </ion-item>
               <ion-item fill="outline">
                 <ion-label position="stacked">{{
-                  'WC_LOANS.ACTIONS.ACTUAL_DISBURSEMENT_DATE' | translate
+                  'WC_LOANS.ACTIONS.ACTUAL_DISBURSEMENT_DATE' | appTranslate
                 }}</ion-label>
-                <ion-datetime-button datetime="actualDisbursementDate-picker"></ion-datetime-button>
+                @if (pickersReady()) {
+                  <ion-datetime-button
+                    datetime="actualDisbursementDate-picker"
+                  ></ion-datetime-button>
+                }
                 <ion-modal [keepContentsMounted]="true">
                   <ng-template>
                     <ion-datetime
@@ -155,10 +168,10 @@ import {
               </ion-item>
               <ion-item fill="outline">
                 <ion-label position="stacked">{{
-                  'WC_LOANS.ACTIONS.TRANSACTION_AMOUNT' | translate
+                  'WC_LOANS.ACTIONS.TRANSACTION_AMOUNT' | appTranslate
                 }}</ion-label>
                 <ion-input
-                  [attr.aria-label]="'WC_LOANS.ACTIONS.TRANSACTION_AMOUNT' | translate"
+                  [attr.aria-label]="'WC_LOANS.ACTIONS.TRANSACTION_AMOUNT' | appTranslate"
                   type="number"
                   name="transactionAmount"
                   [(ngModel)]="lifecycle.transactionAmount"
@@ -167,10 +180,10 @@ import {
               </ion-item>
               <ion-item fill="outline">
                 <ion-label position="stacked">{{
-                  'WC_LOANS.ACTIONS.DISCOUNT_AMOUNT' | translate
+                  'WC_LOANS.ACTIONS.DISCOUNT_AMOUNT' | appTranslate
                 }}</ion-label>
                 <ion-input
-                  [attr.aria-label]="'WC_LOANS.ACTIONS.DISCOUNT_AMOUNT' | translate"
+                  [attr.aria-label]="'WC_LOANS.ACTIONS.DISCOUNT_AMOUNT' | appTranslate"
                   type="number"
                   name="discountAmount"
                   [(ngModel)]="lifecycle.discountAmount"
@@ -181,9 +194,11 @@ import {
             @if (command === 'reject') {
               <ion-item fill="outline">
                 <ion-label position="stacked">{{
-                  'WC_LOANS.ACTIONS.REJECTED_ON_DATE' | translate
+                  'WC_LOANS.ACTIONS.REJECTED_ON_DATE' | appTranslate
                 }}</ion-label>
-                <ion-datetime-button datetime="rejectedOnDate-picker"></ion-datetime-button>
+                @if (pickersReady()) {
+                  <ion-datetime-button datetime="rejectedOnDate-picker"></ion-datetime-button>
+                }
                 <ion-modal [keepContentsMounted]="true">
                   <ng-template>
                     <ion-datetime
@@ -202,9 +217,11 @@ import {
             @if (command === 'repayment') {
               <ion-item fill="outline">
                 <ion-label position="stacked">{{
-                  'WC_LOANS.ACTIONS.TRANSACTION_DATE' | translate
+                  'WC_LOANS.ACTIONS.TRANSACTION_DATE' | appTranslate
                 }}</ion-label>
-                <ion-datetime-button datetime="transactionDate-picker"></ion-datetime-button>
+                @if (pickersReady()) {
+                  <ion-datetime-button datetime="transactionDate-picker"></ion-datetime-button>
+                }
                 <ion-modal [keepContentsMounted]="true">
                   <ng-template>
                     <ion-datetime
@@ -220,10 +237,10 @@ import {
               </ion-item>
               <ion-item fill="outline">
                 <ion-label position="stacked">{{
-                  'WC_LOANS.ACTIONS.TRANSACTION_AMOUNT' | translate
+                  'WC_LOANS.ACTIONS.TRANSACTION_AMOUNT' | appTranslate
                 }}</ion-label>
                 <ion-input
-                  [attr.aria-label]="'WC_LOANS.ACTIONS.TRANSACTION_AMOUNT' | translate"
+                  [attr.aria-label]="'WC_LOANS.ACTIONS.TRANSACTION_AMOUNT' | appTranslate"
                   type="number"
                   name="repaymentAmount"
                   [(ngModel)]="repayment.transactionAmount"
@@ -231,20 +248,107 @@ import {
                 ></ion-input>
               </ion-item>
               <ion-item fill="outline">
-                <ion-label position="stacked">{{ 'WC_LOANS.ACTIONS.NOTE' | translate }}</ion-label>
+                <ion-label position="stacked">{{
+                  'WC_LOANS.ACTIONS.NOTE' | appTranslate
+                }}</ion-label>
                 <ion-textarea
-                  [attr.aria-label]="'WC_LOANS.ACTIONS.NOTE' | translate"
+                  [attr.aria-label]="'WC_LOANS.ACTIONS.NOTE' | appTranslate"
                   name="repaymentNote"
                   [(ngModel)]="repayment.note"
                 ></ion-textarea>
               </ion-item>
             }
 
-            @if (command !== 'repayment') {
+            @if (command === 'markasfraud') {
+              <ion-item>
+                <ion-checkbox name="fraud" [(ngModel)]="fraud">
+                  {{ 'WC_LOANS.ACTIONS.MARK_AS_FRAUD' | appTranslate }}
+                </ion-checkbox>
+              </ion-item>
+            }
+
+            @if (command === 'discount') {
               <ion-item fill="outline">
-                <ion-label position="stacked">{{ 'WC_LOANS.ACTIONS.NOTE' | translate }}</ion-label>
+                <ion-label position="stacked">{{
+                  'WC_LOANS.ACTIONS.DISCOUNT_AMOUNT' | appTranslate
+                }}</ion-label>
+                <ion-input
+                  [attr.aria-label]="'WC_LOANS.ACTIONS.DISCOUNT_AMOUNT' | appTranslate"
+                  type="number"
+                  name="discountAmount"
+                  [(ngModel)]="discount.discountAmount"
+                ></ion-input>
+              </ion-item>
+              <ion-item fill="outline">
+                <ion-label position="stacked">{{
+                  'WC_LOANS.ACTIONS.NOTE' | appTranslate
+                }}</ion-label>
                 <ion-textarea
-                  [attr.aria-label]="'WC_LOANS.ACTIONS.NOTE' | translate"
+                  [attr.aria-label]="'WC_LOANS.ACTIONS.NOTE' | appTranslate"
+                  name="discountNote"
+                  [(ngModel)]="discount.note"
+                ></ion-textarea>
+              </ion-item>
+            }
+
+            @if (command === 'paymentrate') {
+              <ion-item fill="outline">
+                <ion-label position="stacked">{{
+                  'WC_LOANS.ACTIONS.EFFECTIVE_DATE' | appTranslate
+                }}</ion-label>
+                @if (pickersReady()) {
+                  <ion-datetime-button
+                    datetime="paymentRateEffectiveDate-picker"
+                  ></ion-datetime-button>
+                }
+                <ion-modal [keepContentsMounted]="true">
+                  <ng-template>
+                    <ion-datetime
+                      id="paymentRateEffectiveDate-picker"
+                      data-testid="paymentRateEffectiveDate-picker"
+                      presentation="date"
+                      name="paymentRateEffectiveDate"
+                      [(ngModel)]="paymentRateEffectiveDate"
+                      required
+                    ></ion-datetime>
+                  </ng-template>
+                </ion-modal>
+              </ion-item>
+              <ion-item fill="outline">
+                <ion-label position="stacked">{{
+                  'WC_LOANS.PERIOD_PAYMENT_RATE' | appTranslate
+                }}</ion-label>
+                <ion-input
+                  [attr.aria-label]="'WC_LOANS.PERIOD_PAYMENT_RATE' | appTranslate"
+                  type="number"
+                  name="periodPaymentRate"
+                  [(ngModel)]="paymentRate.periodPaymentRate"
+                ></ion-input>
+              </ion-item>
+              <ion-item fill="outline">
+                <ion-label position="stacked">{{
+                  'WC_LOANS.ACTIONS.NOTE' | appTranslate
+                }}</ion-label>
+                <ion-textarea
+                  [attr.aria-label]="'WC_LOANS.ACTIONS.NOTE' | appTranslate"
+                  name="paymentRateNote"
+                  [(ngModel)]="paymentRate.note"
+                ></ion-textarea>
+              </ion-item>
+            }
+
+            @if (
+              command !== 'repayment' &&
+              command !== 'markasfraud' &&
+              command !== 'discount' &&
+              command !== 'paymentrate'
+            ) {
+              <ion-item fill="outline">
+                <ion-label position="stacked">{{
+                  'WC_LOANS.ACTIONS.NOTE' | appTranslate
+                }}</ion-label>
+                <ion-textarea
+                  [attr.aria-label]="'WC_LOANS.ACTIONS.NOTE' | appTranslate"
                   name="note"
                   [(ngModel)]="lifecycle.note"
                 ></ion-textarea>
@@ -253,7 +357,7 @@ import {
 
             <div class="form-actions">
               <ion-button fill="clear" type="button" (click)="onCancel()" [disabled]="isSaving()">
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               <ion-button
                 color="primary"
@@ -262,9 +366,9 @@ import {
               >
                 @if (isSaving()) {
                   <ion-spinner name="crescent"></ion-spinner>
-                  {{ 'COMMON.SAVING' | translate }}
+                  {{ 'COMMON.SAVING' | appTranslate }}
                 } @else {
-                  {{ 'COMMON.SUBMIT' | translate }}
+                  {{ 'COMMON.SUBMIT' | appTranslate }}
                 }
               </ion-button>
             </div>
@@ -289,6 +393,9 @@ import {
   ],
 })
 export class WcLoanActionFormComponent implements OnInit {
+  /** See `createPickersReady` — the date buttons must not outrun their pickers. */
+  readonly pickersReady = createPickersReady();
+
   private readonly loansService = inject(WorkingCapitalLoansService);
   private readonly transactionsService = inject(WorkingCapitalLoanTransactionsService);
   private readonly route = inject(ActivatedRoute);
@@ -306,12 +413,23 @@ export class WcLoanActionFormComponent implements OnInit {
     dateFormat: FINERACT_DATE_FORMAT,
     locale: FINERACT_LOCALE,
   };
+  discount: PutWorkingCapitalLoansLoanIdDiscountRequest = {
+    dateFormat: FINERACT_DATE_FORMAT,
+    locale: FINERACT_LOCALE,
+  };
+  paymentRate: PutWorkingCapitalLoansLoanIdRateRequest = {
+    dateFormat: FINERACT_DATE_FORMAT,
+    locale: FINERACT_LOCALE,
+    effectiveDate: '',
+  };
+  fraud = false;
 
   approvedOnDate: string | null = null;
   expectedDisbursementDate: string | null = null;
   actualDisbursementDate: string | null = null;
   rejectedOnDate: string | null = null;
   transactionDate: string | null = toIsoDate(new Date());
+  paymentRateEffectiveDate: string | null = toIsoDate(new Date());
 
   get title(): string {
     const map: Record<string, string> = {
@@ -321,6 +439,9 @@ export class WcLoanActionFormComponent implements OnInit {
       undoapproval: 'WC_LOANS.ACTIONS.UNDO_APPROVAL',
       undodisbursal: 'WC_LOANS.ACTIONS.UNDO_DISBURSAL',
       repayment: 'WC_LOANS.REPAYMENT',
+      markasfraud: 'WC_LOANS.ACTIONS.MARK_AS_FRAUD',
+      discount: 'WC_LOANS.ACTIONS.APPLY_DISCOUNT',
+      paymentrate: 'WC_LOANS.ACTIONS.CHANGE_PAYMENT_RATE',
     };
     return map[this.command] ?? this.command;
   }
@@ -335,19 +456,64 @@ export class WcLoanActionFormComponent implements OnInit {
   onSubmit(): void {
     this.isSaving.set(true);
 
-    if (this.command === 'repayment') {
-      if (this.transactionDate) {
-        this.repayment.transactionDate = formatDateToFineract(this.transactionDate);
-      }
-      this.transactionsService
-        .postWorkingCapitalLoansLoanIdTransactions(this.loanId, 'repayment', this.repayment)
-        .subscribe({
-          next: () => this.router.navigate([`/working-capital/loans/view/${this.loanId}`]),
-          error: () => this.isSaving.set(false),
-        });
-      return;
+    switch (this.command) {
+      case 'repayment':
+        return this.submitRepayment();
+      case 'markasfraud':
+        return this.submitMarkAsFraud();
+      case 'discount':
+        return this.submitDiscount();
+      case 'paymentrate':
+        return this.submitPaymentRate();
+      default:
+        return this.submitLifecycleCommand();
     }
+  }
 
+  private submitRepayment(): void {
+    if (this.transactionDate) {
+      this.repayment.transactionDate = formatDateToFineract(this.transactionDate);
+    }
+    this.transactionsService
+      .postWorkingCapitalLoansLoanIdTransactions(this.loanId, 'repayment', this.repayment)
+      .subscribe({
+        next: () => this.router.navigate([`/working-capital/loans/view/${this.loanId}`]),
+        error: () => this.isSaving.set(false),
+      });
+  }
+
+  private submitMarkAsFraud(): void {
+    this.loansService
+      .putWorkingCapitalLoansLoanIdMarkAsFraud(this.loanId, { fraud: this.fraud })
+      .subscribe({
+        next: () => this.router.navigate([`/working-capital/loans/view/${this.loanId}`]),
+        error: () => this.isSaving.set(false),
+      });
+  }
+
+  private submitDiscount(): void {
+    this.loansService.putWorkingCapitalLoansLoanIdDiscount(this.loanId, this.discount).subscribe({
+      next: () => this.router.navigate([`/working-capital/loans/view/${this.loanId}`]),
+      error: () => this.isSaving.set(false),
+    });
+  }
+
+  private submitPaymentRate(): void {
+    if (this.paymentRateEffectiveDate) {
+      this.paymentRate.effectiveDate = formatDateToFineract(this.paymentRateEffectiveDate);
+    }
+    this.loansService
+      .putWorkingCapitalLoansLoanIdPaymentRate(this.loanId, this.paymentRate)
+      .subscribe({
+        next: () =>
+          this.router.navigate([`/working-capital/loans/view/${this.loanId}`], {
+            queryParams: { tab: 'rateChanges' },
+          }),
+        error: () => this.isSaving.set(false),
+      });
+  }
+
+  private submitLifecycleCommand(): void {
     if (this.command === 'approve' && this.approvedOnDate) {
       this.lifecycle.approvedOnDate = formatDateToFineract(this.approvedOnDate);
     }

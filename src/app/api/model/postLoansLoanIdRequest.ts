@@ -24,7 +24,9 @@
  */
 
 import { PostLoansLoanIdDisbursementData } from './postLoansLoanIdDisbursementData';
+import { PostLoansLoanIdPostDatedCheckData } from './postLoansLoanIdPostDatedCheckData';
 import { PostLoansLoanIdOriginatorData } from './postLoansLoanIdOriginatorData';
+import { PostLoansLoanIdGlimApprovalData } from './postLoansLoanIdGlimApprovalData';
 
 
 /**
@@ -33,6 +35,10 @@ import { PostLoansLoanIdOriginatorData } from './postLoansLoanIdOriginatorData';
 export interface PostLoansLoanIdRequest { 
     actualDisbursementDate?: string;
     adjustRepaymentDate?: string;
+    /**
+     * Approve GLIM Application only: the per-child-loan approval details
+     */
+    approvalFormData?: Array<PostLoansLoanIdGlimApprovalData>;
     approvedLoanAmount?: number;
     approvedOnDate?: string;
     assignmentDate?: string;
@@ -45,16 +51,26 @@ export interface PostLoansLoanIdRequest {
     externalId?: string;
     fixedEmiAmount?: number;
     fromLoanOfficerId?: number;
+    /**
+     * Approve GLIM Application only: the approved principal of the parent GLIM account
+     */
+    glimPrincipal?: number;
     locale?: string;
+    netDisbursalAmount?: number;
     note?: string;
     /**
      * Optional array of originators to reconcile during loan disbursement. Omit the field to leave existing mappings unchanged. Send an empty array to detach all originators. Each entry can reference an existing originator by \'id\' or \'externalId\'. Missing externalIds are created during disbursement.
      */
     originators?: Array<PostLoansLoanIdOriginatorData>;
     paymentTypeId?: number;
+    /**
+     * Disburse only: the post dated checks backing the repayment schedule
+     */
+    postDatedChecks?: Array<PostLoansLoanIdPostDatedCheckData>;
     rejectedOnDate?: string;
     toLoanOfficerId?: number;
     transactionAmount?: number;
+    transactionDate?: string;
     unassignedDate?: string;
     withdrawnOnDate?: string;
 }

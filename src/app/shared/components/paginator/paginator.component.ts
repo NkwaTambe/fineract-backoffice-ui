@@ -17,11 +17,10 @@
  * under the License.
  */
 
-import { Component, computed, inject, input, output, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { TranslateService } from '@ngx-translate/core';
+import { Component, computed, inject, input, output } from '@angular/core';
 import { IonButton, IonIcon, IonSelect, IonSelectOption } from '@ionic/angular/standalone';
 import { PageEvent } from '../../models/table.model';
+import { I18N } from '../../../core/adapters';
 
 /**
  * Paginator for {@link DataTableComponent} and any other paged list.
@@ -119,11 +118,32 @@ import { PageEvent } from '../../models/table.model';
         --padding-end: 6px;
         margin: 0;
       }
+      @media (max-width: 768px) {
+        .paginator {
+          display: grid;
+          grid-template-columns: max-content minmax(0, 1fr) repeat(4, auto);
+          gap: 4px;
+        }
+        .items-per-page {
+          white-space: nowrap;
+        }
+        .page-size-select {
+          min-width: 0;
+        }
+        .range-label {
+          grid-column: 1 / 3;
+          grid-row: 2;
+          margin: 0;
+        }
+        ion-button {
+          grid-row: 2;
+        }
+      }
     `,
   ],
 })
 export class PaginatorComponent {
-  private readonly translate = inject(TranslateService);
+  private readonly i18n = inject(I18N);
 
   /** Total number of records. For server-side paging this comes from the API response. */
   readonly length = input(0);
@@ -131,17 +151,22 @@ export class PaginatorComponent {
   readonly pageIndex = input(0);
   readonly pageSizeOptions = input<number[]>([5, 10, 25, 100]);
 
+  /**
+   * Set when `length` is a real, complete count rather than a value read off a paged Fineract
+   * response — e.g. the caller already holds the entire result set client-side (`localLogic` in
+   * {@link DataTableComponent}). Suppresses the "of many" sentinel below: there is nothing to
+   * hedge against when the count did not come from Fineract's pagination in the first place, and
+   * without this a small exact total that happens to be `k * pageSize + 1` (11 records at a page
+   * size of 10, or even a single record at the default page size of 10) was misread as the same
+   * "there's at least one more" signal a genuinely paged response uses.
+   */
+  readonly exactTotal = input(false);
+
   readonly page = output<PageEvent>();
 
-  /** Bumped on language change so the label computeds re-evaluate. */
-  private readonly lang = signal(this.translate.currentLang);
-
-  private readonly langChange = toSignal(this.translate.onLangChange);
-
   protected readonly labels = computed(() => {
-    // Touch both language sources so the labels re-translate when either moves.
-    this.lang();
-    this.langChange();
+    // Touch the adapter's language signal so the labels re-translate when it changes.
+    this.i18n.currentLang();
 
     return {
       itemsPerPage: this.instant('COMMON.ITEMS_PER_PAGE', 'Items per page:'),
@@ -184,7 +209,7 @@ export class PaginatorComponent {
     const endIndex =
       startIndex < length ? Math.min(startIndex + pageSize, length) : startIndex + pageSize;
 
-    if (length % pageSize === 1) {
+    if (!this.exactTotal() && length % pageSize === 1) {
       return `${startIndex + 1} - ${endIndex} ${of} ${this.instant('COMMON.MANY', 'many')}`;
     }
 
@@ -213,7 +238,7 @@ export class PaginatorComponent {
   }
 
   private instant(key: string, fallback: string): string {
-    const translated = this.translate.instant(key);
+    const translated = this.i18n.translate(key);
     return !translated || translated === key ? fallback : translated;
   }
 }

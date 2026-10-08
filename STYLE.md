@@ -49,11 +49,31 @@ The UI layer is **Ionic** (`@ionic/angular` v8). Ionic is configured in `mode: '
 (`src/app/app.config.ts`), so components render in Material Design styling.
 
 > Angular Material has been removed entirely, and `npm run lint` fails on any import of it.
-> The table below records the equivalents, which are also the conventions for new code.
+> The table below records vendor equivalents for UI implementations. New feature/shared code
+> uses the app-owned boundary described below.
 > `@angular/cdk` is retained and is fine to use for unstyled primitives (`cdk-table`, virtual
 > scroll, a11y) — the shared data table is built on it.
 
-### Importing Ionic components
+### UI boundary
+
+New UI dependencies belong in `src/app/ui/`. Prefer its app-owned primitives; direct Ionic
+imports in existing features are a lint migration baseline.
+
+Available today:
+
+| Primitive     | Notes                                                                              |
+| ------------- | ---------------------------------------------------------------------------------- |
+| `app-tabs`    | Manual activation: moving focus never loads a panel. Caller renders the one panel. |
+| `app-button`  | `type` is required — no inherited submit. `intent`/`emphasis`, `busy`, `icon`.     |
+| `app-icon`    | Decorative unless given a translated `label`.                                      |
+| `app-spinner` | Decorative unless given a translated `label`.                                      |
+
+See
+[ADR 0005](DOCS/adr/0005-ui-boundary.md) for component, form-value, theme and browser-test
+contracts. Implementations inside `ui/` may use Ionic as described below; CDK behavioural
+primitives such as `app-tabs` do not need it.
+
+### Importing Ionic components inside UI implementations
 
 Always import individual components from the **standalone** entry point and list them in the
 component's own `imports` array. Never use `IonicModule`.
@@ -63,7 +83,7 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
 
 @Component({
   standalone: true,
-  imports: [TranslateModule, IonButton, IonIcon],
+  imports: [TranslatePipe, IonButton, IonIcon],
   // ...
 })
 ```
@@ -183,8 +203,8 @@ Ionic components inherit the Fineract palette automatically.
 
 ## Testing
 
-- **Runner**: Karma + Jasmine (`npm test`). The `jest.config.ts` in the repo root is unused.
-- **Unit Tests**: Every service and complex component should have a corresponding `spec.ts`.
+- **Runner**: Vitest (`npm test`). The `jest.config.ts` in the repo root is unused.
+- **Unit Tests**: Every service and complex component should have a corresponding `test.ts`.
 - **Test Coverage**: Aim for at least 80% statement coverage.
 - **Ionic in TestBed**: Components that use Ionic overlays — directly, or via `NotificationService`
   / `DialogService` — need Ionic's providers, or they fail with
@@ -192,10 +212,11 @@ Ionic components inherit the Fineract palette automatically.
 
   ```ts
   import { provideIonicTesting } from '../../testing/ionic-testing';
+  import { provideTranslateTesting } from '../../testing/i18n-testing';
 
   TestBed.configureTestingModule({
-    imports: [MyComponent, TranslateModule.forRoot()],
-    providers: [provideIonicTesting()],
+    imports: [MyComponent],
+    providers: [provideIonicTesting(), ...provideTranslateTesting()],
   });
   ```
 

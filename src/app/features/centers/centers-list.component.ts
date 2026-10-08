@@ -19,8 +19,7 @@
 
 import { Component, inject, signal } from '@angular/core';
 
-import { TranslateModule } from '@ngx-translate/core';
-import { Router } from '@angular/router';
+import { Router, RouterModule } from '@angular/router';
 import { Subject, merge, of } from 'rxjs';
 import { catchError, map, startWith, switchMap, tap } from 'rxjs/operators';
 import {
@@ -30,19 +29,20 @@ import {
   ColumnDef,
 } from '../../shared';
 import { CentersService, GetCentersPageItems } from '../../api';
+import { TranslatePipe } from '../../core/adapters';
 import { PageEvent, SortEvent } from '../../shared/models/table.model';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { ButtonComponent } from '../../ui/button/button.component';
 
 @Component({
   selector: 'app-centers-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    RouterModule,
     StatusBadgeComponent,
     DataTableComponent,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    TranslatePipe,
+    ButtonComponent,
   ],
   template: `
     <app-data-table
@@ -50,7 +50,8 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
       (retry)="onRetry()"
       title="nav.centers"
       helpTextKey="HELP.CENTERS_DESC"
-      createButtonLabel="Create Center"
+      createButtonLabel="CENTERS.CREATE_CENTER"
+      createPermission="CREATE_CENTER"
       [columns]="columns"
       [data]="centers()"
       [totalRecords]="totalRecords"
@@ -60,20 +61,25 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
       [pageIndex]="pageIndex()"
       (pageChange)="onPage($event)"
     >
+      <ng-template appCellTemplate="name" let-center>
+        <a [routerLink]="['/centers/view', center.id]" data-testid="center-name-link">
+          {{ center.name }}
+        </a>
+      </ng-template>
+
       <ng-template appCellTemplate="status" let-center>
         <app-status-badge [status]="center.status?.value"></app-status-badge>
       </ng-template>
 
       <ng-template appCellTemplate="actions" let-center>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'COMMON.EDIT' | translate"
-          title="Edit Center"
+        <app-button
+          type="button"
+          emphasis="quiet"
+          intent="primary"
+          icon="create-outline"
+          [label]="'COMMON.EDIT' | appTranslate"
           (click)="onEditCenter(center)"
-        >
-          <ion-icon name="create-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,

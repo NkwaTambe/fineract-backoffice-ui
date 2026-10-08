@@ -5,12 +5,19 @@
  * regarding copyright ownership.  The ASF licenses this file
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
- * with the License.  See the NOTICE file BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
 
+import { mockClientTextSearch } from './utils/client-search-mock';
 import { test, expect, Page } from './fixtures';
 
 const TEST_USER = 'mifos';
@@ -122,6 +129,7 @@ async function loginAndGoToDashboard(page: Page) {
 }
 
 async function setupClientMocks(page: Page, clients: unknown[] = []) {
+  await mockClientTextSearch(page, clients);
   const body =
     clients.length > 0
       ? JSON.stringify({ totalFilteredRecords: clients.length, pageItems: clients })
@@ -175,8 +183,8 @@ test.describe('Client CRUD Workflow', () => {
     await expect(page).toHaveURL(URL_CLIENTS_CREATE);
     await expect(page.locator(CARD_TITLE).first()).toContainText(/Create Client/i);
 
-    /* save button should be disabled when required fields are empty */
-    await expect(page.getByRole('button', { name: BTN_SAVE })).toBeDisabled();
+    /* step 1 (Client Type): Next disabled until office is picked */
+    await expect(page.getByRole('button', { name: 'Next' })).toBeDisabled();
 
     /* fill required fields */
     await page.locator(SELECT_LEGAL_FORM).click();
@@ -188,18 +196,21 @@ test.describe('Client CRUD Workflow', () => {
     await page.locator(SELECT_OFFICE).click();
     await page.locator(OPTION).first().click();
 
-    /* submitted on / activation date already default to today; no interaction needed */
+    await expect(page.getByRole('button', { name: 'Next' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Next' }).click();
+
+    /* step 2 (Personal Details): submitted on / activation date already default to today */
+    await expect(page.getByRole('button', { name: 'Next' })).toBeDisabled();
 
     /* fill required name fields */
     await page.locator('input[name="firstname"]').fill('Test');
     await page.locator('input[name="lastname"]').fill('User');
 
-    /* now save button should be enabled */
-    await expect(page.getByRole('button', { name: BTN_SAVE })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Next' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Next' }).click();
 
-    /* fill optional fields */
-    await page.locator('input[name="firstname"]').fill('Test');
-    await page.locator('input[name="lastname"]').fill('User');
+    /* step 3 (Contact Details, all optional): save should already be enabled */
+    await expect(page.getByRole('button', { name: BTN_SAVE })).toBeEnabled();
     await page.locator('input[name="externalId"]').fill('EXT-TEST-001');
     await page.locator('input[name="mobileNo"]').fill('9876543210');
     await page.locator('input[name="emailAddress"]').fill('test@example.com');
@@ -215,8 +226,8 @@ test.describe('Client CRUD Workflow', () => {
     await page.getByRole('button', { name: /Create/i }).click();
     await expect(page).toHaveURL(URL_CLIENTS_CREATE);
 
-    /* save disabled initially */
-    await expect(page.getByRole('button', { name: BTN_SAVE })).toBeDisabled();
+    /* Next disabled initially — office not yet picked */
+    await expect(page.getByRole('button', { name: 'Next' })).toBeDisabled();
 
     /* select Entity legal form */
     await page.locator(SELECT_LEGAL_FORM).click();
@@ -229,13 +240,19 @@ test.describe('Client CRUD Workflow', () => {
     await page.locator(SELECT_OFFICE).click();
     await page.locator(OPTION).first().click();
 
-    /* submitted on / activation date already default to today; no interaction needed */
+    await expect(page.getByRole('button', { name: 'Next' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Next' }).click();
 
+    /* step 2 (Personal Details): submitted on / activation date already default to today */
     /* entity shows fullname field instead of first/last */
     const fullname = page.locator('input[name="fullname"]');
     await expect(fullname).toBeVisible();
     await fullname.fill('Acme Corporation');
 
+    await expect(page.getByRole('button', { name: 'Next' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Next' }).click();
+
+    /* step 3 (Contact Details, all optional) */
     await expect(page.getByRole('button', { name: BTN_SAVE })).toBeEnabled();
   });
 
@@ -290,8 +307,10 @@ test.describe('Client View & Status Transitions', () => {
     await setupClientMocks(page, [ACTIVE_CLIENT]);
 
     await page.goto(URL_CLIENT_2001);
-    await expect(page.locator('.breadcrumb')).toContainText('Clients');
-    await expect(page.locator('.breadcrumb')).toContainText('Test User');
+    // The trail comes from the route titles, so it names the screen; the client is in the heading.
+    const breadcrumb = page.getByRole('navigation', { name: 'Breadcrumb' });
+    await expect(breadcrumb).toContainText('Clients');
+    await expect(breadcrumb).toContainText('Client Details');
     await expect(page.locator('h2')).toContainText('Test User');
     await expect(page.getByText('#000000001')).toBeVisible();
   });
@@ -994,6 +1013,44 @@ test.describe('Security CRUD', () => {
     await expect(page.getByText('Maker Date From')).toBeVisible();
     await expect(page.getByText('Maker Date To')).toBeVisible();
   });
+
+  test('audit logs list exports the loaded page as CSV', async ({ page }) => {
+    await page.route('**/api/v1/audits**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          totalFilteredRecords: 1,
+          pageItems: [
+            {
+              id: 1,
+              resourceId: 10,
+              entityName: 'Client',
+              actionName: 'CREATE',
+              maker: 'mifos',
+              madeOnDate: '2026-06-16T12:00:00Z',
+              checker: 'mifos',
+              checkedOnDate: '2026-06-16T12:05:00Z',
+              processingResult: 'success',
+            },
+          ],
+        }),
+      });
+    });
+    await page.route(ROUTE_OFFICES_WILDCARD, async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: OFFICE_ARRAY });
+    });
+
+    await page.getByRole('link', { name: 'Audit Logs' }).click();
+    await expect(page).toHaveURL('/security/audits');
+    await expect(page.getByRole('cell', { name: 'Client' })).toBeVisible();
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export CSV' }).click();
+    const download = await downloadPromise;
+
+    expect(download.suggestedFilename()).toBe('audit-logs.csv');
+  });
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -1117,6 +1174,7 @@ test.describe('Create Office Dialog from Client Form', () => {
   test('should open create office dialog from client create form', async ({ page }) => {
     await loginAndGoToDashboard(page);
     await mockOffices(page);
+    await mockClientTextSearch(page);
     await page.route('**/api/v1/clients?**', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: EMPTY_RESPONSE });
     });

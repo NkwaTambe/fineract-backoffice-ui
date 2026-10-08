@@ -18,9 +18,11 @@
  */
 
 import { Component, OnInit, inject, signal } from '@angular/core';
+
+import { HasPermissionDirective } from '../../../shared/directives/has-permission.directive';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterModule } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import { Observable, of } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
 import {
@@ -45,13 +47,28 @@ import {
   IonSegmentButton,
 } from '@ionic/angular/standalone';
 
+/**
+ * The tabs on this screen, named.
+ *
+ * They were positional strings — '0', '7' — which say nothing at the point of use and shift
+ * meaning whenever a tab is inserted in the middle. The values are still strings because
+ * `ion-segment` compares them as such.
+ */
+export const ASSET_OWNER_TAB = {
+  details: 'details',
+  loanProductAttributes: 'loanProductAttributes',
+} as const;
+
+export type AssetOwnerTab = (typeof ASSET_OWNER_TAB)[keyof typeof ASSET_OWNER_TAB];
+
 @Component({
   selector: 'app-asset-owner-view',
   standalone: true,
   imports: [
     CommonModule,
     RouterModule,
-    TranslateModule,
+    HasPermissionDirective,
+    TranslatePipe,
     CdkTableModule,
     DataTableComponent,
     StatusBadgeComponent,
@@ -68,10 +85,6 @@ import {
   template: `
     @if (transfer$ | async; as transfer) {
       <div class="container">
-        <div class="breadcrumb">
-          <a routerLink="/fintech/asset-owners">External Asset Owners</a> /
-          <span>{{ transfer.owner?.externalId }}</span>
-        </div>
         <ion-card class="header-card">
           <ion-card-header>
             <ion-card-title>
@@ -79,13 +92,20 @@ import {
               <app-status-badge [status]="transfer.status"></app-status-badge>
             </ion-card-title>
             <div class="header-actions">
+              <!--
+                Removed rather than disabled: it navigates elsewhere, and the loan screen is
+                gated on READ_LOAN while this one is not, so a reader without it was offered a
+                button whose only destination was Access Denied.
+              -->
               <ion-button
+                *appHasPermission="'READ_LOAN'"
                 fill="outline"
                 color="primary"
+                data-testid="asset-owner-view-loan"
                 [routerLink]="['/loans/view', transfer.loan?.loanId]"
               >
                 <ion-icon name="business-outline"></ion-icon>
-                View Loan Account
+                {{ 'ASSET_OWNERS.VIEW_LOAN_ACCOUNT' | appTranslate }}
               </ion-button>
             </div>
           </ion-card-header>
@@ -119,17 +139,17 @@ import {
           </ion-card-content>
         </ion-card>
         <ion-segment [value]="activeTab()" (ionChange)="activeTab.set($any($event).detail.value)">
-          <ion-segment-button value="0">
-            <ion-label>Journal Entries</ion-label>
+          <ion-segment-button [value]="TAB.details">
+            <ion-label>{{ 'nav.journalEntries' | appTranslate }}</ion-label>
           </ion-segment-button>
-          <ion-segment-button value="1">
-            <ion-label>{{ 'ASSET_OWNERS.LOAN_PRODUCT_ATTRIBUTES' | translate }}</ion-label>
+          <ion-segment-button [value]="TAB.loanProductAttributes">
+            <ion-label>{{ 'ASSET_OWNERS.LOAN_PRODUCT_ATTRIBUTES' | appTranslate }}</ion-label>
           </ion-segment-button>
         </ion-segment>
 
-        @if (activeTab() === '0') {
+        @if (activeTab() === TAB.details) {
           <app-data-table
-            title="Journal Entries"
+            title="nav.journalEntries"
             [columns]="journalColumns"
             [data]="(journalEntries$ | async) || []"
             [showSearch]="false"
@@ -137,21 +157,21 @@ import {
           >
           </app-data-table>
         }
-        @if (activeTab() === '1') {
+        @if (activeTab() === TAB.loanProductAttributes) {
           <div class="tab-content">
             @if (attributes().length === 0) {
-              <p class="empty-state">{{ 'COMMON.NO_DATA' | translate }}</p>
+              <p class="empty-state">{{ 'COMMON.NO_DATA' | appTranslate }}</p>
             } @else {
               <table cdk-table [dataSource]="attributes()" class="full-width-table">
                 <ng-container cdkColumnDef="attributeKey">
                   <th cdk-header-cell *cdkHeaderCellDef>
-                    {{ 'ASSET_OWNERS.ATTRIBUTE_KEY' | translate }}
+                    {{ 'ASSET_OWNERS.ATTRIBUTE_KEY' | appTranslate }}
                   </th>
                   <td cdk-cell *cdkCellDef="let row">{{ row.attributeKey }}</td>
                 </ng-container>
                 <ng-container cdkColumnDef="attributeValue">
                   <th cdk-header-cell *cdkHeaderCellDef>
-                    {{ 'ASSET_OWNERS.ATTRIBUTE_VALUE' | translate }}
+                    {{ 'ASSET_OWNERS.ATTRIBUTE_VALUE' | appTranslate }}
                   </th>
                   <td cdk-cell *cdkCellDef="let row">{{ row.attributeValue }}</td>
                 </ng-container>
@@ -174,14 +194,6 @@ import {
     `
       .container {
         padding: 24px;
-      }
-      .breadcrumb {
-        margin-bottom: 16px;
-        font-size: 14px;
-      }
-      .breadcrumb a {
-        text-decoration: none;
-        color: #1976d2;
       }
       .header-card {
         margin-bottom: 24px;
@@ -231,7 +243,10 @@ import {
 })
 export class AssetOwnerViewComponent implements OnInit {
   /** Selected tab; mat-tab-group tracked this internally, ion-segment does not. */
-  readonly activeTab = signal('0');
+  /** Exposed so the template names its tabs instead of numbering them. */
+  protected readonly TAB = ASSET_OWNER_TAB;
+
+  readonly activeTab = signal<AssetOwnerTab>(ASSET_OWNER_TAB.details);
   private readonly route = inject(ActivatedRoute);
   private readonly assetOwnersService = inject(ExternalAssetOwnersService);
   private readonly attributesService = inject(ExternalAssetOwnerLoanProductAttributesService);
@@ -243,11 +258,11 @@ export class AssetOwnerViewComponent implements OnInit {
   journalEntries$!: Observable<JournalEntryData[]>;
 
   journalColumns: ColumnDef[] = [
-    { key: 'id', label: 'ID', sortable: true },
-    { key: 'transactionDate', label: 'Date', sortable: true },
-    { key: 'amount', label: 'Amount', sortable: true },
-    { key: 'type.value', label: 'Type', sortable: true },
-    { key: 'glAccountName', label: 'GL Account', sortable: true },
+    { key: 'id', label: 'COMMON.ID', sortable: true },
+    { key: 'transactionDate', label: 'COMMON.DATE', sortable: true },
+    { key: 'amount', label: 'COMMON.AMOUNT', sortable: true },
+    { key: 'type.value', label: 'COMMON.TYPE', sortable: true },
+    { key: 'glAccountName', label: 'JOURNAL_ENTRIES.GL_ACCOUNT', sortable: true },
   ];
 
   ngOnInit() {

@@ -20,7 +20,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 
 import { Router, RouterModule } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
 import { CurrencyPipe } from '@angular/common';
 import { Subject, merge, of } from 'rxjs';
 import { catchError, map, startWith, switchMap, tap } from 'rxjs/operators';
@@ -33,8 +32,9 @@ import {
 } from '../../shared';
 import { SavingsAccountService, GetSavingsAccountsResponse, GetSavingsPageItems } from '../../api';
 import { PageEvent, SortEvent } from '../../shared/models/table.model';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
 import { TooltipDirective } from '../../shared/directives/tooltip.directive';
+import { ButtonComponent } from '../../ui/button/button.component';
+import { TranslatePipe } from '../../core/adapters';
 import {
   resolveAccountActionType,
   resolveAccountRoutePrefix,
@@ -45,14 +45,13 @@ import {
   standalone: true,
   imports: [
     RouterModule,
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
     StatusBadgeComponent,
     HasPermissionDirective,
     CurrencyPipe,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
@@ -71,15 +70,15 @@ import {
       [pageIndex]="pageIndex()"
       (pageChange)="onPage($event)"
     >
-      <ion-button
+      <app-button
+        type="button"
+        intent="primary"
+        icon="add-outline"
         headerActions
-        color="primary"
         *appHasPermission="'CREATE_SAVINGSACCOUNT'"
         (click)="onCreateAccount()"
+        >{{ 'SAVINGS.CREATE_ACCOUNT' | appTranslate }}</app-button
       >
-        <ion-icon name="add-outline"></ion-icon>
-        {{ 'SAVINGS.CREATE_ACCOUNT' | translate }}
-      </ion-button>
 
       <ng-template appCellTemplate="accountNo" let-account>
         <a
@@ -99,46 +98,47 @@ import {
 
       <ng-template appCellTemplate="actions" let-account>
         @if (account.status?.submittedAndPendingApproval) {
-          <ion-button
-            fill="clear"
-            color="secondary"
-            [appTooltip]="'LOANS.APPROVE' | translate"
+          <app-button
+            type="button"
+            intent="secondary"
+            emphasis="quiet"
+            [label]="'LOANS.APPROVE' | appTranslate"
+            icon="checkmark-circle-outline"
+            [appTooltip]="'LOANS.APPROVE' | appTranslate"
             (click)="onApprove(account)"
             *appHasPermission="'APPROVE_SAVINGSACCOUNT'"
-          >
-            <ion-icon name="checkmark-circle-outline"></ion-icon>
-          </ion-button>
+          />
         }
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'COMMON.EDIT' | translate"
-          [appTooltip]="'COMMON.EDIT' | translate"
+        <app-button
+          type="button"
+          intent="primary"
+          emphasis="quiet"
+          [label]="'COMMON.EDIT' | appTranslate"
+          icon="create-outline"
+          [appTooltip]="'COMMON.EDIT' | appTranslate"
           (click)="onEditAccount(account)"
           *appHasPermission="'UPDATE_SAVINGSACCOUNT'"
-        >
-          <ion-icon name="create-outline"></ion-icon>
-        </ion-button>
-        <ion-button
-          fill="clear"
-          color="secondary"
-          [attr.aria-label]="'SAVINGS.DEPOSIT' | translate"
-          [appTooltip]="'SAVINGS.DEPOSIT_CASH' | translate"
+        />
+        <app-button
+          type="button"
+          intent="secondary"
+          emphasis="quiet"
+          [label]="'SAVINGS.DEPOSIT' | appTranslate"
+          icon="add-circle-outline"
+          [appTooltip]="'SAVINGS.DEPOSIT_CASH' | appTranslate"
           (click)="onTransaction(account, 'deposit')"
           *appHasPermission="'DEPOSIT_SAVINGSACCOUNT'"
-        >
-          <ion-icon name="add-circle-outline"></ion-icon>
-        </ion-button>
-        <ion-button
-          fill="clear"
-          color="danger"
-          [attr.aria-label]="'SAVINGS.WITHDRAWAL' | translate"
-          [appTooltip]="'SAVINGS.WITHDRAW_CASH' | translate"
+        />
+        <app-button
+          type="button"
+          intent="danger"
+          emphasis="quiet"
+          [label]="'SAVINGS.WITHDRAWAL' | appTranslate"
+          icon="remove-circle-outline"
+          [appTooltip]="'SAVINGS.WITHDRAW_CASH' | appTranslate"
           (click)="onTransaction(account, 'withdrawal')"
           *appHasPermission="'WITHDRAW_SAVINGSACCOUNT'"
-        >
-          <ion-icon name="remove-circle-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,
@@ -208,19 +208,22 @@ export class SavingsAccountsListComponent implements OnInit {
         map((response: GetSavingsAccountsResponse | null) => {
           this.isLoading = false;
           if (!response) return [];
-          const items = Array.from(response.pageItems || []).filter((account) => {
+          // The generated model types `pageItems` as a `Set`, but JSON has no sets and the
+          // platform sends an array. `Array.from` is what bridges the two, so the count has to
+          // come from its result: reading `.size` off the response satisfied the compiler and
+          // returned `undefined` at runtime, which made the arithmetic below `NaN` and the
+          // footer read "1 - 10 of NaN" on every page that had rows.
+          const returned = Array.from(response.pageItems || []);
+          const items = returned.filter((account) => {
             const acc = account as Record<string, unknown>;
             const depositType = acc['depositType'] as Record<string, unknown> | undefined;
             const depositTypeId = depositType ? depositType['id'] : acc['depositTypeId'];
             return depositTypeId !== 200;
           });
           this.totalRecords = response.totalFilteredRecords || 0;
-          // If server-side count is returned, but we filtered client-side, adjust totalRecords accordingly
-          if (response.pageItems && response.pageItems.size !== items.length) {
-            this.totalRecords = Math.max(
-              0,
-              this.totalRecords - (response.pageItems.size - items.length),
-            );
+          // The server counts before this filter runs, so discount whatever it removed.
+          if (returned.length !== items.length) {
+            this.totalRecords = Math.max(0, this.totalRecords - (returned.length - items.length));
           }
           return items;
         }),

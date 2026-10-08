@@ -20,7 +20,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { Router, ActivatedRoute, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import { DefaultService } from '../../../api';
 import { NotificationService } from '../../../core/services/notification.service';
 import { formatDateToFineract, toIsoDate } from '../../../core/utils/date-formatter';
@@ -40,6 +40,7 @@ import {
   IonSelectOption,
   IonTextarea,
 } from '@ionic/angular/standalone';
+import { createPickersReady } from '../../../shared/utils/pickers-ready';
 
 @Component({
   selector: 'app-email-campaign-form',
@@ -47,7 +48,7 @@ import {
   imports: [
     FormsModule,
     RouterModule,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonInput,
     IonTextarea,
@@ -69,9 +70,9 @@ import {
         <ion-card-header>
           <ion-card-title>
             @if (isEditMode()) {
-              {{ 'EMAIL_CAMPAIGNS.EDIT' | translate }}
+              {{ 'EMAIL_CAMPAIGNS.EDIT' | appTranslate }}
             } @else {
-              {{ 'EMAIL_CAMPAIGNS.CREATE' | translate }}
+              {{ 'EMAIL_CAMPAIGNS.CREATE' | appTranslate }}
             }
           </ion-card-title>
         </ion-card-header>
@@ -79,9 +80,9 @@ import {
         <ion-card-content>
           <form #campaignForm="ngForm" (ngSubmit)="onSubmit()" class="campaign-form">
             <ion-item fill="outline" class="full-width">
-              <ion-label position="stacked">{{ 'EMAIL_CAMPAIGNS.NAME' | translate }}</ion-label>
+              <ion-label position="stacked">{{ 'EMAIL_CAMPAIGNS.NAME' | appTranslate }}</ion-label>
               <ion-input
-                [attr.aria-label]="'EMAIL_CAMPAIGNS.NAME' | translate"
+                [attr.aria-label]="'EMAIL_CAMPAIGNS.NAME' | appTranslate"
                 name="campaignName"
                 [ngModel]="campaignName()"
                 (ngModelChange)="campaignName.set($event)"
@@ -90,9 +91,9 @@ import {
             </ion-item>
 
             <ion-item fill="outline" class="full-width">
-              <ion-label position="stacked">{{ 'EMAIL_CAMPAIGNS.TYPE' | translate }}</ion-label>
+              <ion-label position="stacked">{{ 'EMAIL_CAMPAIGNS.TYPE' | appTranslate }}</ion-label>
               <ion-select
-                [attr.aria-label]="'EMAIL_CAMPAIGNS.TYPE' | translate"
+                [attr.aria-label]="'EMAIL_CAMPAIGNS.TYPE' | appTranslate"
                 interface="popover"
                 name="campaignType"
                 [ngModel]="campaignType()"
@@ -105,9 +106,11 @@ import {
             </ion-item>
 
             <ion-item fill="outline" class="full-width">
-              <ion-label position="stacked">{{ 'EMAIL_CAMPAIGNS.SUBJECT' | translate }}</ion-label>
+              <ion-label position="stacked">{{
+                'EMAIL_CAMPAIGNS.SUBJECT' | appTranslate
+              }}</ion-label>
               <ion-input
-                [attr.aria-label]="'EMAIL_CAMPAIGNS.SUBJECT' | translate"
+                [attr.aria-label]="'EMAIL_CAMPAIGNS.SUBJECT' | appTranslate"
                 name="emailSubject"
                 [ngModel]="emailSubject()"
                 (ngModelChange)="emailSubject.set($event)"
@@ -115,9 +118,11 @@ import {
             </ion-item>
 
             <ion-item fill="outline" class="full-width">
-              <ion-label position="stacked">{{ 'EMAIL_CAMPAIGNS.MESSAGE' | translate }}</ion-label>
+              <ion-label position="stacked">{{
+                'EMAIL_CAMPAIGNS.MESSAGE' | appTranslate
+              }}</ion-label>
               <ion-textarea
-                [attr.aria-label]="'EMAIL_CAMPAIGNS.MESSAGE' | translate"
+                [attr.aria-label]="'EMAIL_CAMPAIGNS.MESSAGE' | appTranslate"
                 name="emailMessage"
                 [ngModel]="emailMessage()"
                 (ngModelChange)="emailMessage.set($event)"
@@ -126,8 +131,12 @@ import {
             </ion-item>
 
             <ion-item fill="outline" class="full-width">
-              <ion-label position="stacked">{{ 'EMAIL_CAMPAIGNS.SCHEDULE' | translate }}</ion-label>
-              <ion-datetime-button datetime="scheduledStartDate-picker"></ion-datetime-button>
+              <ion-label position="stacked">{{
+                'EMAIL_CAMPAIGNS.SCHEDULE' | appTranslate
+              }}</ion-label>
+              @if (pickersReady()) {
+                <ion-datetime-button datetime="scheduledStartDate-picker"></ion-datetime-button>
+              }
               <ion-modal [keepContentsMounted]="true">
                 <ng-template>
                   <ion-datetime
@@ -144,14 +153,14 @@ import {
 
             <div class="form-actions">
               <ion-button fill="clear" type="button" (click)="onCancel()" [disabled]="isSaving()">
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               <ion-button
                 color="primary"
                 type="submit"
                 [disabled]="campaignForm.invalid || isSaving()"
               >
-                {{ 'COMMON.SAVE' | translate }}
+                {{ 'COMMON.SAVE' | appTranslate }}
               </ion-button>
             </div>
           </form>
@@ -185,6 +194,9 @@ import {
   ],
 })
 export class EmailCampaignFormComponent implements OnInit {
+  /** See `createPickersReady` — the date buttons must not outrun their pickers. */
+  readonly pickersReady = createPickersReady();
+
   private readonly api = inject(DefaultService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);

@@ -17,9 +17,18 @@
  * under the License.
  */
 
-import { Component, OnInit, computed, signal, inject } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  OnDestroy,
+  computed,
+  signal,
+  inject,
+  viewChildren,
+} from '@angular/core';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { HttpErrorResponse } from '@angular/common/http';
+import { I18N, TranslatePipe } from '../../core/adapters';
 import { DecimalPipe } from '@angular/common';
 import {
   ClientService,
@@ -28,9 +37,12 @@ import {
   GetClientsLoanAccounts,
   GetClientsSavingsAccounts,
   PostClientsClientIdRequest,
+  ShareAccountService,
 } from '../../api';
-import { StatusBadgeComponent } from '../../shared';
-import { HasPermissionDirective } from '../../shared/directives/has-permission.directive';
+import { StatusBadgeComponent, LoadErrorComponent } from '../../shared';
+import { RequiresPermissionDirective } from '../../shared/directives/requires-permission.directive';
+import { createPermissionCheck } from '../../shared/utils/permission-check';
+import { skipErrorToast } from '../../core/http/http-context';
 import { resolveAccountActionType } from '../../core/utils/account-type-resolver';
 import { ClientActionDialogComponent } from './client-action-dialog.component';
 import {
@@ -57,10 +69,11 @@ import { ClientAddressesListComponent } from './tabs/client-addresses-list.compo
 import { ClientFamilyMembersListComponent } from './tabs/client-family-members-list.component';
 import { ClientNotesListComponent } from './tabs/client-notes-list.component';
 import { ClientDocumentsListComponent } from './tabs/client-documents-list.component';
+import { ClientStandingInstructionsTabComponent } from './tabs/client-standing-instructions-tab.component';
+import { DateTimePipe } from '../../shared/pipes/date-time.pipe';
 import { EntityDatatablesComponent } from '../../shared/components/entity-datatables/entity-datatables.component';
 import { CdkTableModule } from '@angular/cdk/table';
 import { DialogService } from '../../core/services/dialog.service';
-import { I18N } from '../../core/adapters';
 import { TooltipDirective } from '../../shared/directives/tooltip.directive';
 import {
   IonButton,
@@ -97,21 +110,61 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
   undoWithdraw: 'UndoWithdrawal',
 };
 
+/**
+ * `depositType.id` on a client's deposit account. Verified against a running platform by opening
+ * one of each: a fixed deposit comes back as 200 and a recurring deposit as 300, both inside the
+ * same `savingsAccounts` array as plain savings.
+ */
+const DEPOSIT_TYPE = { savings: 100, fixed: 200, recurring: 300 } as const;
+
+interface ShareAccountRow {
+  id?: number;
+  accountNo?: string;
+  productName?: string;
+  status?: { value?: string };
+}
+
+/**
+ * The tabs on this screen, named.
+ *
+ * They were positional strings — '0', '7' — which say nothing at the point of use and shift
+ * meaning whenever a tab is inserted in the middle. The values are still strings because
+ * `ion-segment` compares them as such.
+ */
+export const CLIENT_TAB = {
+  details: 'details',
+  savings: 'savings',
+  loans: 'loans',
+  identifiers: 'identifiers',
+  addresses: 'addresses',
+  familyMembers: 'familyMembers',
+  notes: 'notes',
+  documents: 'documents',
+  customFields: 'customFields',
+  deposits: 'deposits',
+  shares: 'shares',
+  standingInstructions: 'standingInstructions',
+} as const;
+
+export type ClientTab = (typeof CLIENT_TAB)[keyof typeof CLIENT_TAB];
+
 @Component({
   selector: 'app-client-view',
   standalone: true,
   imports: [
     RouterModule,
-    TranslateModule,
+    TranslatePipe,
     CdkTableModule,
     StatusBadgeComponent,
-    HasPermissionDirective,
+    LoadErrorComponent,
+    RequiresPermissionDirective,
     ClientIdentifiersListComponent,
     ClientAddressesListComponent,
     ClientFamilyMembersListComponent,
     ClientNotesListComponent,
     ClientDocumentsListComponent,
     EntityDatatablesComponent,
+    ClientStandingInstructionsTabComponent,
     DecimalPipe,
     IonIcon,
     IonButton,
@@ -126,15 +179,26 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
     IonList,
     IonItem,
     TooltipDirective,
+    DateTimePipe,
   ],
   template: `
     <div class="view-container">
-      @if (client()) {
-        <div class="breadcrumb">
-          <a routerLink="/clients">Clients</a> /
-          <span>{{ client()?.displayName }}</span>
-        </div>
-
+      @if (loadError() === 'not-found') {
+        <app-load-error
+          testId="client-load-error"
+          icon="person-remove-outline"
+          [message]="'CLIENTS.ERRORS.NOT_FOUND' | appTranslate"
+          [actionLabel]="'CLIENTS.BACK_TO_CLIENTS' | appTranslate"
+          (action)="onBackToClients()"
+        ></app-load-error>
+      } @else if (loadError() === 'failed') {
+        <app-load-error
+          testId="client-load-error"
+          [message]="'CLIENTS.LOAD_FAILED' | appTranslate"
+          [actionLabel]="'COMMON.RETRY' | appTranslate"
+          (action)="loadClientData()"
+        ></app-load-error>
+      } @else if (client()) {
         <ion-card class="header-card">
           <ion-card-content class="header-content">
             <div class="client-title-area">
@@ -163,17 +227,17 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
                 fill="outline"
                 color="primary"
                 (click)="onEditClient()"
-                *appHasPermission="'UPDATE_CLIENT'"
+                appRequiresPermission="UPDATE_CLIENT"
               >
                 <ion-icon name="create-outline"></ion-icon>
-                {{ 'COMMON.EDIT' | translate }}
+                {{ 'COMMON.EDIT' | appTranslate }}
               </ion-button>
 
               <ion-button
                 fill="outline"
                 color="secondary"
                 id="clientActionsMenu-trigger"
-                *appHasPermission="[
+                [appRequiresPermission]="[
                   'ACTIVATE_CLIENT',
                   'CLOSE_CLIENT',
                   'REJECT_CLIENT',
@@ -181,7 +245,7 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
                   'DELETE_CLIENT',
                   'REACTIVATE_CLIENT',
                   'UNDOREJECT_CLIENT',
-                  'UNDOWITHDRAW_CLIENT',
+                  'UNDOWITHDRAWAL_CLIENT',
                   'PROPOSETRANSFER_CLIENT',
                   'PROPOSEANDACCEPTTRANSFER_CLIENT',
                   'ACCEPTTRANSFER_CLIENT',
@@ -193,7 +257,7 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
                 ]"
               >
                 <ion-icon name="settings-outline"></ion-icon>
-                {{ 'COMMON.ACTIONS' | translate }}
+                {{ 'COMMON.ACTIONS' | appTranslate }}
               </ion-button>
 
               <ion-popover trigger="clientActionsMenu-trigger" [dismissOnSelect]="true">
@@ -203,63 +267,65 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
                       <ion-item
                         button
                         (click)="onClientAction('activate')"
-                        *appHasPermission="'ACTIVATE_CLIENT'"
+                        appRequiresPermission="ACTIVATE_CLIENT"
                       >
                         <ion-icon slot="start" name="play-circle-outline"></ion-icon>
-                        <ion-label>{{ 'ACTIONS.ACTIVATE_CLIENT' | translate }}</ion-label>
+                        <ion-label>{{ 'ACTIONS.ACTIVATE_CLIENT' | appTranslate }}</ion-label>
                       </ion-item>
                       <ion-item
                         button
                         (click)="onClientAction('reject')"
-                        *appHasPermission="'REJECT_CLIENT'"
+                        appRequiresPermission="REJECT_CLIENT"
                       >
                         <ion-icon slot="start" name="alert-circle-outline"></ion-icon>
-                        <ion-label>{{ 'ACTIONS.REJECT_CLIENT' | translate }}</ion-label>
+                        <ion-label>{{ 'ACTIONS.REJECT_CLIENT' | appTranslate }}</ion-label>
                       </ion-item>
                       <ion-item
                         button
                         (click)="onClientAction('withdraw')"
-                        *appHasPermission="'WITHDRAW_CLIENT'"
+                        appRequiresPermission="WITHDRAW_CLIENT"
                       >
                         <ion-icon slot="start" name="close-circle-outline"></ion-icon>
-                        <ion-label>{{ 'ACTIONS.WITHDRAW_CLIENT' | translate }}</ion-label>
+                        <ion-label>{{ 'ACTIONS.WITHDRAW_CLIENT' | appTranslate }}</ion-label>
                       </ion-item>
                       <ion-item
                         button
                         (click)="onDeleteClient()"
-                        *appHasPermission="'DELETE_CLIENT'"
+                        appRequiresPermission="DELETE_CLIENT"
                       >
                         <ion-icon slot="start" name="trash-outline"></ion-icon>
-                        <ion-label>{{ 'COMMON.DELETE' | translate }}</ion-label>
+                        <ion-label>{{ 'COMMON.DELETE' | appTranslate }}</ion-label>
                       </ion-item>
                     }
                     @if (client()?.status?.id === CLIENT_STATUS.ACTIVE) {
                       <ion-item
                         button
                         (click)="onClientAction('close')"
-                        *appHasPermission="'CLOSE_CLIENT'"
+                        appRequiresPermission="CLOSE_CLIENT"
                       >
                         <ion-icon slot="start" name="close-outline"></ion-icon>
-                        <ion-label>{{ 'ACTIONS.CLOSE_CLIENT' | translate }}</ion-label>
+                        <ion-label>{{ 'ACTIONS.CLOSE_CLIENT' | appTranslate }}</ion-label>
                       </ion-item>
                       <ion-item
                         button
                         (click)="onProposeTransfer()"
                         data-testid="client-propose-transfer-action"
-                        *appHasPermission="'PROPOSETRANSFER_CLIENT'"
+                        appRequiresPermission="PROPOSETRANSFER_CLIENT"
                       >
                         <ion-icon slot="start" name="swap-horizontal-outline"></ion-icon>
-                        <ion-label>{{ 'CLIENTS.ACTIONS.PROPOSE_TRANSFER' | translate }}</ion-label>
+                        <ion-label>{{
+                          'CLIENTS.ACTIONS.PROPOSE_TRANSFER' | appTranslate
+                        }}</ion-label>
                       </ion-item>
                       <ion-item
                         button
                         (click)="onProposeAndAcceptTransfer()"
                         data-testid="client-propose-and-accept-transfer-action"
-                        *appHasPermission="'PROPOSEANDACCEPTTRANSFER_CLIENT'"
+                        appRequiresPermission="PROPOSEANDACCEPTTRANSFER_CLIENT"
                       >
                         <ion-icon slot="start" name="git-compare-outline"></ion-icon>
                         <ion-label>
-                          {{ 'CLIENTS.ACTIONS.PROPOSE_AND_ACCEPT_TRANSFER' | translate }}
+                          {{ 'CLIENTS.ACTIONS.PROPOSE_AND_ACCEPT_TRANSFER' | appTranslate }}
                         </ion-label>
                       </ion-item>
                     }
@@ -269,19 +335,23 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
                         button
                         (click)="onAcceptTransfer()"
                         data-testid="client-accept-transfer-action"
-                        *appHasPermission="'ACCEPTTRANSFER_CLIENT'"
+                        appRequiresPermission="ACCEPTTRANSFER_CLIENT"
                       >
                         <ion-icon slot="start" name="checkmark-circle-outline"></ion-icon>
-                        <ion-label>{{ 'CLIENTS.ACTIONS.ACCEPT_TRANSFER' | translate }}</ion-label>
+                        <ion-label>{{
+                          'CLIENTS.ACTIONS.ACCEPT_TRANSFER' | appTranslate
+                        }}</ion-label>
                       </ion-item>
                       <ion-item
                         button
                         (click)="onRejectTransfer()"
                         data-testid="client-reject-transfer-action"
-                        *appHasPermission="'REJECTTRANSFER_CLIENT'"
+                        appRequiresPermission="REJECTTRANSFER_CLIENT"
                       >
                         <ion-icon slot="start" name="close-circle-outline"></ion-icon>
-                        <ion-label>{{ 'CLIENTS.ACTIONS.REJECT_TRANSFER' | translate }}</ion-label>
+                        <ion-label>{{
+                          'CLIENTS.ACTIONS.REJECT_TRANSFER' | appTranslate
+                        }}</ion-label>
                       </ion-item>
                     }
 
@@ -295,10 +365,12 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
                         button
                         (click)="onWithdrawTransfer()"
                         data-testid="client-withdraw-transfer-action"
-                        *appHasPermission="'WITHDRAWTRANSFER_CLIENT'"
+                        appRequiresPermission="WITHDRAWTRANSFER_CLIENT"
                       >
                         <ion-icon slot="start" name="arrow-undo-outline"></ion-icon>
-                        <ion-label>{{ 'CLIENTS.ACTIONS.WITHDRAW_TRANSFER' | translate }}</ion-label>
+                        <ion-label>{{
+                          'CLIENTS.ACTIONS.WITHDRAW_TRANSFER' | appTranslate
+                        }}</ion-label>
                       </ion-item>
                     }
 
@@ -307,31 +379,33 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
                         button
                         (click)="onAssignStaff()"
                         data-testid="client-assign-staff-action"
-                        *appHasPermission="'ASSIGNSTAFF_CLIENT'"
+                        appRequiresPermission="ASSIGNSTAFF_CLIENT"
                       >
                         <ion-icon slot="start" name="person-add-outline"></ion-icon>
-                        <ion-label>{{ 'CLIENTS.ACTIONS.ASSIGN_STAFF' | translate }}</ion-label>
+                        <ion-label>{{ 'CLIENTS.ACTIONS.ASSIGN_STAFF' | appTranslate }}</ion-label>
                       </ion-item>
                       @if (assignedStaffId() !== undefined) {
                         <ion-item
                           button
                           (click)="onUnassignStaff()"
                           data-testid="client-unassign-staff-action"
-                          *appHasPermission="'UNASSIGNSTAFF_CLIENT'"
+                          appRequiresPermission="UNASSIGNSTAFF_CLIENT"
                         >
                           <ion-icon slot="start" name="person-remove-outline"></ion-icon>
-                          <ion-label>{{ 'CLIENTS.ACTIONS.UNASSIGN_STAFF' | translate }}</ion-label>
+                          <ion-label>{{
+                            'CLIENTS.ACTIONS.UNASSIGN_STAFF' | appTranslate
+                          }}</ion-label>
                         </ion-item>
                       }
                       <ion-item
                         button
                         (click)="onUpdateSavingsAccount()"
                         data-testid="client-update-savings-account-action"
-                        *appHasPermission="'UPDATESAVINGSACCOUNT_CLIENT'"
+                        appRequiresPermission="UPDATESAVINGSACCOUNT_CLIENT"
                       >
                         <ion-icon slot="start" name="wallet-outline"></ion-icon>
                         <ion-label>
-                          {{ 'CLIENTS.ACTIONS.UPDATE_SAVINGS_ACCOUNT' | translate }}
+                          {{ 'CLIENTS.ACTIONS.UPDATE_SAVINGS_ACCOUNT' | appTranslate }}
                         </ion-label>
                       </ion-item>
                     }
@@ -339,30 +413,30 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
                       <ion-item
                         button
                         (click)="onClientAction('reactivate')"
-                        *appHasPermission="'REACTIVATE_CLIENT'"
+                        appRequiresPermission="REACTIVATE_CLIENT"
                       >
                         <ion-icon slot="start" name="refresh-outline"></ion-icon>
-                        <ion-label>{{ 'ACTIONS.REACTIVATE_CLIENT' | translate }}</ion-label>
+                        <ion-label>{{ 'ACTIONS.REACTIVATE_CLIENT' | appTranslate }}</ion-label>
                       </ion-item>
                     }
                     @if (client()?.status?.id === CLIENT_STATUS.REJECTED) {
                       <ion-item
                         button
                         (click)="onClientAction('undoReject')"
-                        *appHasPermission="'UNDOREJECT_CLIENT'"
+                        appRequiresPermission="UNDOREJECT_CLIENT"
                       >
                         <ion-icon slot="start" name="arrow-undo-outline"></ion-icon>
-                        <ion-label>{{ 'ACTIONS.UNDO_REJECT_CLIENT' | translate }}</ion-label>
+                        <ion-label>{{ 'ACTIONS.UNDO_REJECT_CLIENT' | appTranslate }}</ion-label>
                       </ion-item>
                     }
                     @if (client()?.status?.id === CLIENT_STATUS.WITHDRAWN) {
                       <ion-item
                         button
                         (click)="onClientAction('undoWithdraw')"
-                        *appHasPermission="'UNDOWITHDRAW_CLIENT'"
+                        appRequiresPermission="UNDOWITHDRAWAL_CLIENT"
                       >
                         <ion-icon slot="start" name="arrow-undo-outline"></ion-icon>
-                        <ion-label>{{ 'ACTIONS.UNDO_WITHDRAW_CLIENT' | translate }}</ion-label>
+                        <ion-label>{{ 'ACTIONS.UNDO_WITHDRAW_CLIENT' | appTranslate }}</ion-label>
                       </ion-item>
                     }
                   </ion-list>
@@ -371,39 +445,39 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
 
               <ion-button color="primary" id="createMenu-trigger">
                 <ion-icon name="add-outline"></ion-icon>
-                {{ 'ACTIONS.NEW_ACCOUNT' | translate }}
+                {{ 'ACTIONS.NEW_ACCOUNT' | appTranslate }}
               </ion-button>
 
               <ion-popover trigger="createMenu-trigger" [dismissOnSelect]="true">
                 <ng-template>
                   <ion-list>
-                    <ion-item button (click)="onCreateLoan()" *appHasPermission="'CREATE_LOAN'">
+                    <ion-item button (click)="onCreateLoan()" appRequiresPermission="CREATE_LOAN">
                       <ion-icon slot="start" name="business-outline"></ion-icon>
-                      <ion-label>{{ 'ACTIONS.LOAN_ACCOUNT' | translate }}</ion-label>
+                      <ion-label>{{ 'ACTIONS.LOAN_ACCOUNT' | appTranslate }}</ion-label>
                     </ion-item>
                     <ion-item
                       button
                       (click)="onCreateSavings()"
-                      *appHasPermission="'CREATE_SAVINGSACCOUNT'"
+                      appRequiresPermission="CREATE_SAVINGSACCOUNT"
                     >
                       <ion-icon slot="start" name="wallet-outline"></ion-icon>
-                      <ion-label>{{ 'ACTIONS.SAVINGS_ACCOUNT' | translate }}</ion-label>
+                      <ion-label>{{ 'ACTIONS.SAVINGS_ACCOUNT' | appTranslate }}</ion-label>
                     </ion-item>
                     <ion-item
                       button
                       (click)="onCreateFixed()"
-                      *appHasPermission="'CREATE_FIXEDDEPOSITACCOUNT'"
+                      appRequiresPermission="CREATE_FIXEDDEPOSITACCOUNT"
                     >
                       <ion-icon slot="start" name="lock-closed-outline"></ion-icon>
-                      <ion-label>{{ 'ACTIONS.FIXED_DEPOSIT' | translate }}</ion-label>
+                      <ion-label>{{ 'ACTIONS.FIXED_DEPOSIT' | appTranslate }}</ion-label>
                     </ion-item>
                     <ion-item
                       button
                       (click)="onCreateRecurring()"
-                      *appHasPermission="'CREATE_RECURRINGDEPOSITACCOUNT'"
+                      appRequiresPermission="CREATE_RECURRINGDEPOSITACCOUNT"
                     >
                       <ion-icon slot="start" name="refresh-circle-outline"></ion-icon>
-                      <ion-label>{{ 'ACTIONS.RECURRING_DEPOSIT' | translate }}</ion-label>
+                      <ion-label>{{ 'ACTIONS.RECURRING_DEPOSIT' | appTranslate }}</ion-label>
                     </ion-item>
                   </ion-list>
                 </ng-template>
@@ -411,69 +485,81 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
 
               <ion-button fill="clear" (click)="onBack()">
                 <ion-icon name="arrow-back-outline"></ion-icon>
-                {{ 'COMMON.BACK' | translate }}
+                {{ 'COMMON.BACK' | appTranslate }}
               </ion-button>
             </div>
           </ion-card-content>
         </ion-card>
 
         <div class="content-body">
-          <ion-segment [value]="activeTab()" (ionChange)="activeTab.set($any($event).detail.value)">
-            <ion-segment-button value="0">
-              <ion-label>{{ 'CLIENTS.DETAILS' | translate }}</ion-label>
+          <ion-segment [value]="activeTab()" (ionChange)="onTabChange($any($event).detail.value)">
+            <ion-segment-button [value]="TAB.details">
+              <ion-label>{{ 'CLIENTS.DETAILS' | appTranslate }}</ion-label>
             </ion-segment-button>
-            <ion-segment-button value="1">
-              <ion-label>{{ 'CLIENTS.SAVINGS_ACCOUNTS' | translate }}</ion-label>
+            <ion-segment-button [value]="TAB.savings">
+              <ion-label>{{ 'CLIENTS.SAVINGS_ACCOUNTS' | appTranslate }}</ion-label>
             </ion-segment-button>
-            <ion-segment-button value="2">
-              <ion-label>{{ 'CLIENTS.LOAN_ACCOUNTS' | translate }}</ion-label>
+            <ion-segment-button [value]="TAB.loans">
+              <ion-label>{{ 'CLIENTS.LOAN_ACCOUNTS' | appTranslate }}</ion-label>
             </ion-segment-button>
-            <ion-segment-button value="3">
-              <ion-label>{{ 'CLIENTS.IDENTIFIERS' | translate }}</ion-label>
+            <ion-segment-button [value]="TAB.identifiers">
+              <ion-label>{{ 'CLIENTS.IDENTIFIERS' | appTranslate }}</ion-label>
             </ion-segment-button>
-            <ion-segment-button value="4">
-              <ion-label>{{ 'CLIENTS.ADDRESSES' | translate }}</ion-label>
+            <ion-segment-button [value]="TAB.addresses">
+              <ion-label>{{ 'CLIENTS.ADDRESSES' | appTranslate }}</ion-label>
             </ion-segment-button>
-            <ion-segment-button value="5">
-              <ion-label>{{ 'CLIENTS.FAMILY_MEMBERS' | translate }}</ion-label>
+            <ion-segment-button [value]="TAB.familyMembers">
+              <ion-label>{{ 'CLIENTS.FAMILY_MEMBERS' | appTranslate }}</ion-label>
             </ion-segment-button>
-            <ion-segment-button value="6">
-              <ion-label>{{ 'CLIENTS.NOTES' | translate }}</ion-label>
+            <ion-segment-button [value]="TAB.notes">
+              <ion-label>{{ 'CLIENTS.NOTES' | appTranslate }}</ion-label>
             </ion-segment-button>
-            <ion-segment-button value="7">
-              <ion-label>{{ 'CLIENTS.DOCUMENTS' | translate }}</ion-label>
+            <ion-segment-button [value]="TAB.documents">
+              <ion-label>{{ 'CLIENTS.DOCUMENTS' | appTranslate }}</ion-label>
             </ion-segment-button>
-            <ion-segment-button value="8">
-              <ion-label>{{ 'SYSTEM.CUSTOM_FIELDS' | translate }}</ion-label>
+            <ion-segment-button [value]="TAB.customFields">
+              <ion-label>{{ 'SYSTEM.CUSTOM_FIELDS' | appTranslate }}</ion-label>
+            </ion-segment-button>
+            <ion-segment-button [value]="TAB.deposits" data-testid="client-tab-deposits">
+              <ion-label>{{ 'CLIENTS.DEPOSIT_ACCOUNTS' | appTranslate }}</ion-label>
+            </ion-segment-button>
+            <ion-segment-button [value]="TAB.shares" data-testid="client-tab-shares">
+              <ion-label>{{ 'CLIENTS.SHARE_ACCOUNTS' | appTranslate }}</ion-label>
+            </ion-segment-button>
+            <ion-segment-button
+              [value]="TAB.standingInstructions"
+              data-testid="client-tab-standing-instructions"
+            >
+              <ion-label>{{ 'SAVINGS.STANDING_INSTRUCTIONS' | appTranslate }}</ion-label>
             </ion-segment-button>
           </ion-segment>
 
-          @if (activeTab() === '0') {
+          @if (activeTab() === TAB.details) {
             <div class="tab-content">
               <div class="info-grid">
                 <ion-card class="info-card">
                   <ion-card-header>
                     <ion-card-title>
                       <ion-icon name="id-card-outline"></ion-icon>
-                      {{ 'CLIENTS.GENERAL_PROFILE' | translate }}
+                      {{ 'CLIENTS.GENERAL_PROFILE' | appTranslate }}
                     </ion-card-title>
                   </ion-card-header>
                   <ion-card-content class="details-list">
                     <div class="detail-item">
-                      <span class="label">{{ 'CLIENTS.FIRST_NAME' | translate }}</span>
+                      <span class="label">{{ 'CLIENTS.FIRST_NAME' | appTranslate }}</span>
                       <span class="value">{{ client()?.firstname || '-' }}</span>
                     </div>
                     <div class="detail-item">
-                      <span class="label">{{ 'CLIENTS.LAST_NAME' | translate }}</span>
+                      <span class="label">{{ 'CLIENTS.LAST_NAME' | appTranslate }}</span>
                       <span class="value">{{ client()?.lastname || '-' }}</span>
                     </div>
                     <div class="detail-item">
-                      <span class="label">{{ 'COMMON.EXTERNAL_ID' | translate }}</span>
+                      <span class="label">{{ 'COMMON.EXTERNAL_ID' | appTranslate }}</span>
                       <span class="value">{{ client()?.externalId || '-' }}</span>
                     </div>
                     <div class="detail-item">
-                      <span class="label">{{ 'CLIENTS.LEGAL_FORM' | translate }}</span>
-                      <span class="value">{{ 'CLIENTS.PERSON' | translate }}</span>
+                      <span class="label">{{ 'CLIENTS.LEGAL_FORM' | appTranslate }}</span>
+                      <span class="value">{{ 'CLIENTS.PERSON' | appTranslate }}</span>
                     </div>
                   </ion-card-content>
                 </ion-card>
@@ -482,57 +568,63 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
                   <ion-card-header>
                     <ion-card-title>
                       <ion-icon name="mail-open-outline"></ion-icon>
-                      {{ 'CLIENTS.CONTACT_STATUS' | translate }}
+                      {{ 'CLIENTS.CONTACT_STATUS' | appTranslate }}
                     </ion-card-title>
                   </ion-card-header>
                   <ion-card-content class="details-list">
                     <div class="detail-item">
-                      <span class="label">{{ 'COMMON.EMAIL' | translate }}</span>
+                      <span class="label">{{ 'COMMON.EMAIL' | appTranslate }}</span>
                       <span class="value">{{ client()?.emailAddress || '-' }}</span>
                     </div>
                     <div class="detail-item">
-                      <span class="label">{{ 'COMMON.ACTIVATION_DATE' | translate }}</span>
-                      <span class="value">{{ formattedActivationDate }}</span>
+                      <span class="label">{{ 'COMMON.ACTIVATION_DATE' | appTranslate }}</span>
+                      <span class="value">{{ this.client()?.activationDate | dateTime }}</span>
                     </div>
                     <div class="detail-item">
-                      <span class="label">{{ 'CLIENTS.TIMELINE_SUBMITTED' | translate }}</span>
-                      <span class="value">{{ formattedSubmissionDate }}</span>
+                      <span class="label">{{ 'CLIENTS.TIMELINE_SUBMITTED' | appTranslate }}</span>
+                      <span class="value">{{
+                        this.client()?.timeline?.submittedOnDate | dateTime
+                      }}</span>
                     </div>
                   </ion-card-content>
                 </ion-card>
               </div>
             </div>
           }
-          @if (activeTab() === '1') {
+          @if (activeTab() === TAB.savings) {
             <div class="tab-content">
               <ion-card class="table-card">
                 <ion-card-content>
-                  @if (savingsAccounts().length > 0) {
-                    <table cdk-table [dataSource]="savingsAccounts()" class="full-width-table">
+                  @if (plainSavingsAccounts().length > 0) {
+                    <table cdk-table [dataSource]="plainSavingsAccounts()" class="full-width-table">
                       <ng-container cdkColumnDef="accountNo">
                         <th cdk-header-cell *cdkHeaderCellDef>
-                          {{ 'COMMON.ACCOUNT_NO' | translate }}
+                          {{ 'COMMON.ACCOUNT_NO' | appTranslate }}
                         </th>
                         <td cdk-cell *cdkCellDef="let account">
-                          <a
-                            class="clickable-link"
-                            [routerLink]="['/products/savings-accounts/view', account.id]"
-                          >
+                          @if (canViewSavings()) {
+                            <a
+                              class="clickable-link"
+                              [routerLink]="['/products/savings-accounts/view', account.id]"
+                            >
+                              {{ account.accountNo }}
+                            </a>
+                          } @else {
                             {{ account.accountNo }}
-                          </a>
+                          }
                         </td>
                       </ng-container>
 
                       <ng-container cdkColumnDef="productName">
                         <th cdk-header-cell *cdkHeaderCellDef>
-                          {{ 'COMMON.PRODUCT' | translate }}
+                          {{ 'COMMON.PRODUCT' | appTranslate }}
                         </th>
                         <td cdk-cell *cdkCellDef="let account">{{ account.productName }}</td>
                       </ng-container>
 
                       <ng-container cdkColumnDef="balance">
                         <th cdk-header-cell *cdkHeaderCellDef>
-                          {{ 'COMMON.BALANCE' | translate }}
+                          {{ 'COMMON.BALANCE' | appTranslate }}
                         </th>
                         <td cdk-cell *cdkCellDef="let account">
                           {{ account.currency?.displaySymbol }}
@@ -542,7 +634,7 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
 
                       <ng-container cdkColumnDef="status">
                         <th cdk-header-cell *cdkHeaderCellDef>
-                          {{ 'COMMON.STATUS' | translate }}
+                          {{ 'COMMON.STATUS' | appTranslate }}
                         </th>
                         <td cdk-cell *cdkCellDef="let account">
                           <app-status-badge [status]="account.status"></app-status-badge>
@@ -551,15 +643,16 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
 
                       <ng-container cdkColumnDef="actions">
                         <th cdk-header-cell *cdkHeaderCellDef>
-                          {{ 'COMMON.ACTIONS' | translate }}
+                          {{ 'COMMON.ACTIONS' | appTranslate }}
                         </th>
                         <td cdk-cell *cdkCellDef="let account">
                           <ion-button
                             fill="clear"
                             color="primary"
                             (click)="onSavingsTransaction(account.id, 'deposit')"
-                            *appHasPermission="'DEPOSIT_SAVINGSACCOUNT'"
-                            [appTooltip]="'SAVINGS.DEPOSIT' | translate"
+                            appRequiresPermission="DEPOSIT_SAVINGSACCOUNT"
+                            [attr.aria-label]="'SAVINGS.DEPOSIT' | appTranslate"
+                            [appTooltip]="'SAVINGS.DEPOSIT' | appTranslate"
                           >
                             <ion-icon name="add-circle-outline"></ion-icon>
                           </ion-button>
@@ -569,8 +662,9 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
                               fill="clear"
                               color="secondary"
                               (click)="onSavingsAction(account.id, 'approve', account)"
-                              *appHasPermission="'APPROVE_SAVINGSACCOUNT'"
-                              [appTooltip]="'LOANS.APPROVE' | translate"
+                              appRequiresPermission="APPROVE_SAVINGSACCOUNT"
+                              [attr.aria-label]="'LOANS.APPROVE' | appTranslate"
+                              [appTooltip]="'LOANS.APPROVE' | appTranslate"
                             >
                               <ion-icon name="checkmark-circle-outline"></ion-icon>
                             </ion-button>
@@ -581,8 +675,9 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
                               fill="clear"
                               color="primary"
                               (click)="onSavingsAction(account.id, 'activate', account)"
-                              *appHasPermission="'ACTIVATE_SAVINGSACCOUNT'"
-                              [appTooltip]="'LOANS.ACTIVATE' | translate"
+                              appRequiresPermission="ACTIVATE_SAVINGSACCOUNT"
+                              [attr.aria-label]="'LOANS.ACTIVATE' | appTranslate"
+                              [appTooltip]="'LOANS.ACTIVATE' | appTranslate"
                             >
                               <ion-icon name="play-circle-outline"></ion-icon>
                             </ion-button>
@@ -593,8 +688,9 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
                               fill="clear"
                               color="danger"
                               (click)="onSavingsAction(account.id, 'close', account)"
-                              *appHasPermission="'CLOSE_SAVINGSACCOUNT'"
-                              [appTooltip]="'LOANS.CLOSE' | translate"
+                              appRequiresPermission="CLOSE_SAVINGSACCOUNT"
+                              [attr.aria-label]="'LOANS.CLOSE' | appTranslate"
+                              [appTooltip]="'LOANS.CLOSE' | appTranslate"
                             >
                               <ion-icon name="close-circle-outline"></ion-icon>
                             </ion-button>
@@ -604,8 +700,9 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
                             fill="clear"
                             color="danger"
                             (click)="onSavingsTransaction(account.id, 'withdrawal')"
-                            *appHasPermission="'WITHDRAW_SAVINGSACCOUNT'"
-                            [appTooltip]="'SAVINGS.WITHDRAWAL' | translate"
+                            appRequiresPermission="WITHDRAW_SAVINGSACCOUNT"
+                            [attr.aria-label]="'SAVINGS.WITHDRAWAL' | appTranslate"
+                            [appTooltip]="'SAVINGS.WITHDRAWAL' | appTranslate"
                           >
                             <ion-icon name="remove-circle-outline"></ion-icon>
                           </ion-button>
@@ -618,14 +715,23 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
                   } @else {
                     <div class="empty-state">
                       <ion-icon name="wallet-outline"></ion-icon>
-                      <p>{{ 'CLIENTS.NO_SAVINGS_ACCOUNTS' | translate }}</p>
+                      <p>{{ 'CLIENTS.NO_SAVINGS_ACCOUNTS' | appTranslate }}</p>
+                      <ion-button
+                        color="primary"
+                        data-testid="client-create-savings-account"
+                        (click)="onCreateSavings()"
+                        appRequiresPermission="CREATE_SAVINGSACCOUNT"
+                      >
+                        <ion-icon slot="start" name="add-outline"></ion-icon>
+                        {{ 'ACTIONS.CREATE_SAVINGS_ACCOUNT' | appTranslate }}
+                      </ion-button>
                     </div>
                   }
                 </ion-card-content>
               </ion-card>
             </div>
           }
-          @if (activeTab() === '2') {
+          @if (activeTab() === TAB.loans) {
             <div class="tab-content">
               <ion-card class="table-card">
                 <ion-card-content>
@@ -633,25 +739,29 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
                     <table cdk-table [dataSource]="loanAccounts()" class="full-width-table">
                       <ng-container cdkColumnDef="accountNo">
                         <th cdk-header-cell *cdkHeaderCellDef>
-                          {{ 'COMMON.ACCOUNT_NO' | translate }}
+                          {{ 'COMMON.ACCOUNT_NO' | appTranslate }}
                         </th>
                         <td cdk-cell *cdkCellDef="let account">
-                          <a class="clickable-link" [routerLink]="['/loans/view', account.id]">
+                          @if (canViewLoan()) {
+                            <a class="clickable-link" [routerLink]="['/loans/view', account.id]">
+                              {{ account.accountNo }}
+                            </a>
+                          } @else {
                             {{ account.accountNo }}
-                          </a>
+                          }
                         </td>
                       </ng-container>
 
                       <ng-container cdkColumnDef="productName">
                         <th cdk-header-cell *cdkHeaderCellDef>
-                          {{ 'COMMON.PRODUCT' | translate }}
+                          {{ 'COMMON.PRODUCT' | appTranslate }}
                         </th>
                         <td cdk-cell *cdkCellDef="let account">{{ account.productName }}</td>
                       </ng-container>
 
                       <ng-container cdkColumnDef="principal">
                         <th cdk-header-cell *cdkHeaderCellDef>
-                          {{ 'LOANS.PRINCIPAL' | translate }}
+                          {{ 'LOANS.PRINCIPAL' | appTranslate }}
                         </th>
                         <td cdk-cell *cdkCellDef="let account">
                           {{ account.currency?.displaySymbol }}
@@ -661,7 +771,7 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
 
                       <ng-container cdkColumnDef="status">
                         <th cdk-header-cell *cdkHeaderCellDef>
-                          {{ 'COMMON.STATUS' | translate }}
+                          {{ 'COMMON.STATUS' | appTranslate }}
                         </th>
                         <td cdk-cell *cdkCellDef="let account">
                           <app-status-badge [status]="account.status"></app-status-badge>
@@ -670,15 +780,16 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
 
                       <ng-container cdkColumnDef="actions">
                         <th cdk-header-cell *cdkHeaderCellDef>
-                          {{ 'COMMON.ACTIONS' | translate }}
+                          {{ 'COMMON.ACTIONS' | appTranslate }}
                         </th>
                         <td cdk-cell *cdkCellDef="let account">
                           <ion-button
                             fill="clear"
                             color="primary"
                             (click)="onLoanTransaction(account.id, 'repayment')"
-                            *appHasPermission="'REPAYMENT_LOAN'"
-                            [appTooltip]="'LOANS.REPAYMENT' | translate"
+                            appRequiresPermission="REPAYMENT_LOAN"
+                            [attr.aria-label]="'LOANS.REPAYMENT' | appTranslate"
+                            [appTooltip]="'LOANS.REPAYMENT' | appTranslate"
                           >
                             <ion-icon name="card-outline"></ion-icon>
                           </ion-button>
@@ -688,7 +799,8 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
                               fill="clear"
                               color="secondary"
                               (click)="onLoanAction(account.id, 'approve')"
-                              [appTooltip]="'LOANS.APPROVE' | translate"
+                              [attr.aria-label]="'LOANS.APPROVE' | appTranslate"
+                              [appTooltip]="'LOANS.APPROVE' | appTranslate"
                             >
                               <ion-icon name="checkmark-circle-outline"></ion-icon>
                             </ion-button>
@@ -699,7 +811,8 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
                               fill="clear"
                               color="secondary"
                               (click)="onLoanAction(account.id, 'disburse')"
-                              [appTooltip]="'LOANS.DISBURSE' | translate"
+                              [attr.aria-label]="'LOANS.DISBURSE' | appTranslate"
+                              [appTooltip]="'LOANS.DISBURSE' | appTranslate"
                             >
                               <ion-icon name="open-outline"></ion-icon>
                             </ion-button>
@@ -710,8 +823,9 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
                               fill="clear"
                               color="danger"
                               (click)="onLoanAction(account.id, 'close')"
-                              *appHasPermission="'CLOSE_LOAN'"
-                              [appTooltip]="'LOANS.CLOSE' | translate"
+                              appRequiresPermission="CLOSE_LOAN"
+                              [attr.aria-label]="'LOANS.CLOSE' | appTranslate"
+                              [appTooltip]="'LOANS.CLOSE' | appTranslate"
                             >
                               <ion-icon name="close-circle-outline"></ion-icon>
                             </ion-button>
@@ -725,46 +839,153 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
                   } @else {
                     <div class="empty-state">
                       <ion-icon name="card-outline"></ion-icon>
-                      <p>{{ 'CLIENTS.NO_LOAN_ACCOUNTS' | translate }}</p>
+                      <p>{{ 'CLIENTS.NO_LOAN_ACCOUNTS' | appTranslate }}</p>
+                      <ion-button
+                        color="primary"
+                        data-testid="client-create-loan-account"
+                        (click)="onCreateLoan()"
+                        appRequiresPermission="CREATE_LOAN"
+                      >
+                        <ion-icon slot="start" name="add-outline"></ion-icon>
+                        {{ 'LOANS.CREATE_LOAN' | appTranslate }}
+                      </ion-button>
                     </div>
                   }
                 </ion-card-content>
               </ion-card>
             </div>
           }
-          @if (activeTab() === '3') {
+          @if (activeTab() === TAB.identifiers) {
             <div class="tab-content">
               <app-client-identifiers-list [clientId]="clientId()"></app-client-identifiers-list>
             </div>
           }
-          @if (activeTab() === '4') {
+          @if (activeTab() === TAB.addresses) {
             <div class="tab-content">
               <app-client-addresses-list [clientId]="clientId()"></app-client-addresses-list>
             </div>
           }
-          @if (activeTab() === '5') {
+          @if (activeTab() === TAB.familyMembers) {
             <div class="tab-content">
               <app-client-family-members-list
                 [clientId]="clientId()"
               ></app-client-family-members-list>
             </div>
           }
-          @if (activeTab() === '6') {
+          @if (activeTab() === TAB.notes) {
             <div class="tab-content">
               <app-client-notes-list [clientId]="clientId()"></app-client-notes-list>
             </div>
           }
-          @if (activeTab() === '7') {
+          @if (activeTab() === TAB.documents) {
             <div class="tab-content">
               <app-client-documents-list [clientId]="clientId()"></app-client-documents-list>
             </div>
           }
-          @if (activeTab() === '8') {
+          @if (activeTab() === TAB.customFields) {
             <div class="tab-content">
               <app-entity-datatables
                 apptableName="m_client"
                 [entityId]="clientId()"
               ></app-entity-datatables>
+            </div>
+          }
+
+          @if (activeTab() === TAB.deposits) {
+            <div class="tab-content">
+              <h2>{{ 'CLIENTS.FIXED_DEPOSITS' | appTranslate }}</h2>
+              @if (fixedDepositAccounts().length === 0) {
+                <p class="empty-state" data-testid="client-fixed-deposits-empty">
+                  {{ 'CLIENTS.NO_FIXED_DEPOSITS' | appTranslate }}
+                </p>
+              } @else {
+                <table class="accounts-table" data-testid="client-fixed-deposits">
+                  <tbody>
+                    @for (account of fixedDepositAccounts(); track account.id) {
+                      <tr>
+                        <td>
+                          @if (canViewFixedDeposit()) {
+                            <a
+                              class="clickable-link"
+                              [routerLink]="['/products/fixed-deposits/view', account.id]"
+                              >{{ account.accountNo }}</a
+                            >
+                          } @else {
+                            {{ account.accountNo }}
+                          }
+                        </td>
+                        <td>{{ account.productName }}</td>
+                        <td>{{ account.status?.value }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
+
+              <h2>{{ 'CLIENTS.RECURRING_DEPOSITS' | appTranslate }}</h2>
+              @if (recurringDepositAccounts().length === 0) {
+                <p class="empty-state" data-testid="client-recurring-deposits-empty">
+                  {{ 'CLIENTS.NO_RECURRING_DEPOSITS' | appTranslate }}
+                </p>
+              } @else {
+                <table class="accounts-table" data-testid="client-recurring-deposits">
+                  <tbody>
+                    @for (account of recurringDepositAccounts(); track account.id) {
+                      <tr>
+                        <td>
+                          @if (canViewRecurringDeposit()) {
+                            <a
+                              class="clickable-link"
+                              [routerLink]="['/products/recurring-deposits/view', account.id]"
+                              >{{ account.accountNo }}</a
+                            >
+                          } @else {
+                            {{ account.accountNo }}
+                          }
+                        </td>
+                        <td>{{ account.productName }}</td>
+                        <td>{{ account.status?.value }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
+            </div>
+          }
+
+          @if (activeTab() === TAB.shares) {
+            <div class="tab-content">
+              @if (shareAccounts().length === 0) {
+                <p class="empty-state" data-testid="client-share-accounts-empty">
+                  {{ 'CLIENTS.NO_SHARE_ACCOUNTS' | appTranslate }}
+                </p>
+              } @else {
+                <table class="accounts-table" data-testid="client-share-accounts">
+                  <tbody>
+                    @for (account of shareAccounts(); track account.id) {
+                      <tr>
+                        <td>
+                          <a
+                            class="clickable-link"
+                            [routerLink]="['/products/shares/view', account.id]"
+                            >{{ account.accountNo }}</a
+                          >
+                        </td>
+                        <td>{{ account.productName }}</td>
+                        <td>{{ account.status?.value }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
+            </div>
+          }
+
+          @if (activeTab() === TAB.standingInstructions) {
+            <div class="tab-content">
+              <app-client-standing-instructions-tab
+                [clientId]="clientId()"
+              ></app-client-standing-instructions-tab>
             </div>
           }
         </div>
@@ -780,14 +1001,6 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
         display: flex;
         flex-direction: column;
         gap: 24px;
-      }
-      .breadcrumb {
-        font-size: 14px;
-        margin-bottom: -8px;
-      }
-      .breadcrumb a {
-        text-decoration: none;
-        color: var(--primary-color);
       }
       .header-card {
         border-radius: 12px;
@@ -830,11 +1043,11 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
         display: flex;
         align-items: center;
         gap: 8px;
-        color: #7f8c8d;
+        color: var(--text-muted);
         font-size: 14px;
       }
       .divider {
-        color: #bdc3c7;
+        color: var(--border-color);
       }
       .actions-area {
         display: flex;
@@ -902,7 +1115,7 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
         flex-direction: column;
         align-items: center;
         padding: 48px;
-        color: #95a5a6;
+        color: var(--text-muted);
       }
       .empty-state mat-icon {
         font-size: 48px;
@@ -914,8 +1127,11 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
         margin: 0;
         font-size: 16px;
       }
+      .empty-state ion-button {
+        margin-top: 16px;
+      }
       .clickable-link {
-        color: #3f51b5;
+        color: var(--primary-text);
         text-decoration: none;
         font-weight: 500;
         cursor: pointer;
@@ -926,20 +1142,66 @@ const CLIENT_COMMAND_NAMES: Record<string, string> = {
     `,
   ],
 })
-export class ClientViewComponent implements OnInit {
+export class ClientViewComponent implements OnInit, OnDestroy {
   /** Selected tab; mat-tab-group tracked this internally, ion-segment does not. */
-  readonly activeTab = signal('0');
+  /** Exposed so the template names its tabs instead of numbering them. */
+  protected readonly TAB = CLIENT_TAB;
+
+  private readonly popovers = viewChildren(IonPopover);
+
+  readonly activeTab = signal<ClientTab>(CLIENT_TAB.details);
   private readonly clientService = inject(ClientService);
   private readonly notesService = inject(NotesService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly dialogService = inject(DialogService);
+  private readonly shareAccountService = inject(ShareAccountService);
   private readonly i18n = inject(I18N);
+
+  /**
+   * Whether the account screens this client's tables link to can actually be opened.
+   *
+   * A client's accounts come back with READ_CLIENT alone, but each account screen is gated on its
+   * own code, so a reader was shown account numbers as links whose only destination was
+   * `/forbidden`. The number still renders; only the link is withheld.
+   */
+  protected readonly canViewLoan = createPermissionCheck('READ_LOAN');
+  protected readonly canViewSavings = createPermissionCheck('READ_SAVINGSACCOUNT');
+  protected readonly canViewFixedDeposit = createPermissionCheck('READ_FIXEDDEPOSITACCOUNT');
+  protected readonly canViewRecurringDeposit = createPermissionCheck(
+    'READ_RECURRINGDEPOSITACCOUNT',
+  );
 
   readonly clientId = signal(0);
   readonly client = signal<GetClientsClientIdResponse | null>(null);
+  /**
+   * `'not-found'` covers both a missing client and one the caller lacks permission to see —
+   * Fineract's 404 and 403 read the same to the user, and distinguishing them here would leak
+   * which is true, telling an unauthorized caller a client id is valid. `'failed'` is anything
+   * else (a 500, a dropped connection), where retrying the same request can succeed.
+   */
+  readonly loadError = signal<'not-found' | 'failed' | null>(null);
   readonly loanAccounts = signal<GetClientsLoanAccounts[]>([]);
   readonly savingsAccounts = signal<GetClientsSavingsAccounts[]>([]);
+  readonly shareAccounts = signal<ShareAccountRow[]>([]);
+
+  /**
+   * Fineract returns savings, fixed deposits and recurring deposits in one `savingsAccounts`
+   * array, told apart only by `depositType.id` — 100, 200 and 300, confirmed against a running
+   * platform. They are three different products with three different screens, so listing them
+   * together sent a fixed deposit to the savings account view.
+   */
+  readonly plainSavingsAccounts = computed(() => this.depositAccountsOfType(DEPOSIT_TYPE.savings));
+  readonly fixedDepositAccounts = computed(() => this.depositAccountsOfType(DEPOSIT_TYPE.fixed));
+  readonly recurringDepositAccounts = computed(() =>
+    this.depositAccountsOfType(DEPOSIT_TYPE.recurring),
+  );
+
+  private depositAccountsOfType(typeId: number): GetClientsSavingsAccounts[] {
+    return this.savingsAccounts().filter(
+      (account) => (account.depositType?.id ?? DEPOSIT_TYPE.savings) === typeId,
+    );
+  }
 
   savingsColumns = ['accountNo', 'productName', 'balance', 'status', 'actions'];
   loanColumns = ['accountNo', 'productName', 'principal', 'status', 'actions'];
@@ -976,42 +1238,54 @@ export class ClientViewComponent implements OnInit {
     return status === CLIENT_STATUS.PENDING || status === CLIENT_STATUS.ACTIVE;
   });
 
-  get formattedActivationDate(): string {
-    const actDateArray = this.client()?.activationDate as unknown as number[];
-    if (actDateArray && Array.isArray(actDateArray)) {
-      return new Date(actDateArray[0], actDateArray[1] - 1, actDateArray[2]).toLocaleDateString();
-    }
-    return '-';
-  }
-
-  get formattedSubmissionDate(): string {
-    const submitDateArray = this.client()?.timeline?.submittedOnDate as unknown as number[];
-    if (submitDateArray && Array.isArray(submitDateArray)) {
-      return new Date(
-        submitDateArray[0],
-        submitDateArray[1] - 1,
-        submitDateArray[2],
-      ).toLocaleDateString();
-    }
-    return '-';
-  }
-
   ngOnInit() {
     this.route.paramMap.subscribe((params) => {
       const id = params.get('id');
       if (id) {
         this.clientId.set(+id);
         this.loadClientData();
-        this.loadClientAccounts();
       }
     });
   }
 
+  ngOnDestroy(): void {
+    for (const popover of this.popovers()) {
+      void popover.dismiss().catch(() => false);
+    }
+  }
+
+  /**
+   * `skipErrorToast()` because this screen renders the failure itself — the global toast
+   * otherwise prints Fineract's raw `defaultUserMessage`/parameter name (e.g. "[id] Client not
+   * found with valuer 99999") over a blank page.
+   *
+   * The accounts are fetched from here rather than beside this call for the same reason. They
+   * are derived from the client, so when the client cannot be read — a different office's
+   * record, or a role without READ_CLIENT — the accounts request is refused identically, and it
+   * does *not* skip the toast. Firing the two in parallel therefore put exactly the toast this
+   * method suppresses back on the screen, beside the page's own "this client doesn't exist, or
+   * you don't have permission to view it". Ordering them removes the duplicate and the
+   * request that could never have succeeded.
+   */
   loadClientData() {
-    this.clientService.getClientsClientId(this.clientId()).subscribe({
-      next: (data) => this.client.set(data),
-      error: (err) => console.error('Failed to load client details', err),
-    });
+    this.clientService
+      .getClientsClientId(this.clientId(), undefined, 'body', false, {
+        context: skipErrorToast(),
+      })
+      .subscribe({
+        next: (data) => {
+          this.client.set(data);
+          this.loadError.set(null);
+          this.loadClientAccounts();
+        },
+        error: (err: HttpErrorResponse) => {
+          this.loadError.set(err.status === 404 || err.status === 403 ? 'not-found' : 'failed');
+        },
+      });
+  }
+
+  onBackToClients(): void {
+    this.router.navigate(['/clients']);
   }
 
   loadClientAccounts() {
@@ -1022,6 +1296,47 @@ export class ClientViewComponent implements OnInit {
       },
       error: (err) => console.error('Failed to load client accounts', err),
     });
+  }
+
+  /**
+   * Share accounts, fetched when the tab is opened rather than with the client.
+   *
+   * They do not come back with the client's other accounts, so they need a request of their own —
+   * and most visits to a client never open this tab, so making it eager would add a request to
+   * every one of them. `skipErrorToast` because a tenant that does not use the shares module
+   * should not be told about it in a toast every time a client is opened.
+   *
+   * Worth knowing when reading this tab: the list returns only approved and active accounts. A
+   * share application still pending approval is readable by id but absent from the list, so it
+   * will not appear here — the platform omits it, this screen does not filter it out.
+   */
+  private loadShareAccounts(): void {
+    if (this.shareAccountsLoaded) {
+      return;
+    }
+    this.shareAccountsLoaded = true;
+    this.shareAccountService
+      .getAccountsType('share', 0, 200, 'body', false, { context: skipErrorToast() })
+      .subscribe({
+        next: (response) => {
+          const rows = [
+            ...((response.pageItems as Iterable<ShareAccountRow & { clientId?: number }>) ?? []),
+          ];
+          this.shareAccounts.set(rows.filter((row) => row.clientId === this.clientId()));
+        },
+        error: () => this.shareAccounts.set([]),
+      });
+  }
+
+  /** Set on the first visit to the shares tab, so re-selecting it does not refetch. */
+  private shareAccountsLoaded = false;
+
+  /** Loads what a tab needs the first time it is opened. */
+  onTabChange(tab: ClientTab): void {
+    this.activeTab.set(tab);
+    if (tab === CLIENT_TAB.shares) {
+      this.loadShareAccounts();
+    }
   }
 
   onEditClient() {
@@ -1072,7 +1387,12 @@ export class ClientViewComponent implements OnInit {
     return this.dialogService
       .open<ClientActionResult>(ClientActionDialogComponent, {
         data: {
-          title: `ACTIONS.${command.toUpperCase()}_CLIENT`,
+          // `undoReject` has to become UNDO_REJECT_CLIENT, not UNDOREJECT_CLIENT: the
+          // catalogue words the key as the action reads, and a bare toUpperCase() welds the
+          // camel hump shut. The miss was silent — the dialog titled itself
+          // `ACTIONS.UNDOREJECT_CLIENT` — until the e2e translation gate caught it. Same
+          // transformation savings-account-view uses for its confirm keys.
+          title: `ACTIONS.${command.replaceAll(/([A-Z])/g, '_$1').toUpperCase()}_CLIENT`,
           command: command,
           clientId: this.clientId(),
         },
@@ -1159,7 +1479,7 @@ export class ClientViewComponent implements OnInit {
     // `proposeTransfer` requires a date and the locale/format that make it parseable;
     // `proposeAndAcceptTransfer` rejects `transferDate` outright, so neither is sent for it.
     if (mode === 'propose' && result.transferDate) {
-      body['transferDate'] = formatDateToFineract(new Date(result.transferDate));
+      body['transferDate'] = formatDateToFineract(result.transferDate);
       body['locale'] = FINERACT_LOCALE;
       body['dateFormat'] = FINERACT_DATE_FORMAT;
     }

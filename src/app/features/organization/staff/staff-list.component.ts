@@ -18,29 +18,28 @@
  */
 
 import { Component, OnInit, inject, signal } from '@angular/core';
-import { RouterModule } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { STAFF_API, TranslatePipe } from '../../../core/adapters';
+import type { Staff } from '../../../core/adapters';
 import {
   DataTableComponent,
   ColumnDef,
   HasPermissionDirective,
   CellTemplateDirective,
 } from '../../../shared';
-import { StaffService, StaffData } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { IconComponent } from '../../../ui/icon/icon.component';
+import { ButtonComponent } from '../../../ui/button/button.component';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
 
 @Component({
   selector: 'app-staff-list',
   standalone: true,
   imports: [
-    RouterModule,
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     HasPermissionDirective,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    IconComponent,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
@@ -51,41 +50,43 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       [isLoading]="isLoading()"
       [localLogic]="true"
     >
-      <ion-button
+      <app-button
         headerActions
-        color="primary"
-        [routerLink]="['create']"
+        type="button"
+        intent="primary"
+        icon="add-outline"
+        [link]="['create']"
         *appHasPermission="'CREATE_STAFF'"
       >
-        <ion-icon name="add-outline"></ion-icon>
-        {{ 'ORGANIZATION.CREATE_STAFF' | translate }}
-      </ion-button>
+        {{ 'ORGANIZATION.CREATE_STAFF' | appTranslate }}
+      </app-button>
 
       <ng-template appCellTemplate="isLoanOfficer" let-row>
-        <ion-icon
-          [color]="row.isLoanOfficer ? 'primary' : 'danger'"
+        <app-icon
+          [tone]="row.isLoanOfficer ? 'success' : 'danger'"
           [name]="row.isLoanOfficer ? 'checkmark-circle-outline' : 'close-circle-outline'"
-        ></ion-icon>
+        />
       </ng-template>
 
       <ng-template appCellTemplate="isActive" let-row>
-        <ion-icon
-          [color]="row.isActive ? 'primary' : 'danger'"
+        <app-icon
+          [tone]="row.isActive ? 'success' : 'danger'"
           [name]="row.isActive ? 'checkmark-circle-outline' : 'close-circle-outline'"
-        ></ion-icon>
+        />
       </ng-template>
 
       <ng-template appCellTemplate="actions" let-row>
         <div class="action-buttons">
-          <ion-button
-            fill="clear"
-            color="primary"
-            [routerLink]="['edit', row.id]"
+          <app-button
+            type="button"
+            intent="primary"
+            emphasis="quiet"
+            icon="create-outline"
+            [link]="['edit', row.id]"
             *appHasPermission="'UPDATE_STAFF'"
-            [appTooltip]="'COMMON.EDIT' | translate"
-          >
-            <ion-icon name="create-outline"></ion-icon>
-          </ion-button>
+            [label]="'COMMON.EDIT' | appTranslate"
+            [appTooltip]="'COMMON.EDIT' | appTranslate"
+          />
         </div>
       </ng-template>
     </app-data-table>
@@ -100,9 +101,9 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
   ],
 })
 export class StaffListComponent implements OnInit {
-  private readonly staffService = inject(StaffService);
+  private readonly staffApi = inject(STAFF_API);
 
-  readonly staff = signal<StaffData[]>([]);
+  readonly staff = signal<Staff[]>([]);
   readonly isLoading = signal<boolean>(false);
 
   columns: ColumnDef[] = [
@@ -134,7 +135,7 @@ export class StaffListComponent implements OnInit {
 
   loadStaff(): void {
     this.isLoading.set(true);
-    this.staffService.getStaff(undefined, undefined, undefined, 'all').subscribe({
+    this.staffApi.list({ status: 'all' }).subscribe({
       next: (data) => {
         this.staff.set(data);
         this.isLoading.set(false);

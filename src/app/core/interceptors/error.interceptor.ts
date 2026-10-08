@@ -25,9 +25,7 @@ import { catchError, throwError } from 'rxjs';
 import { NotificationService } from '../services/notification.service';
 import { AuthService } from '../services/auth.service';
 import { SKIP_ERROR_TOAST } from '../http/http-context';
-
-/** Query parameter the login page reads to explain an involuntary return to it. */
-export const SESSION_EXPIRED_REASON = 'session-expired';
+import { SESSION_EXPIRED_REASON } from '../router/session-reasons';
 
 /**
  * True when this 401 means an established session stopped being valid, as opposed to
@@ -43,6 +41,45 @@ function isExpiredSession(req: HttpRequest<unknown>, error: HttpErrorResponse): 
   return error.status === 401 && req.headers.has('Authorization');
 }
 
+/** Fineract's globalisation code for "the request was understood and the rules say no". */
+const DOMAIN_RULE_VIOLATION = 'validation.msg.domain.rule.violation';
+
+/**
+ * Whether a 403 is Fineract refusing on a business rule rather than on a permission.
+ *
+ * Either signal is enough. The globalisation code is the explicit one; a populated `errors[]`
+ * is the practical one, because an authorization refusal has nothing to put in it.
+ */
+function isDomainRuleViolation(error: HttpErrorResponse): boolean {
+  const body = error.error as { userMessageGlobalisationCode?: string; errors?: unknown } | null;
+  return (
+    body?.userMessageGlobalisationCode === DOMAIN_RULE_VIOLATION ||
+    (Array.isArray(body?.errors) && body.errors.length > 0)
+  );
+}
+
+/**
+ * Some Fineract commands — `PUT .../approved-amount` and `.../available-disbursement-amount`
+ * among them — wrap the validator's actual per-field error one level deeper than the rest of
+ * the API, behind a generic outer entry (`parameterName: "id"`, message "Validation errors
+ * exist."). The real reason sits at `args[0].value`, itself shaped like an error entry. Without
+ * unwrapping it, the toast says nothing the user did not already know from the 403 alone.
+ */
+function unwrapNestedError(err: Record<string, unknown>): Record<string, unknown> {
+  const args = err['args'];
+  const nested = Array.isArray(args)
+    ? (args[0] as { value?: unknown } | undefined)?.value
+    : undefined;
+  if (
+    nested &&
+    typeof nested === 'object' &&
+    ('developerMessage' in nested || 'defaultUserMessage' in nested)
+  ) {
+    return nested as Record<string, unknown>;
+  }
+  return err;
+}
+
 /**
  * Builds the user-facing message for a failed request.
  *
@@ -55,16 +92,29 @@ function messageFor(error: HttpErrorResponse, i18n: I18nAdapter): string {
     return `Error: ${error.error.message}`;
   }
 
-  // Fineract's 403 body describes the missing permission in backend terms ("NOT_ALLOWED",
-  // a permission code) which means nothing to the user. What they can act on is that this
-  // account lacks the right, not which internal code was checked.
-  if (error.status === 403) {
+  // Fineract answers 403 for two unrelated things: the caller lacks the permission, and the
+  // operation is not allowed in this state. Only the first is an authorization problem.
+  //
+  // For an authorization 403 the body describes the missing right in backend terms
+  // ("NOT_ALLOWED", a permission code) which means nothing to the user; what they can act on
+  // is that the account lacks the right, so the friendly message is the correct treatment.
+  //
+  // A domain-rule 403 is the opposite: the body carries the reason, and it is the only place
+  // the reason exists. "Group cannot be closed because of active clients associated with it"
+  // told as "you do not have permission" sends the user to an administrator to ask for a right
+  // they already hold, while the thing they actually needed to do goes unsaid.
+  //
+  // The two are distinguishable without guessing — a domain-rule violation names itself, and
+  // carries a populated `errors[]`. Anything that matches neither keeps the friendly message,
+  // so nothing gets worse than it was.
+  if (error.status === 403 && !isDomainRuleViolation(error)) {
     return i18n.translate('COMMON.ERRORS.FORBIDDEN');
   }
 
   if (error.error?.errors && Array.isArray(error.error.errors) && error.error.errors.length > 0) {
     const stacked = error.error.errors
-      .map((err: Record<string, unknown>) => {
+      .map((rawErr: Record<string, unknown>) => {
+        const err = unwrapNestedError(rawErr);
         const msg = err['developerMessage'] || err['defaultUserMessage'] || 'Validation error';
         const param = err['parameterName'] ? `[${err['parameterName']}] ` : '';
         return `• ${param}${msg}`;

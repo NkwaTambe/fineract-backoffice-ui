@@ -20,6 +20,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 
 import { Router } from '@angular/router';
+import { TranslatePipe } from '../../core/adapters';
 import { MappingFinancialActivitiesToAccountsService } from '../../api/api/mappingFinancialActivitiesToAccounts.service';
 import { GetFinancialActivityAccountsResponse } from '../../api/model/models';
 import {
@@ -27,12 +28,12 @@ import {
   ColumnDef,
 } from '../../shared/components/data-table/data-table.component';
 import { CellTemplateDirective } from '../../shared/components/data-table/cell-template.directive';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { ButtonComponent } from '../../ui/button/button.component';
 
 @Component({
   selector: 'app-financial-activity-mappings-list',
   standalone: true,
-  imports: [DataTableComponent, CellTemplateDirective, IonIcon, IonButton],
+  imports: [DataTableComponent, CellTemplateDirective, TranslatePipe, ButtonComponent],
   template: `
     <div class="container">
       <app-data-table
@@ -41,6 +42,7 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
         [columns]="columns"
         [localLogic]="true"
         createButtonLabel="ACCOUNTING.DEFINE_MAPPING"
+        createPermission="CREATE_FINANCIALACTIVITYACCOUNT"
         (create)="onCreate()"
       >
         <ng-template appCellTemplate="financialActivity" let-row>
@@ -53,12 +55,22 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
           {{ row.glAccountData?.glCode || '' }}
         </ng-template>
         <ng-template appCellTemplate="actions" let-row>
-          <ion-button fill="clear" color="primary" (click)="onEdit(row)">
-            <ion-icon name="create-outline"></ion-icon>
-          </ion-button>
-          <ion-button fill="clear" color="danger" (click)="onDelete(row)">
-            <ion-icon name="trash-outline"></ion-icon>
-          </ion-button>
+          <app-button
+            type="button"
+            intent="primary"
+            emphasis="quiet"
+            [label]="'COMMON.EDIT' | appTranslate"
+            icon="create-outline"
+            (click)="onEdit(row)"
+          />
+          <app-button
+            type="button"
+            intent="danger"
+            emphasis="quiet"
+            [label]="'COMMON.DELETE' | appTranslate"
+            icon="trash-outline"
+            (click)="onDelete(row)"
+          />
         </ng-template>
       </app-data-table>
     </div>
@@ -77,10 +89,10 @@ export class FinancialActivityMappingsListComponent implements OnInit {
 
   readonly mappings = signal<GetFinancialActivityAccountsResponse[]>([]);
   columns: ColumnDef[] = [
-    { key: 'financialActivity', label: 'Financial Activity', sortable: true },
-    { key: 'glAccountName', label: 'GL Account', sortable: true },
-    { key: 'glAccountCode', label: 'GL Code', sortable: true },
-    { key: 'actions', label: 'Actions' },
+    { key: 'financialActivity', label: 'ACCOUNTING.FINANCIAL_ACTIVITY', sortable: true },
+    { key: 'glAccountName', label: 'JOURNAL_ENTRIES.GL_ACCOUNT', sortable: true },
+    { key: 'glAccountCode', label: 'ACCOUNTING.GL_CODE', sortable: true },
+    { key: 'actions', label: 'COMMON.ACTIONS' },
   ];
 
   ngOnInit() {

@@ -20,7 +20,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 
 import { ActivatedRoute, Router } from '@angular/router';
-import { TranslateModule, TranslateService } from '@ngx-translate/core';
+import { I18N, TranslatePipe } from '../../../core/adapters';
 import {
   DataTableComponent,
   ColumnDef,
@@ -29,7 +29,7 @@ import {
 } from '../../../shared';
 import { RescheduleLoansService, GetLoanRescheduleRequestResponse } from '../../../api';
 import { DialogService } from '../../../core/services/dialog.service';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 /**
  * Component for listing loan reschedule requests.
@@ -40,16 +40,15 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
   selector: 'app-reschedule-requests-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
     StatusBadgeComponent,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
   ],
   template: `
     <app-data-table
-      title="Loan Reschedule Requests"
+      title="LOANS.RESCHEDULE_REQUESTS"
       helpTextKey="HELP.RESCHEDULING_DESC"
       [createButtonLabel]="loanId() ? 'LOANS.REQUEST_RESCHEDULE' : ''"
       [columns]="columns"
@@ -72,15 +71,14 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
       </ng-template>
 
       <ng-template appCellTemplate="actions" let-request>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'COMMON.VIEW' | translate"
-          title="View Request Details"
+        <app-button
+          type="button"
+          emphasis="quiet"
+          intent="primary"
+          icon="eye-outline"
+          [label]="'COMMON.VIEW' | appTranslate"
           (click)="onViewRequest(request)"
-        >
-          <ion-icon name="eye-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,
@@ -90,7 +88,7 @@ export class RescheduleRequestsListComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly dialogService = inject(DialogService);
-  private readonly translate = inject(TranslateService);
+  private readonly i18n = inject(I18N);
 
   readonly loanId = signal<number | null>(null);
 
@@ -156,11 +154,11 @@ export class RescheduleRequestsListComponent implements OnInit {
         : []),
     ]
       .filter((row): row is { label: string; value: string } => !!row.value && row.value !== '-')
-      .map((row) => ({ label: this.translate.instant(row.label), value: row.value }));
+      .map((row) => ({ label: this.i18n.translate(row.label), value: row.value }));
 
-    const closeLabel = this.translate.instant('COMMON.CLOSE');
+    const closeLabel = this.i18n.translate('COMMON.CLOSE');
     this.dialogService.confirm({
-      title: this.translate.instant('LOANS.RESCHEDULE_REQUEST_DETAILS'),
+      title: this.i18n.translate('LOANS.RESCHEDULE_REQUEST_DETAILS'),
       message: '',
       details,
       confirmText: closeLabel,

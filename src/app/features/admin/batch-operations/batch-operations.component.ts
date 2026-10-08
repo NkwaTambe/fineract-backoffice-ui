@@ -19,7 +19,7 @@
 import { Component, signal, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { JsonPipe } from '@angular/common';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import { BatchAPIService, BatchRequest, BatchResponse } from '../../../api';
 import {
   IonButton,
@@ -40,7 +40,7 @@ import {
   imports: [
     FormsModule,
     JsonPipe,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonSpinner,
     IonTextarea,
@@ -55,42 +55,50 @@ import {
   template: `
     <ion-card>
       <ion-card-header>
-        <ion-card-title>{{ 'BATCH_OPERATIONS.TITLE' | translate }}</ion-card-title>
+        <ion-card-title>{{ 'BATCH_OPERATIONS.TITLE' | appTranslate }}</ion-card-title>
       </ion-card-header>
       <ion-card-content>
         <ion-item fill="outline" class="full-width">
-          <ion-label position="stacked">{{ 'BATCH_OPERATIONS.INPUT' | translate }}</ion-label>
+          <ion-label position="stacked">{{ 'BATCH_OPERATIONS.INPUT' | appTranslate }}</ion-label>
           <ion-textarea
-            [attr.aria-label]="'BATCH_OPERATIONS.INPUT' | translate"
+            data-testid="batch-operations-input"
+            [attr.aria-label]="'BATCH_OPERATIONS.INPUT' | appTranslate"
             [(ngModel)]="batchInput"
             rows="10"
             placeholder="[]"
           ></ion-textarea>
         </ion-item>
 
-        <ion-checkbox [(ngModel)]="enclosingTransaction">
-          {{ 'BATCH_OPERATIONS.ENCLOSE' | translate }}
+        <ion-checkbox data-testid="batch-operations-enclose" [(ngModel)]="enclosingTransaction">
+          {{ 'BATCH_OPERATIONS.ENCLOSE' | appTranslate }}
         </ion-checkbox>
 
         @if (error()) {
-          <p class="error-text">{{ 'BATCH_OPERATIONS.PARSE_ERROR' | translate }}: {{ error() }}</p>
+          <p class="error-text" data-testid="batch-operations-error">
+            {{ 'BATCH_OPERATIONS.PARSE_ERROR' | appTranslate }}: {{ error() }}
+          </p>
         }
       </ion-card-content>
       <div class="card-actions">
-        <ion-button color="primary" (click)="submit()" [disabled]="isSubmitting()">
+        <ion-button
+          color="primary"
+          data-testid="batch-operations-submit"
+          (click)="submit()"
+          [disabled]="isSubmitting()"
+        >
           @if (isSubmitting()) {
             <ion-spinner name="crescent"></ion-spinner>
           } @else {
-            {{ 'BATCH_OPERATIONS.SUBMIT' | translate }}
+            {{ 'BATCH_OPERATIONS.SUBMIT' | appTranslate }}
           }
         </ion-button>
       </div>
     </ion-card>
 
     @if (results().length > 0) {
-      <ion-card class="results-card">
+      <ion-card class="results-card" data-testid="batch-operations-results">
         <ion-card-header>
-          <ion-card-title>{{ 'BATCH_OPERATIONS.RESULTS' | translate }}</ion-card-title>
+          <ion-card-title>{{ 'BATCH_OPERATIONS.RESULTS' | appTranslate }}</ion-card-title>
         </ion-card-header>
         <ion-card-content>
           <pre><code>{{ results() | json }}</code></pre>
@@ -140,7 +148,7 @@ export class BatchOperationsComponent {
     try {
       parsed = JSON.parse(this.batchInput);
       if (!Array.isArray(parsed)) {
-        throw new Error('Input must be a JSON array');
+        throw new TypeError('Input must be a JSON array');
       }
     } catch (e: unknown) {
       this.error.set(e instanceof Error ? e.message : 'Invalid JSON');

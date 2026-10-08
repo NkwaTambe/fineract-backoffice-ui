@@ -19,12 +19,13 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
 import { ColumnDef, CellTemplateDirective } from '../../../shared';
 import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 import { ProvisioningCriteriaService, GetProvisioningCriteriaResponse } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { DialogService } from '../../../core/services/dialog.service';
+import { ButtonComponent } from '../../../ui/button/button.component';
+import { I18N, TranslatePipe } from '../../../core/adapters';
 
 /**
  * Lists provisioning criteria. The list response carries the criteria name and
@@ -34,11 +35,10 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
   selector: 'app-provisioning-criteria-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
@@ -46,6 +46,7 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       title="nav.provisioningCriteria"
       helpTextKey="HELP.PROVISIONING_CRITERIA_DESC"
       createButtonLabel="PROVISIONING_CRITERIA.CREATE"
+      createPermission="CREATE_PROVISIONCRITERIA"
       [columns]="columns"
       [data]="criteria()"
       [totalRecords]="criteria().length"
@@ -53,24 +54,24 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       (create)="onCreate()"
     >
       <ng-template appCellTemplate="actions" let-row>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'COMMON.EDIT' | translate"
-          [appTooltip]="'COMMON.EDIT' | translate"
+        <app-button
+          type="button"
+          intent="primary"
+          emphasis="quiet"
+          [label]="'COMMON.EDIT' | appTranslate"
+          icon="create-outline"
+          [appTooltip]="'COMMON.EDIT' | appTranslate"
           (click)="onEdit(row)"
-        >
-          <ion-icon name="create-outline"></ion-icon>
-        </ion-button>
-        <ion-button
-          fill="clear"
-          color="danger"
-          [attr.aria-label]="'COMMON.DELETE' | translate"
-          [appTooltip]="'COMMON.DELETE' | translate"
+        />
+        <app-button
+          type="button"
+          intent="danger"
+          emphasis="quiet"
+          [label]="'COMMON.DELETE' | appTranslate"
+          icon="trash-outline"
+          [appTooltip]="'COMMON.DELETE' | appTranslate"
           (click)="onDelete(row)"
-        >
-          <ion-icon name="trash-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,
@@ -78,6 +79,8 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
 export class ProvisioningCriteriaListComponent implements OnInit {
   private readonly criteriaService = inject(ProvisioningCriteriaService);
   private readonly router = inject(Router);
+  private readonly dialogService = inject(DialogService);
+  private readonly i18n = inject(I18N);
 
   readonly columns: ColumnDef[] = [
     { key: 'criteriaName', label: 'PROVISIONING_CRITERIA.NAME', sortable: true },
@@ -111,10 +114,21 @@ export class ProvisioningCriteriaListComponent implements OnInit {
   }
 
   onDelete(row: GetProvisioningCriteriaResponse): void {
-    if (!row.criteriaId || !window.confirm('Delete this provisioning criteria?')) return;
-    this.criteriaService.deleteProvisioningcriteriaCriteriaId(row.criteriaId).subscribe({
-      next: () => this.load(),
-      error: (err: unknown) => console.error('Failed to delete provisioning criteria', err),
-    });
+    if (!row.criteriaId) return;
+    void this.dialogService
+      .confirm({
+        title: this.i18n.translate('PROVISIONING_CRITERIA.DELETE'),
+        message: this.i18n.translate('PROVISIONING_CRITERIA.CONFIRM_DELETE', {
+          name: row.criteriaName,
+        }),
+        destructive: true,
+      })
+      .then((confirmed) => {
+        if (!confirmed) return;
+        this.criteriaService.deleteProvisioningcriteriaCriteriaId(row.criteriaId!).subscribe({
+          next: () => this.load(),
+          error: (err: unknown) => console.error('Failed to delete provisioning criteria', err),
+        });
+      });
   }
 }

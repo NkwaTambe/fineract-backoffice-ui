@@ -20,6 +20,9 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 
 import { Router } from '@angular/router';
+import { of } from 'rxjs';
+import { catchError, tap } from 'rxjs/operators';
+import { TranslatePipe } from '../../core/adapters';
 import { AccountingRulesService } from '../../api/api/accountingRules.service';
 import { AccountingRuleData } from '../../api/model/models';
 import {
@@ -27,20 +30,23 @@ import {
   ColumnDef,
 } from '../../shared/components/data-table/data-table.component';
 import { CellTemplateDirective } from '../../shared/components/data-table/cell-template.directive';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { ButtonComponent } from '../../ui/button/button.component';
 
 @Component({
   selector: 'app-accounting-rules-list',
   standalone: true,
-  imports: [DataTableComponent, CellTemplateDirective, IonIcon, IonButton],
+  imports: [DataTableComponent, CellTemplateDirective, TranslatePipe, ButtonComponent],
   template: `
     <div class="container">
       <app-data-table
+        [hasError]="hasError()"
+        (retry)="onRetry()"
         title="nav.accountingRules"
         [data]="rules()"
         [columns]="columns"
         [localLogic]="true"
         createButtonLabel="ACCOUNTING_RULES.CREATE"
+        createPermission="CREATE_ACCOUNTINGRULE"
         (create)="onCreate()"
       >
         <ng-template appCellTemplate="debitAccounts" let-row>
@@ -50,12 +56,22 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
           {{ row.creditAccounts?.[0]?.name || '' }}
         </ng-template>
         <ng-template appCellTemplate="actions" let-row>
-          <ion-button fill="clear" color="primary" (click)="onEdit(row)">
-            <ion-icon name="create-outline"></ion-icon>
-          </ion-button>
-          <ion-button fill="clear" color="danger" (click)="onDelete(row)">
-            <ion-icon name="trash-outline"></ion-icon>
-          </ion-button>
+          <app-button
+            type="button"
+            intent="primary"
+            emphasis="quiet"
+            [label]="'COMMON.EDIT' | appTranslate"
+            icon="create-outline"
+            (click)="onEdit(row)"
+          />
+          <app-button
+            type="button"
+            intent="danger"
+            emphasis="quiet"
+            [label]="'COMMON.DELETE' | appTranslate"
+            icon="trash-outline"
+            (click)="onDelete(row)"
+          />
         </ng-template>
       </app-data-table>
     </div>
@@ -73,6 +89,8 @@ export class AccountingRulesListComponent implements OnInit {
   private readonly router = inject(Router);
 
   readonly rules = signal<AccountingRuleData[]>([]);
+  /** True when the last load failed, so the table offers a retry instead of an empty list. */
+  readonly hasError = signal(false);
   columns: ColumnDef[] = [
     { key: 'name', label: 'COMMON.NAME', sortable: true },
     { key: 'officeName', label: 'COMMON.OFFICE', sortable: true },
@@ -86,9 +104,20 @@ export class AccountingRulesListComponent implements OnInit {
   }
 
   loadRules() {
-    this.accountingRulesService.getAccountingrules().subscribe((rules) => {
-      this.rules.set(rules);
-    });
+    this.accountingRulesService
+      .getAccountingrules()
+      .pipe(
+        tap(() => this.hasError.set(false)),
+        catchError(() => {
+          this.hasError.set(true);
+          return of([] as AccountingRuleData[]);
+        }),
+      )
+      .subscribe((rules) => this.rules.set(rules ?? []));
+  }
+
+  onRetry(): void {
+    this.loadRules();
   }
 
   onCreate() {

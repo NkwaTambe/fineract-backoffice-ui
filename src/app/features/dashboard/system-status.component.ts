@@ -17,8 +17,8 @@
  * under the License.
  */
 
-import { Component, signal, inject, OnInit } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { Component, signal, computed, inject, OnInit } from '@angular/core';
+import { TranslatePipe } from '../../core/adapters';
 import {
   IonCard,
   IonCardHeader,
@@ -39,6 +39,8 @@ import { catchError } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { ConfigService } from '../../core/services/config.service';
 import { ClientService, LoansService, SavingsAccountService } from '../../api';
+import { AuthService } from '../../core/services/auth.service';
+import { HasPermissionDirective } from '../../shared';
 import {
   DonutChartComponent,
   ChartData,
@@ -51,7 +53,7 @@ import {
   selector: 'app-system-status',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     IonCard,
     IonCardHeader,
     IonCardTitle,
@@ -66,12 +68,13 @@ import {
     RouterModule,
     DonutChartComponent,
     NgClass,
+    HasPermissionDirective,
   ],
   template: `
     <div class="dashboard-container">
       <ion-grid class="widgets-grid-container">
         <ion-row>
-          <ion-col size="12" size-sm="6" size-lg="3">
+          <ion-col size="12" size-sm="6" size-lg="3" *appHasPermission="'READ_CLIENT'">
             <ion-card
               class="widget-card clients"
               id="dashboard-clients-widget"
@@ -80,7 +83,7 @@ import {
               <ion-card-content>
                 <div class="widget-header">
                   <ion-icon name="people-outline"></ion-icon>
-                  <span class="widget-label">{{ 'DASHBOARD.TOTAL_CLIENTS' | translate }}</span>
+                  <span class="widget-label">{{ 'DASHBOARD.TOTAL_CLIENTS' | appTranslate }}</span>
                 </div>
                 @if (isLoading()) {
                   <div class="widget-loader">
@@ -88,13 +91,13 @@ import {
                   </div>
                 } @else {
                   <div class="widget-value">{{ clientCount() }}</div>
-                  <div class="widget-trend">{{ 'DASHBOARD.ACTIVE_MEMBERS' | translate }}</div>
+                  <div class="widget-trend">{{ 'DASHBOARD.ACTIVE_MEMBERS' | appTranslate }}</div>
                 }
               </ion-card-content>
             </ion-card>
           </ion-col>
 
-          <ion-col size="12" size-sm="6" size-lg="3">
+          <ion-col size="12" size-sm="6" size-lg="3" *appHasPermission="'READ_LOAN'">
             <ion-card
               class="widget-card loans"
               id="dashboard-loans-widget"
@@ -103,7 +106,7 @@ import {
               <ion-card-content>
                 <div class="widget-header">
                   <ion-icon name="wallet-outline"></ion-icon>
-                  <span class="widget-label">{{ 'DASHBOARD.ACTIVE_LOANS' | translate }}</span>
+                  <span class="widget-label">{{ 'DASHBOARD.ACTIVE_LOANS' | appTranslate }}</span>
                 </div>
                 @if (isLoading()) {
                   <div class="widget-loader">
@@ -111,15 +114,15 @@ import {
                   </div>
                 } @else {
                   <div class="widget-value">{{ activeLoans() }}</div>
-                  <div class="widget-trend highlight">
-                    {{ pendingLoans().length }} {{ 'DASHBOARD.PENDING_APPROVALS' | translate }}
+                  <div class="widget-trend" [class.highlight]="pendingLoans().length > 0">
+                    {{ pendingLoans().length }} {{ 'DASHBOARD.PENDING_APPROVALS' | appTranslate }}
                   </div>
                 }
               </ion-card-content>
             </ion-card>
           </ion-col>
 
-          <ion-col size="12" size-sm="6" size-lg="3">
+          <ion-col size="12" size-sm="6" size-lg="3" *appHasPermission="'READ_SAVINGSACCOUNT'">
             <ion-card
               class="widget-card savings"
               id="dashboard-savings-widget"
@@ -128,7 +131,9 @@ import {
               <ion-card-content>
                 <div class="widget-header">
                   <ion-icon name="card-outline"></ion-icon>
-                  <span class="widget-label">{{ 'DASHBOARD.SAVINGS_ACCOUNTS' | translate }}</span>
+                  <span class="widget-label">{{
+                    'DASHBOARD.SAVINGS_ACCOUNTS' | appTranslate
+                  }}</span>
                 </div>
                 @if (isLoading()) {
                   <div class="widget-loader">
@@ -136,8 +141,8 @@ import {
                   </div>
                 } @else {
                   <div class="widget-value">{{ savingsCount() }}</div>
-                  <div class="widget-trend">
-                    {{ pendingSavings().length }} {{ 'DASHBOARD.PENDING_APPROVALS' | translate }}
+                  <div class="widget-trend" [class.highlight]="pendingSavings().length > 0">
+                    {{ pendingSavings().length }} {{ 'DASHBOARD.PENDING_APPROVALS' | appTranslate }}
                   </div>
                 }
               </ion-card-content>
@@ -153,9 +158,9 @@ import {
               <ion-card-content>
                 <div class="widget-header">
                   <ion-icon name="hardware-chip-outline"></ion-icon>
-                  <span class="widget-label">{{ 'DASHBOARD.SYSTEM_HEALTH' | translate }}</span>
+                  <span class="widget-label">{{ 'DASHBOARD.SYSTEM_HEALTH' | appTranslate }}</span>
                 </div>
-                <div class="widget-value healthy">{{ 'DASHBOARD.ONLINE' | translate }}</div>
+                <div class="widget-value healthy">{{ 'DASHBOARD.ONLINE' | appTranslate }}</div>
                 <div class="widget-trend">API: {{ currentTenant() }}</div>
               </ion-card-content>
             </ion-card>
@@ -164,124 +169,133 @@ import {
       </ion-grid>
 
       <div class="dashboard-layout">
-        <div class="main-column">
-          <ion-card class="approval-card">
+        <!--
+            OR, not AND: a user who can see one kind of pending approval should get the
+            card for it. A user who can see neither would otherwise be shown a reassuring
+            "no pending approvals" that only means they were not allowed to look.
+          -->
+        <ion-card class="approval-card" *appHasPermission="['READ_LOAN', 'READ_SAVINGSACCOUNT']">
+          <ion-card-header>
+            <ion-card-title>
+              <ion-icon name="time-outline"></ion-icon>
+              {{ 'DASHBOARD.PENDING_APPROVALS' | appTranslate }}
+            </ion-card-title>
+          </ion-card-header>
+          <ion-card-content>
+            @if (isLoading()) {
+              <div class="empty-approvals">
+                <ion-spinner name="crescent"></ion-spinner>
+              </div>
+            } @else if (pendingLoans().length === 0 && pendingSavings().length === 0) {
+              <div class="empty-approvals">
+                <ion-icon name="checkmark-circle-outline"></ion-icon>
+                <p>{{ 'DASHBOARD.NO_PENDING_APPROVALS' | appTranslate }}</p>
+              </div>
+            } @else {
+              <div class="approval-list">
+                @for (loan of pendingLoans(); track loan['id']) {
+                  <div class="approval-item">
+                    <div class="item-info">
+                      <ion-badge color="primary" class="item-type loan">LOAN</ion-badge>
+                      <span class="item-id">#{{ loan['accountNo'] }}</span>
+                      <span class="item-detail">{{ loan['clientName'] }}</span>
+                    </div>
+                    <ion-button
+                      fill="clear"
+                      color="primary"
+                      [routerLink]="['/loans/view', loan['id']]"
+                      id="dashboard-pending-loans-view-btn"
+                      data-testid="dashboard-pending-loans-view-btn"
+                    >
+                      {{ 'COMMON.VIEW' | appTranslate }}
+                    </ion-button>
+                  </div>
+                }
+                @for (savings of pendingSavings(); track savings['id']) {
+                  <div class="approval-item">
+                    <div class="item-info">
+                      <ion-badge color="success" class="item-type savings">SAVINGS</ion-badge>
+                      <span class="item-id">#{{ savings['accountNo'] }}</span>
+                      <span class="item-detail">{{ savings['clientName'] }}</span>
+                    </div>
+                    <ion-button
+                      fill="clear"
+                      color="primary"
+                      [routerLink]="['/products/savings-accounts/view', savings['id']]"
+                      id="dashboard-pending-savings-view-btn"
+                      data-testid="dashboard-pending-savings-view-btn"
+                    >
+                      {{ 'COMMON.VIEW' | appTranslate }}
+                    </ion-button>
+                  </div>
+                }
+              </div>
+            }
+          </ion-card-content>
+        </ion-card>
+
+        <div class="charts-grid" *appHasPermission="['READ_LOAN', 'READ_SAVINGSACCOUNT']">
+          <ion-card class="chart-card" *appHasPermission="'READ_LOAN'">
             <ion-card-header>
               <ion-card-title>
-                <ion-icon name="time-outline"></ion-icon>
-                {{ 'DASHBOARD.PENDING_APPROVALS' | translate }}
+                <ion-icon name="pie-chart-outline"></ion-icon>
+                {{ 'DASHBOARD.LOAN_DISTRIBUTION' | appTranslate }}
               </ion-card-title>
             </ion-card-header>
             <ion-card-content>
-              @if (isLoading()) {
-                <div class="empty-approvals">
-                  <ion-spinner name="crescent"></ion-spinner>
-                </div>
-              } @else if (pendingLoans().length === 0 && pendingSavings().length === 0) {
-                <div class="empty-approvals">
-                  <ion-icon name="checkmark-circle-outline"></ion-icon>
-                  <p>{{ 'DASHBOARD.NO_PENDING_APPROVALS' | translate }}</p>
-                </div>
-              } @else {
-                <div class="approval-list">
-                  @for (loan of pendingLoans(); track loan['id']) {
-                    <div class="approval-item">
-                      <div class="item-info">
-                        <ion-badge color="primary" class="item-type loan">LOAN</ion-badge>
-                        <span class="item-id">#{{ loan['accountNo'] }}</span>
-                        <span class="item-detail">{{ loan['clientName'] }}</span>
-                      </div>
-                      <ion-button
-                        fill="clear"
-                        color="primary"
-                        [routerLink]="['/loans/view', loan['id']]"
-                        id="dashboard-pending-loans-view-btn"
-                        data-testid="dashboard-pending-loans-view-btn"
-                      >
-                        {{ 'COMMON.VIEW' | translate }}
-                      </ion-button>
-                    </div>
-                  }
-                  @for (savings of pendingSavings(); track savings['id']) {
-                    <div class="approval-item">
-                      <div class="item-info">
-                        <ion-badge color="success" class="item-type savings">SAVINGS</ion-badge>
-                        <span class="item-id">#{{ savings['accountNo'] }}</span>
-                        <span class="item-detail">{{ savings['clientName'] }}</span>
-                      </div>
-                      <ion-button
-                        fill="clear"
-                        color="primary"
-                        [routerLink]="['/products/savings-accounts/view', savings['id']]"
-                        id="dashboard-pending-savings-view-btn"
-                        data-testid="dashboard-pending-savings-view-btn"
-                      >
-                        {{ 'COMMON.VIEW' | translate }}
-                      </ion-button>
-                    </div>
-                  }
-                </div>
-              }
+              <app-donut-chart
+                [data]="loanChartData()"
+                [labelsAreTranslationKeys]="true"
+              ></app-donut-chart>
+            </ion-card-content>
+          </ion-card>
+
+          <ion-card class="chart-card" *appHasPermission="'READ_SAVINGSACCOUNT'">
+            <ion-card-header>
+              <ion-card-title>
+                <ion-icon name="pie-chart-outline"></ion-icon>
+                {{ 'DASHBOARD.SAVINGS_DISTRIBUTION' | appTranslate }}
+              </ion-card-title>
+            </ion-card-header>
+            <ion-card-content>
+              <app-donut-chart
+                [data]="savingsChartData()"
+                [labelsAreTranslationKeys]="true"
+              ></app-donut-chart>
             </ion-card-content>
           </ion-card>
         </div>
 
-        <div class="side-column">
-          <ion-card class="chart-card">
-            <ion-card-header>
-              <ion-card-title>
-                <ion-icon name="pie-chart-outline"></ion-icon>
-                {{ 'DASHBOARD.LOAN_DISTRIBUTION' | translate }}
-              </ion-card-title>
-            </ion-card-header>
-            <ion-card-content>
-              <app-donut-chart [data]="loanChartData()"></app-donut-chart>
-            </ion-card-content>
-          </ion-card>
-
-          <ion-card class="chart-card">
-            <ion-card-header>
-              <ion-card-title>
-                <ion-icon name="pie-chart-outline"></ion-icon>
-                {{ 'DASHBOARD.SAVINGS_DISTRIBUTION' | translate }}
-              </ion-card-title>
-            </ion-card-header>
-            <ion-card-content>
-              <app-donut-chart [data]="savingsChartData()"></app-donut-chart>
-            </ion-card-content>
-          </ion-card>
-
-          <ion-card class="system-card">
-            <ion-card-header>
-              <ion-card-title>
-                <ion-icon name="settings-outline"></ion-icon>
-                {{ 'DASHBOARD.SYSTEM_STATUS' | translate }}
-              </ion-card-title>
-            </ion-card-header>
-            <ion-card-content>
-              <ul class="status-list">
-                <li>
-                  <span class="label">{{ 'DASHBOARD.RUNTIME_API' | translate }}:</span>
-                  <span class="value">{{ configService.apiUrl }}</span>
-                </li>
-                <li>
-                  <span class="label">{{ 'DASHBOARD.FALLBACK_API' | translate }}:</span>
-                  <span class="value">{{ environmentUrl }}</span>
-                </li>
-                <li>
-                  <span class="label">{{ 'DASHBOARD.ENVIRONMENT' | translate }}:</span>
-                  <span class="value badge" [ngClass]="isProd ? 'prod' : 'dev'">
-                    {{ (isProd ? 'DASHBOARD.PRODUCTION' : 'DASHBOARD.DEVELOPMENT') | translate }}
-                  </span>
-                </li>
-                <li>
-                  <span class="label">{{ 'DASHBOARD.ACTIVE_TENANT' | translate }}:</span>
-                  <span class="value">{{ currentTenant() }}</span>
-                </li>
-              </ul>
-            </ion-card-content>
-          </ion-card>
-        </div>
+        <ion-card class="system-card">
+          <ion-card-header>
+            <ion-card-title>
+              <ion-icon name="settings-outline"></ion-icon>
+              {{ 'DASHBOARD.SYSTEM_STATUS' | appTranslate }}
+            </ion-card-title>
+          </ion-card-header>
+          <ion-card-content>
+            <ul class="status-list">
+              <li>
+                <span class="label">{{ 'DASHBOARD.RUNTIME_API' | appTranslate }}:</span>
+                <span class="value">{{ configService.apiUrl }}</span>
+              </li>
+              <li>
+                <span class="label">{{ 'DASHBOARD.FALLBACK_API' | appTranslate }}:</span>
+                <span class="value">{{ environmentUrl }}</span>
+              </li>
+              <li>
+                <span class="label">{{ 'DASHBOARD.ENVIRONMENT' | appTranslate }}:</span>
+                <span class="value badge" [ngClass]="isProd ? 'prod' : 'dev'">
+                  {{ (isProd ? 'DASHBOARD.PRODUCTION' : 'DASHBOARD.DEVELOPMENT') | appTranslate }}
+                </span>
+              </li>
+              <li>
+                <span class="label">{{ 'DASHBOARD.ACTIVE_TENANT' | appTranslate }}:</span>
+                <span class="value">{{ currentTenant() }}</span>
+              </li>
+            </ul>
+          </ion-card-content>
+        </ion-card>
       </div>
     </div>
   `,
@@ -295,10 +309,19 @@ import {
         flex-direction: column;
         gap: 24px;
       }
-      .widgets-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 24px;
+      /* Ionic's column padding resolves to 0 here, so the gutter is set explicitly. The row's
+         negative margin keeps the outer tiles flush with the cards below. */
+      .widgets-grid-container {
+        padding: 0;
+      }
+      .widgets-grid-container ion-row {
+        margin: -12px;
+      }
+      .widgets-grid-container ion-col {
+        padding: 12px;
+      }
+      .widgets-grid-container .widget-card {
+        height: 100%;
       }
       .widget-card {
         border-radius: 12px;
@@ -347,21 +370,22 @@ import {
         color: var(--text-muted);
       }
       .widget-trend.highlight {
-        color: var(--warning-color);
+        color: var(--warning-text);
         font-weight: 600;
       }
       .healthy {
-        color: var(--success-color);
+        color: var(--success-text);
       }
+      /* Full-width bands, so no card sits beside empty space: pending approvals, the
+         charts side by side, then the system status, whose URLs then fit on one line. */
       .dashboard-layout {
         display: grid;
-        grid-template-columns: 2fr 1fr;
+        grid-template-columns: minmax(0, 1fr);
         gap: 24px;
       }
-      .main-column,
-      .side-column {
-        display: flex;
-        flex-direction: column;
+      .charts-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
         gap: 24px;
       }
       .chart-card {
@@ -404,11 +428,11 @@ import {
       }
       .item-type.loan {
         background: #e3f2fd;
-        color: #1976d2;
+        color: var(--primary-text);
       }
       .item-type.savings {
         background: #e8f5e9;
-        color: #2e7d32;
+        color: #126330;
       }
       :host-context([data-theme='dark']) .item-type.loan {
         background: rgba(52, 152, 219, 0.16);
@@ -496,6 +520,7 @@ import {
 })
 export class SystemStatusComponent implements OnInit {
   protected readonly configService = inject(ConfigService);
+  private readonly authService = inject(AuthService);
   private readonly clientService = inject(ClientService);
   private readonly loansService = inject(LoansService);
   private readonly savingsService = inject(SavingsAccountService);
@@ -505,6 +530,34 @@ export class SystemStatusComponent implements OnInit {
   protected readonly isProd = environment.production;
   protected readonly currentTenant = signal('default');
   readonly isLoading = signal(true);
+
+  /**
+   * Whether this user may read the entity a widget counts.
+   *
+   * The dashboard is the one screen everybody lands on, so it is also the one screen where a
+   * user is guaranteed to meet every widget whether or not their role covers it. Asking for
+   * counts they cannot read produced a row of 403s and their error toasts on arrival — and
+   * because `forkJoin` fails fast, a single refusal zeroed every other metric alongside it.
+   *
+   * Mirrors what `*appHasPermission` does, `rbacEnabled` included, so the request a widget makes
+   * and the widget's own visibility are decided by the same rule.
+   */
+  private canRead(permission: string): boolean {
+    return !this.configService.rbacEnabled() || this.authService.hasPermission(permission);
+  }
+
+  protected readonly canReadClients = computed(() => {
+    this.authService.currentUser();
+    return this.canRead('READ_CLIENT');
+  });
+  protected readonly canReadLoans = computed(() => {
+    this.authService.currentUser();
+    return this.canRead('READ_LOAN');
+  });
+  protected readonly canReadSavings = computed(() => {
+    this.authService.currentUser();
+    return this.canRead('READ_SAVINGSACCOUNT');
+  });
 
   readonly clientCount = signal(0);
   readonly activeLoans = signal(0);
@@ -523,52 +576,66 @@ export class SystemStatusComponent implements OnInit {
   private loadMetrics(): void {
     this.isLoading.set(true);
 
+    // `of(null)` rather than omitting the key: the shape the subscriber reads stays the same
+    // whichever widgets this user can see, so there is one code path instead of two.
+    const skipped = of(null as unknown as Record<string, unknown>);
+
     const metrics$ = forkJoin({
-      clients: this.clientService.getClients(
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        0,
-        1,
-      ),
-      loanActive: this.loansService.getLoans(
-        undefined,
-        0,
-        1,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        '300',
-      ),
-      loanPending: this.loansService.getLoans(
-        undefined,
-        0,
-        1,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        '100',
-      ),
-      loanClosed: this.loansService.getLoans(
-        undefined,
-        0,
-        1,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        '600',
-      ),
-      savings: this.savingsService.getSavingsaccounts(undefined, 0, 100),
+      clients: !this.canReadClients()
+        ? skipped
+        : this.clientService.getClients(
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            0,
+            1,
+          ),
+      loanActive: !this.canReadLoans()
+        ? skipped
+        : this.loansService.getLoans(
+            undefined,
+            0,
+            1,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            '300',
+          ),
+      loanPending: !this.canReadLoans()
+        ? skipped
+        : this.loansService.getLoans(
+            undefined,
+            0,
+            1,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            '100',
+          ),
+      loanClosed: !this.canReadLoans()
+        ? skipped
+        : this.loansService.getLoans(
+            undefined,
+            0,
+            1,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            '600',
+          ),
+      savings: !this.canReadSavings()
+        ? skipped
+        : this.savingsService.getSavingsaccounts(undefined, 0, 100),
     });
 
     metrics$.pipe(catchError(() => of(null))).subscribe((data: Record<string, unknown> | null) => {
@@ -590,9 +657,9 @@ export class SystemStatusComponent implements OnInit {
 
       this.activeLoans.set(active);
       this.loanChartData.set([
-        { label: 'Active', value: active, color: '#2ecc71' },
-        { label: 'Pending', value: pending, color: '#f39c12' },
-        { label: 'Closed', value: closed, color: '#95a5a6' },
+        { label: 'COMMON.ACTIVE', value: active, color: '#2ecc71' },
+        { label: 'COMMON.PENDING', value: pending, color: '#f39c12' },
+        { label: 'COMMON.CLOSED', value: closed, color: '#95a5a6' },
       ]);
 
       // Savings
@@ -617,17 +684,21 @@ export class SystemStatusComponent implements OnInit {
         );
 
         this.savingsChartData.set([
-          { label: 'Active', value: sActive, color: '#3498db' },
-          { label: 'Pending', value: sPending, color: '#f39c12' },
+          { label: 'COMMON.ACTIVE', value: sActive, color: '#3498db' },
+          { label: 'COMMON.PENDING', value: sPending, color: '#f39c12' },
         ]);
       }
     });
 
-    // Separately fetch real pending list for the list widget (first 50) using status code 100
+    // Separately fetch real pending list for the list widget (first 50) using status code 100.
+    // Unlike the metrics above this had no `catchError` at all, so a refusal surfaced as an
+    // error toast rather than as an empty widget.
+    if (!this.canReadLoans()) return;
     this.loansService
       .getLoans(undefined, 0, 50, undefined, undefined, undefined, undefined, undefined, '100')
+      .pipe(catchError(() => of(null)))
       .subscribe((data) => {
-        if (data.pageItems) {
+        if (data?.pageItems) {
           this.pendingLoans.set(Array.from(data.pageItems as unknown as Record<string, unknown>[]));
         }
       });

@@ -19,8 +19,8 @@
 
 import { computed, input, Component } from '@angular/core';
 
-import { TranslateModule } from '@ngx-translate/core';
-import { IonButton } from '@ionic/angular/standalone';
+import { ButtonComponent } from '../../../ui/button/button.component';
+import { TranslatePipe } from '../../../core/adapters';
 
 /**
  * Dialog to display the raw JSON command payload of a pending Maker-Checker task.
@@ -28,14 +28,14 @@ import { IonButton } from '@ionic/angular/standalone';
 @Component({
   selector: 'app-view-payload-dialog',
   standalone: true,
-  imports: [TranslateModule, IonButton],
+  imports: [ButtonComponent, TranslatePipe],
   template: `
-    <h2 class="dialog-title">Command Payload</h2>
+    <h2 class="dialog-title">{{ 'CHECKER_INBOX.COMMAND_PAYLOAD' | appTranslate }}</h2>
     <div class="dialog-content">
       <pre class="payload-code">{{ formattedJson() }}</pre>
     </div>
     <div class="dialog-actions">
-      <ion-button fill="clear" color="primary">CLOSE</ion-button>
+      <app-button type="button" intent="primary" emphasis="quiet">CLOSE</app-button>
     </div>
   `,
   styles: [

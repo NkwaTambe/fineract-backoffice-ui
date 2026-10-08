@@ -17,10 +17,10 @@
  * under the License.
  */
 
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import {
   IonButton,
   IonCard,
@@ -30,8 +30,6 @@ import {
   IonInput,
   IonItem,
   IonLabel,
-  IonSelect,
-  IonSelectOption,
   IonSpinner,
 } from '@ionic/angular/standalone';
 import {
@@ -39,6 +37,10 @@ import {
   CollateralProductCreateRequest,
   CurrencyData,
 } from '../../../api';
+import {
+  SearchableSelectComponent,
+  SearchableSelectOption,
+} from '../../../ui/searchable-select/searchable-select.component';
 
 /**
  * Create / edit form for a collateral product master-data record.
@@ -49,7 +51,7 @@ import {
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonSpinner,
     IonInput,
@@ -59,8 +61,7 @@ import {
     IonCardHeader,
     IonCardTitle,
     IonCard,
-    IonSelectOption,
-    IonSelect,
+    SearchableSelectComponent,
   ],
   template: `
     <div class="form-container">
@@ -69,8 +70,8 @@ import {
           <ion-card-title>
             {{
               isEditMode()
-                ? ('COLLATERAL_MANAGEMENT.EDIT' | translate)
-                : ('COLLATERAL_MANAGEMENT.CREATE' | translate)
+                ? ('COLLATERAL_MANAGEMENT.EDIT' | appTranslate)
+                : ('COLLATERAL_MANAGEMENT.CREATE' | appTranslate)
             }}
           </ion-card-title>
         </ion-card-header>
@@ -79,10 +80,10 @@ import {
           <form #collateralForm="ngForm" (ngSubmit)="onSubmit()" class="collateral-form">
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'COLLATERAL_MANAGEMENT.NAME' | translate
+                'COLLATERAL_MANAGEMENT.NAME' | appTranslate
               }}</ion-label>
               <ion-input
-                [attr.aria-label]="'COLLATERAL_MANAGEMENT.NAME' | translate"
+                [attr.aria-label]="'COLLATERAL_MANAGEMENT.NAME' | appTranslate"
                 name="name"
                 [(ngModel)]="collateral().name"
                 required
@@ -91,10 +92,10 @@ import {
 
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'COLLATERAL_MANAGEMENT.QUALITY' | translate
+                'COLLATERAL_MANAGEMENT.QUALITY' | appTranslate
               }}</ion-label>
               <ion-input
-                [attr.aria-label]="'COLLATERAL_MANAGEMENT.QUALITY' | translate"
+                [attr.aria-label]="'COLLATERAL_MANAGEMENT.QUALITY' | appTranslate"
                 name="quality"
                 [(ngModel)]="collateral().quality"
                 required
@@ -103,10 +104,10 @@ import {
 
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'COLLATERAL_MANAGEMENT.UNIT_TYPE' | translate
+                'COLLATERAL_MANAGEMENT.UNIT_TYPE' | appTranslate
               }}</ion-label>
               <ion-input
-                [attr.aria-label]="'COLLATERAL_MANAGEMENT.UNIT_TYPE' | translate"
+                [attr.aria-label]="'COLLATERAL_MANAGEMENT.UNIT_TYPE' | appTranslate"
                 name="unitType"
                 [(ngModel)]="collateral().unitType"
                 required
@@ -115,10 +116,10 @@ import {
 
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'COLLATERAL_MANAGEMENT.BASE_PRICE' | translate
+                'COLLATERAL_MANAGEMENT.BASE_PRICE' | appTranslate
               }}</ion-label>
               <ion-input
-                [attr.aria-label]="'COLLATERAL_MANAGEMENT.BASE_PRICE' | translate"
+                [attr.aria-label]="'COLLATERAL_MANAGEMENT.BASE_PRICE' | appTranslate"
                 type="number"
                 name="basePrice"
                 [(ngModel)]="collateral().basePrice"
@@ -128,10 +129,10 @@ import {
 
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'COLLATERAL_MANAGEMENT.PCT_TO_BASE' | translate
+                'COLLATERAL_MANAGEMENT.PCT_TO_BASE' | appTranslate
               }}</ion-label>
               <ion-input
-                [attr.aria-label]="'COLLATERAL_MANAGEMENT.PCT_TO_BASE' | translate"
+                [attr.aria-label]="'COLLATERAL_MANAGEMENT.PCT_TO_BASE' | appTranslate"
                 type="number"
                 name="pctToBase"
                 [(ngModel)]="collateral().pctToBase"
@@ -141,26 +142,22 @@ import {
 
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'COLLATERAL_MANAGEMENT.CURRENCY' | translate
+                'COLLATERAL_MANAGEMENT.CURRENCY' | appTranslate
               }}</ion-label>
-              <ion-select
-                [attr.aria-label]="'COLLATERAL_MANAGEMENT.CURRENCY' | translate"
-                interface="popover"
+              <app-searchable-select
+                [ariaLabel]="'COLLATERAL_MANAGEMENT.CURRENCY' | appTranslate"
+                [placeholder]="'COLLATERAL_MANAGEMENT.CURRENCY' | appTranslate"
                 name="currency"
+                testId="collateral-currency-select"
+                [options]="currencySelectOptions()"
                 [(ngModel)]="collateral().currency"
                 required
-              >
-                @for (opt of currencyOptions(); track opt.code) {
-                  <ion-select-option [value]="opt.code"
-                    >{{ opt.name }} ({{ opt.code }})</ion-select-option
-                  >
-                }
-              </ion-select>
+              />
             </ion-item>
 
             <div class="form-actions">
               <ion-button fill="clear" type="button" (click)="onCancel()" [disabled]="isSaving()">
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               <ion-button
                 color="primary"
@@ -169,9 +166,9 @@ import {
               >
                 @if (isSaving()) {
                   <ion-spinner name="crescent"></ion-spinner>
-                  {{ 'COMMON.SAVING' | translate }}
+                  {{ 'COMMON.SAVING' | appTranslate }}
                 } @else {
-                  {{ 'COMMON.SAVE' | translate }}
+                  {{ 'COMMON.SAVE' | appTranslate }}
                 }
               </ion-button>
             </div>
@@ -216,6 +213,12 @@ export class CollateralManagementFormComponent implements OnInit {
     locale: 'en',
   });
   readonly currencyOptions = signal<CurrencyData[]>([]);
+  readonly currencySelectOptions = computed<SearchableSelectOption[]>(() =>
+    this.currencyOptions().map((opt) => ({
+      value: opt.code ?? '',
+      label: `${opt.name} (${opt.code})`,
+    })),
+  );
 
   ngOnInit(): void {
     this.collateralService.getCollateralManagementTemplate().subscribe((currencies) => {

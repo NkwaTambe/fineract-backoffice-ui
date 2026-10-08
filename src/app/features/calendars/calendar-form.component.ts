@@ -20,7 +20,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../core/adapters';
 import { CalendarService, CalendarRequest, EnumOptionData } from '../../api';
 import {
   IonButton,
@@ -44,6 +44,7 @@ import {
   formatDateToFineract,
   toIsoDate,
 } from '../../core/utils/date-formatter';
+import { createPickersReady } from '../../shared/utils/pickers-ready';
 
 /**
  * Create / edit form for a group/center calendar. The entity type and entity id come
@@ -55,7 +56,7 @@ import {
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonSpinner,
     IonInput,
@@ -76,16 +77,18 @@ import {
       <ion-card>
         <ion-card-header>
           <ion-card-title>
-            {{ isEditMode ? ('CALENDARS.EDIT' | translate) : ('CALENDARS.CREATE' | translate) }}
+            {{
+              isEditMode ? ('CALENDARS.EDIT' | appTranslate) : ('CALENDARS.CREATE' | appTranslate)
+            }}
           </ion-card-title>
         </ion-card-header>
 
         <ion-card-content>
           <form #calendarForm="ngForm" (ngSubmit)="onSubmit()" class="calendar-form">
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'CALENDARS.TITLE_FIELD' | translate }}</ion-label>
+              <ion-label position="stacked">{{ 'CALENDARS.TITLE_FIELD' | appTranslate }}</ion-label>
               <ion-input
-                [attr.aria-label]="'CALENDARS.TITLE_FIELD' | translate"
+                [attr.aria-label]="'CALENDARS.TITLE_FIELD' | appTranslate"
                 name="title"
                 [ngModel]="title()"
                 (ngModelChange)="title.set($event)"
@@ -94,8 +97,10 @@ import {
             </ion-item>
 
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'CALENDARS.START_DATE' | translate }}</ion-label>
-              <ion-datetime-button datetime="startDate-picker"></ion-datetime-button>
+              <ion-label position="stacked">{{ 'CALENDARS.START_DATE' | appTranslate }}</ion-label>
+              @if (pickersReady()) {
+                <ion-datetime-button datetime="startDate-picker"></ion-datetime-button>
+              }
               <ion-modal [keepContentsMounted]="true">
                 <ng-template>
                   <ion-datetime
@@ -112,9 +117,9 @@ import {
             </ion-item>
 
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'CALENDARS.TYPE' | translate }}</ion-label>
+              <ion-label position="stacked">{{ 'CALENDARS.TYPE' | appTranslate }}</ion-label>
               <ion-select
-                [attr.aria-label]="'CALENDARS.TYPE' | translate"
+                [attr.aria-label]="'CALENDARS.TYPE' | appTranslate"
                 interface="popover"
                 name="typeId"
                 [ngModel]="typeId()"
@@ -129,7 +134,7 @@ import {
 
             <div class="form-actions">
               <ion-button fill="clear" type="button" (click)="onCancel()" [disabled]="isSaving()">
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               <ion-button
                 color="primary"
@@ -138,9 +143,9 @@ import {
               >
                 @if (isSaving()) {
                   <ion-spinner name="crescent"></ion-spinner>
-                  {{ 'COMMON.SAVING' | translate }}
+                  {{ 'COMMON.SAVING' | appTranslate }}
                 } @else {
-                  {{ 'COMMON.SAVE' | translate }}
+                  {{ 'COMMON.SAVE' | appTranslate }}
                 }
               </ion-button>
             </div>
@@ -165,6 +170,9 @@ import {
   ],
 })
 export class CalendarFormComponent implements OnInit {
+  /** See `createPickersReady` — the date buttons must not outrun their pickers. */
+  readonly pickersReady = createPickersReady();
+
   private readonly calendarService = inject(CalendarService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);

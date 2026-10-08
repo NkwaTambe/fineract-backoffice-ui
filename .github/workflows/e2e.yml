@@ -18,6 +18,17 @@
 name: E2E Tests
 
 on:
+  # Every push, on every branch. The suite is the only thing that exercises this application
+  # against a real Fineract, and waiting for a pull request to open means a branch can be several
+  # commits deep in a broken state before anything says so. It costs a stack bring-up per push;
+  # the concurrency rule below is what keeps that from compounding.
+  push:
+    branches:
+      - '**'
+  # Kept alongside `push` so pull requests from forks are covered: a fork's pushes land in the
+  # fork, not here, so `push` alone would leave external contributions untested. A branch in this
+  # repository with an open pull request will therefore get both runs — same commit, tested twice.
+  # Dropping this trigger removes the duplicate at the cost of fork coverage.
   pull_request:
     branches:
       - main
@@ -25,8 +36,11 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  # Superseded runs are cancelled everywhere except the long-lived branches, where the point of
+  # the run is the record that this commit passed. Without this, pushing three times in five
+  # minutes queues three full Fineract bring-ups.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop' }}
 
 # Granted per job rather than here: a workflow-level `pull-requests: write` hands
 # that token to every step in every job, including the ones that run npm install
@@ -44,11 +58,79 @@ permissions: {}
 #
 # The split lives in playwright.config.ts as two projects, so `--project=mocked`
 # and `--project=backend` mean the same thing locally as they do here.
-# Branch protection must replace the former `E2E (mocked backend)` requirement
-# with all four shard checks. Do not require `E2E (mocked backend report)`
-# instead: merging reports can succeed when a shard fails, so only the shard
-# jobs enforce the mocked E2E result.
+#
+# Both halves are sharded, and the shard counts differ for a reason. A mocked shard costs
+# nothing but a checkout, so four of them is close to free. A backend shard brings up its own
+# PostgreSQL and Fineract — roughly two minutes before the first test runs — so each one is paid
+# for in bring-up time as well as runner minutes, and three is where that stops paying for
+# itself against a 21-file suite. Each backend shard gets a *separate* stack rather than sharing
+# one: the specs create and mutate real records, and `backend.setup.ts` seeds reference data, so
+# a shared instance would make them order-dependent across shards.
+#
+# Branch protection must require all four `E2E (mocked backend, shard n/4)` checks, all three
+# `E2E (real Fineract, shard n/3)` checks, and `E2E (mobile viewport)`. Do not require either `... report` job instead:
+# merging reports can succeed when a shard fails, so only the shard jobs enforce the result.
 jobs:
+  mobile:
+    # The narrow layout, on Pixel 7 emulation. Unsharded: it is one spec of eleven cases and the
+    # fixed cost of a runner dwarfs the run itself. Needs no Fineract — the spec mocks its own
+    # backend — so it sits beside `mocked` rather than behind the stack.
+    name: E2E (mobile viewport)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+
+      - name: Generate Local SSL Certificates for Dev Server
+        run: |
+          mkdir -p ssl
+          openssl req -new -x509 -keyout ssl/localhost.key -out ssl/localhost.crt -days 365 -nodes -subj "/CN=localhost"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Playwright Browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright Browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Cache Angular build output
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .angular/cache
+          key: ${{ runner.os }}-angular-e2e-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-angular-e2e-
+
+      - name: Run mobile E2E tests
+        env:
+          PLAYWRIGHT_OUTPUT_DIR: ${{ runner.temp }}/e2e-output
+        run: npx playwright test --project=mobile --reporter=list
+
+      - name: Upload report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-mobile
+          path: playwright-report/
+          if-no-files-found: warn
+          retention-days: 3
+
   mocked:
     name: E2E (mocked backend, shard ${{ matrix.shard }}/${{ matrix.total }})
     runs-on: ubuntu-latest
@@ -82,17 +164,38 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
+          # restore-keys, so a lockfile bump that does not change Playwright's version reuses
+          # the browsers already downloaded instead of paying ~150 MB again on every job.
+          # `playwright install` re-downloads only when the binary it wants is genuinely absent.
           key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
 
       - name: Install Playwright Browsers
         run: npx playwright install chromium --with-deps
+
+      # Keyed on the lockfile only, and bounded to one entry as a result — see the longer note
+      # in ci.yml. `.angular/cache` is content-addressed internally, so an entry built from
+      # older sources still hits for unchanged files; adding a `src/**` hash to the key would
+      # only churn the repository's shared 10 GB cache budget and evict the Playwright browsers.
+      - name: Cache Angular build output
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .angular/cache
+          key: ${{ runner.os }}-angular-e2e-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-angular-e2e-
 
       - name: Run mocked E2E tests
         env:
           SHARD_INDEX: ${{ matrix.shard }}
           SHARD_TOTAL: ${{ matrix.total }}
           PLAYWRIGHT_OUTPUT_DIR: ${{ runner.temp }}/e2e-output
-        run: npx playwright test --project=mocked --shard="$SHARD_INDEX/$SHARD_TOTAL" --reporter=blob
+        # `list` alongside `blob` so the job log names every test as it runs. With blob alone a
+        # shard that fails prints nothing readable and the only way to find out which test broke
+        # is to download and merge the blob — a slow round trip for a question the log should
+        # already answer.
+        run: npx playwright test --project=mocked --shard="$SHARD_INDEX/$SHARD_TOTAL" --reporter=blob,list
 
       - name: Upload blob report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -136,7 +239,9 @@ jobs:
         env:
           PLAYWRIGHT_HTML_OPEN: 'never'
           PLAYWRIGHT_JSON_OUTPUT_NAME: 'playwright-results.json'
-        run: npx playwright merge-reports --reporter=line,html,json ./all-blob-reports
+        # `list` rather than `line`: `line` overwrites a single status line, so the merged log
+        # ends up with a total and nothing else. `list` leaves one line per test.
+        run: npx playwright merge-reports --reporter=list,html,json ./all-blob-reports
 
       - name: Upload merged report and videos
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -149,34 +254,43 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+      # Rendered twice with different budgets. The run summary allows 1 MB, so it gets the
+      # whole listing; a PR comment is capped at 65536 characters and the API *rejects* a
+      # longer one — and since the comment step is continue-on-error, overflowing would lose
+      # the comment silently. 55000 leaves headroom for the marker, title and artifact footer
+      # the upsert script wraps around it.
       - name: Build test summary
         if: always()
+        env:
+          E2E_SUMMARY_MAX_LISTED: '1000'
         run: |
           {
             echo "## E2E — mocked backend"
-            node scripts/e2e-summary.mjs
+            E2E_SUMMARY_MAX_BYTES=900000 node scripts/e2e-summary.mjs
           } >> "$GITHUB_STEP_SUMMARY"
-          node scripts/e2e-summary.mjs > /tmp/e2e-summary.md
+          E2E_SUMMARY_MAX_BYTES=55000 node scripts/e2e-summary.mjs > /tmp/e2e-summary.md
 
-      - name: Comment PR with summary
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        continue-on-error: true
-        env:
-          REPORT_MARKER: '<!-- e2e-report-mocked -->'
-          REPORT_TITLE: 'E2E — mocked backend'
-          REPORT_ARTIFACT: 'playwright-report-mocked'
+      # The comment is posted by e2e-comment.yml, not from here.
+      #
+      # A `pull_request` run from a fork gets a read-only GITHUB_TOKEN — that is GitHub's
+      # design, not a misconfiguration — so this job cannot comment on exactly the pull
+      # requests that most need the feedback. It uploads the rendered summary instead, and a
+      # `workflow_run` workflow running from the default branch, with a writable token and
+      # none of this job's untrusted checkout, posts it. See DOCS/CI_CHECKS.md.
+      - name: Upload the summary for the commenter
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
         with:
-          script: |
-            const upsert = require('./.github/scripts/upsert-e2e-comment.js');
-            await upsert({ github, context });
+          name: pr-comment-e2e-mocked
+          path: /tmp/e2e-summary.md
+          if-no-files-found: warn
+          retention-days: 1
 
-  backend:
-    name: E2E (real Fineract)
+  two-factor:
+    name: E2E (two-factor, real Fineract)
     runs-on: ubuntu-latest
     permissions:
       contents: read # checkout
-      pull-requests: write # upsert this job's summary comment
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
@@ -193,6 +307,103 @@ jobs:
           mkdir -p ssl
           openssl req -new -x509 -keyout ssl/localhost.key -out ssl/localhost.crt -days 365 -nodes -subj "/CN=localhost"
 
+      # A separate instance from the `backend` job, not a variant of it.
+      # `fineract.security.2fa.enabled` is process-wide: with it on, every endpoint except
+      # /v1/twofactor answers 403 until a one-time token has been validated, so the two suites
+      # cannot share a Fineract. The script also starts a mail catcher and points Fineract's SMTP
+      # settings at it, because the one-time token is delivered by email and nothing is persisted
+      # before the send — a failed send issues no token at all.
+      - name: Start Fineract with two-factor authentication
+        run: bash scripts/e2e-stack-2fa.sh
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Playwright Browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          # restore-keys, so a lockfile bump that does not change Playwright's version reuses
+          # the browsers already downloaded instead of paying ~150 MB again on every job.
+          # `playwright install` re-downloads only when the binary it wants is genuinely absent.
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright Browsers
+        run: npx playwright install chromium --with-deps
+
+      # Keyed on the lockfile only, and bounded to one entry as a result — see the longer note
+      # in ci.yml. `.angular/cache` is content-addressed internally, so an entry built from
+      # older sources still hits for unchanged files; adding a `src/**` hash to the key would
+      # only churn the repository's shared 10 GB cache budget and evict the Playwright browsers.
+      - name: Cache Angular build output
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .angular/cache
+          key: ${{ runner.os }}-angular-e2e-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-angular-e2e-
+
+      - name: Run two-factor E2E tests
+        env:
+          FINERACT_SERVER_URL: '/fineract-provider/api/v1'
+          FINERACT_TENANT_ID: 'default'
+          FINERACT_USERNAME: 'mifos'
+          FINERACT_PASSWORD: 'password'
+          MAILPIT_URL: 'http://localhost:8025'
+          PLAYWRIGHT_HTML_OPEN: 'never'
+          PLAYWRIGHT_OUTPUT_DIR: ${{ runner.temp }}/e2e-output-2fa
+        run: npx playwright test --project=two-factor --workers=1 --reporter=list,html
+
+      - name: Print Fineract logs on failure
+        if: failure()
+        run: |
+          docker compose -f deploy/docker-compose-e2e.yml -f deploy/docker-compose-e2e-2fa.yml \
+            logs --tail=100 fineract-backend mailpit
+
+      - name: Upload report and videos
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: playwright-report-two-factor
+          path: |
+            playwright-report/
+            ${{ runner.temp }}/e2e-output-2fa/
+          if-no-files-found: warn
+          retention-days: 7
+  backend:
+    name: E2E (real Fineract, shard ${{ matrix.shard }}/${{ matrix.total }})
+    runs-on: ubuntu-latest
+    strategy:
+      # Every shard runs to completion. A stack that failed to come up in shard 2 says nothing
+      # about shards 1 and 3, and cancelling them turns one infrastructure blip into a run with
+      # no result at all.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+        total: [3]
+    permissions:
+      contents: read # checkout
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+
+      - name: Generate Local SSL Certificates for Dev Server
+        run: |
+          mkdir -p ssl
+          openssl req -new -x509 -keyout ssl/localhost.key -out ssl/localhost.crt -days 365 -nodes -subj "/CN=localhost"
+
+      # Started before `npm ci` rather than after it, so the two minutes of database migration
+      # overlap the install instead of following it. The wait loop below is what synchronises
+      # them again.
       - name: Start PostgreSQL Database
         run: |
           docker compose -f deploy/docker-compose-e2e.yml up -d --wait fineract-db
@@ -208,6 +419,32 @@ jobs:
       - name: Start Apache Fineract Backend
         run: |
           docker compose -f deploy/docker-compose-e2e.yml up -d fineract-backend
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Playwright Browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright Browsers
+        run: npx playwright install chromium --with-deps
+
+      # Keyed on the lockfile only, and bounded to one entry as a result — see the longer note
+      # in ci.yml. `.angular/cache` is content-addressed internally, so an entry built from
+      # older sources still hits for unchanged files; adding a `src/**` hash to the key would
+      # only churn the repository's shared 10 GB cache budget and evict the Playwright browsers.
+      - name: Cache Angular build output
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .angular/cache
+          key: ${{ runner.os }}-angular-e2e-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-angular-e2e-
 
       - name: Wait for Fineract to be ready
         run: |
@@ -226,18 +463,6 @@ jobs:
           docker compose -f deploy/docker-compose-e2e.yml logs fineract-backend
           exit 1
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Cache Playwright Browsers
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
-
-      - name: Install Playwright Browsers
-        run: npx playwright install chromium --with-deps
-
       # No build step: playwright.config.ts serves the app with `ng serve`, which
       # compiles from source. A production build is already gated by ci.yml.
 
@@ -252,49 +477,122 @@ jobs:
           FINERACT_TENANT_ID: 'default'
           FINERACT_USERNAME: 'mifos'
           FINERACT_PASSWORD: 'password'
-          PLAYWRIGHT_HTML_OPEN: 'never'
-          PLAYWRIGHT_JSON_OUTPUT_NAME: 'playwright-results.json'
+          SHARD_INDEX: ${{ matrix.shard }}
+          SHARD_TOTAL: ${{ matrix.total }}
           # Videos and traces land here rather than in the repo, so the dev server's
           # file watcher cannot race Playwright's artifact churn — see the note in
           # playwright.config.ts.
           PLAYWRIGHT_OUTPUT_DIR: ${{ runner.temp }}/e2e-output
-        run: npx playwright test --project=backend --reporter=line,html,json
+        # A blob report rather than html/json: those are produced once, by the merge job below,
+        # from every shard's blob. Note that Playwright runs the `setup` project in each shard,
+        # so each stack gets its reference data seeded against the shard that uses it.
+        run: npx playwright test --project=backend --shard="$SHARD_INDEX/$SHARD_TOTAL" --reporter=blob,list
 
-      - name: Upload report and videos
+      - name: Print Fineract logs on failure
+        if: failure()
+        run: |
+          docker compose -f deploy/docker-compose-e2e.yml logs --tail=100 fineract-backend
+
+      - name: Upload blob report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-blob-backend-${{ matrix.shard }}
+          path: blob-report/
+          if-no-files-found: warn
+          retention-days: 1
+
+      # Kept as its own artifact rather than merged into the report: videos and traces are per
+      # shard and are what a failure is actually diagnosed from, whereas the merged report is
+      # what a passing run is read from.
+      - name: Upload videos and traces
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: playwright-artifacts-backend-${{ matrix.shard }}
+          path: ${{ runner.temp }}/e2e-output/
+          if-no-files-found: warn
+          retention-days: 7
+
+  backend-report:
+    name: E2E (real Fineract report)
+    if: ${{ !cancelled() }}
+    needs: backend
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # checkout
+      pull-requests: write # upsert this job's summary comment
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download blob reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: all-blob-reports
+          pattern: playwright-blob-backend-*
+          merge-multiple: true
+
+      - name: Merge real-backend E2E reports
+        env:
+          PLAYWRIGHT_HTML_OPEN: 'never'
+          PLAYWRIGHT_JSON_OUTPUT_NAME: 'playwright-results.json'
+        # `list` rather than `line`: `line` overwrites a single status line, so the merged log
+        # ends up with a total and nothing else. `list` leaves one line per test.
+        run: npx playwright merge-reports --reporter=list,html,json ./all-blob-reports
+
+      - name: Upload merged report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
         with:
           name: playwright-report-backend
-          # Videos and traces are written to PLAYWRIGHT_OUTPUT_DIR, not playwright-report/,
-          # so both paths are needed. if-no-files-found: warn keeps a run that
-          # produced neither from silently uploading an empty artifact.
           path: |
             playwright-report/
-            ${{ runner.temp }}/e2e-output/
+            playwright-results.json
           if-no-files-found: warn
           retention-days: 7
 
       # Written to the run summary as well as the PR, because a pull_request from
       # a fork gets a read-only token and cannot be commented on — that is the
       # "Resource not accessible by integration" failure. The summary always works.
+      # Rendered twice with different budgets. The run summary allows 1 MB, so it gets the
+      # whole listing; a PR comment is capped at 65536 characters and the API *rejects* a
+      # longer one — and since the comment step is continue-on-error, overflowing would lose
+      # the comment silently. 55000 leaves headroom for the marker, title and artifact footer
+      # the upsert script wraps around it.
       - name: Build test summary
         if: always()
+        env:
+          E2E_SUMMARY_MAX_LISTED: '1000'
         run: |
           {
             echo "## E2E — real Fineract"
-            node scripts/e2e-summary.mjs
+            E2E_SUMMARY_MAX_BYTES=900000 node scripts/e2e-summary.mjs
           } >> "$GITHUB_STEP_SUMMARY"
-          node scripts/e2e-summary.mjs > /tmp/e2e-summary.md
+          E2E_SUMMARY_MAX_BYTES=55000 node scripts/e2e-summary.mjs > /tmp/e2e-summary.md
 
-      - name: Comment PR with summary
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        continue-on-error: true
-        env:
-          REPORT_MARKER: '<!-- e2e-report-backend -->'
-          REPORT_TITLE: 'E2E — real Fineract'
-          REPORT_ARTIFACT: 'playwright-report-backend'
+      # The comment is posted by e2e-comment.yml, not from here.
+      #
+      # A `pull_request` run from a fork gets a read-only GITHUB_TOKEN — that is GitHub's
+      # design, not a misconfiguration — so this job cannot comment on exactly the pull
+      # requests that most need the feedback. It uploads the rendered summary instead, and a
+      # `workflow_run` workflow running from the default branch, with a writable token and
+      # none of this job's untrusted checkout, posts it. See DOCS/CI_CHECKS.md.
+      - name: Upload the summary for the commenter
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
         with:
-          script: |
-            const upsert = require('./.github/scripts/upsert-e2e-comment.js');
-            await upsert({ github, context });
+          name: pr-comment-e2e-backend
+          path: /tmp/e2e-summary.md
+          if-no-files-found: warn
+          retention-days: 1

@@ -17,16 +17,11 @@
  * under the License.
  */
 
-import { inject, input, signal, Component, OnInit } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
-import {
-  IonButton,
-  IonIcon,
-  IonSegment,
-  IonSegmentButton,
-  IonLabel,
-  IonSpinner,
-} from '@ionic/angular/standalone';
+import { computed, inject, input, signal, Component, OnInit } from '@angular/core';
+import { TranslatePipe } from '../../../core/adapters';
+import { TabsComponent, UiTab } from '../../../ui/tabs/tabs.component';
+import { ButtonComponent } from '../../../ui/button/button.component';
+import { SpinnerComponent } from '../../../ui/spinner/spinner.component';
 import { DataTablesService, GetDataTablesResponse } from '../../../api';
 import { DialogService } from '../../../core/services/dialog.service';
 import { DataTableComponent, ColumnDef } from '../data-table/data-table.component';
@@ -37,60 +32,54 @@ const AUDIT_COLUMN_NAMES = new Set(['id', 'created_at', 'updated_at']);
 @Component({
   selector: 'app-entity-datatables',
   standalone: true,
-  imports: [
-    TranslateModule,
-    IonSegment,
-    IonSegmentButton,
-    IonLabel,
-    IonButton,
-    IonIcon,
-    IonSpinner,
-    DataTableComponent,
-  ],
+  imports: [TranslatePipe, TabsComponent, ButtonComponent, SpinnerComponent, DataTableComponent],
   template: `
     <div class="entity-datatables-container">
       @if (isLoading()) {
         <div class="loading-overlay">
-          <ion-spinner name="crescent"></ion-spinner>
+          <app-spinner [label]="'COMMON.LOADING' | appTranslate" />
         </div>
       }
 
-      @if (datatables().length > 0) {
-        <ion-segment
-          scrollable
+      @if (tableTabs().length > 0) {
+        <app-tabs
+          #tabs
           data-testid="entity-datatables-tabs"
+          [tabs]="tableTabs()"
+          [label]="'SYSTEM.DATA_TABLES' | appTranslate"
+          [idPrefix]="'entity-datatables-' + apptableName() + '-' + entityId()"
           [value]="activeTable()?.registeredTableName"
-          (ionChange)="onTabChange($event)"
-        >
-          @for (dt of datatables(); track dt.registeredTableName) {
-            <ion-segment-button [value]="dt.registeredTableName!">
-              <ion-label>{{ dt.registeredTableName }}</ion-label>
-            </ion-segment-button>
-          }
-        </ion-segment>
+          (valueChange)="onTabChange($event)"
+        />
 
         @if (activeTable(); as dt) {
-          <div class="tab-content">
+          <div
+            class="tab-content"
+            role="tabpanel"
+            tabindex="0"
+            [id]="tabs.panelId()"
+            [attr.aria-labelledby]="tabs.tabId(dt.registeredTableName!)"
+          >
             <app-data-table
               [columns]="getColumnDefs(dt)"
               [data]="tableData()"
               [isLoading]="isTableLoading()"
               [localLogic]="true"
             >
-              <ion-button
+              <app-button
                 headerActions
                 data-testid="entity-datatables-add"
-                color="primary"
+                type="button"
+                icon="add-outline"
                 (click)="onAddEntry(dt)"
               >
-                <ion-icon name="add-outline" slot="start"></ion-icon>
-                {{ 'SYSTEM.ADD_ENTRY' | translate }}
-              </ion-button>
+                {{ 'SYSTEM.ADD_ENTRY' | appTranslate }}
+              </app-button>
             </app-data-table>
           </div>
         }
       } @else if (!isLoading()) {
-        <p class="no-data">{{ 'SYSTEM.NO_DATA_TABLES_REGISTERED' | translate }}</p>
+        <p class="no-data">{{ 'SYSTEM.NO_DATA_TABLES_REGISTERED' | appTranslate }}</p>
       }
     </div>
   `,
@@ -124,6 +113,11 @@ export class EntityDatatablesComponent implements OnInit {
   private readonly dialogService = inject(DialogService);
 
   readonly datatables = signal<GetDataTablesResponse[]>([]);
+  readonly tableTabs = computed<UiTab[]>(() =>
+    this.datatables()
+      .filter((table) => !!table.registeredTableName)
+      .map((table) => ({ value: table.registeredTableName!, label: table.registeredTableName! })),
+  );
   readonly isLoading = signal<boolean>(false);
 
   readonly tableData = signal<Record<string, unknown>[]>([]);
@@ -140,9 +134,11 @@ export class EntityDatatablesComponent implements OnInit {
       next: (data) => {
         this.datatables.set(data);
         this.isLoading.set(false);
-        if (data.length > 0) {
-          this.activeTable.set(data[0]);
-          this.loadTableData(data[0].registeredTableName!);
+        // Only named tables get a tab, so select the first one that can be selected.
+        const first = data.find((table) => !!table.registeredTableName);
+        if (first) {
+          this.activeTable.set(first);
+          this.loadTableData(first.registeredTableName!);
         }
       },
       error: (err) => {
@@ -154,8 +150,16 @@ export class EntityDatatablesComponent implements OnInit {
 
   loadTableData(tableName: string): void {
     this.isTableLoading.set(true);
+    // The columns come from `activeTable()` and switch synchronously, while the rows arrive
+    // later. Holding the previous table's rows would render them under the new table's headers
+    // until the response lands, so drop them as the request goes out.
+    this.tableData.set([]);
     this.datatablesService.getDatatablesDatatableApptableId(tableName, this.entityId()).subscribe({
       next: (data: unknown) => {
+        // Nothing cancels the previous request, so switching A -> B -> A leaves two in flight
+        // and the slower one can land last. Without this guard its rows would be shown under
+        // whichever tab is selected by then, and stay there.
+        if (this.isStale(tableName)) return;
         const parsed = typeof data === 'string' ? JSON.parse(data) : data;
 
         // GET /datatables/{datatable}/{apptableId} returns entries as a plain
@@ -184,9 +188,15 @@ export class EntityDatatablesComponent implements OnInit {
       },
       error: (err) => {
         console.error(`Failed to load data for table ${tableName}`, err);
+        if (this.isStale(tableName)) return;
         this.isTableLoading.set(false);
       },
     });
+  }
+
+  /** True once a later tab change has made this response's table no longer the selected one. */
+  private isStale(tableName: string): boolean {
+    return this.activeTable()?.registeredTableName !== tableName;
   }
 
   getColumnDefs(dt: GetDataTablesResponse): ColumnDef[] {
@@ -202,12 +212,10 @@ export class EntityDatatablesComponent implements OnInit {
       }));
   }
 
-  onTabChange(event: Event): void {
-    const detail = (event as CustomEvent<{ value?: string }>).detail;
-    const tableName = detail?.value ?? (event.target as HTMLInputElement)?.value;
-    if (!tableName) return;
-
-    this.activeTable.set(this.datatables().find((d) => d.registeredTableName === tableName));
+  onTabChange(tableName: string): void {
+    const table = this.datatables().find((dt) => dt.registeredTableName === tableName);
+    if (!table || table === this.activeTable()) return;
+    this.activeTable.set(table);
     this.loadTableData(tableName);
   }
 

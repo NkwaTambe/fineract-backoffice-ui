@@ -17,8 +17,8 @@
  * under the License.
  */
 
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
 import { Router } from '@angular/router';
 import { NgClass } from '@angular/common';
 import { of } from 'rxjs';
@@ -26,27 +26,21 @@ import { catchError, startWith, tap } from 'rxjs/operators';
 import { DataTableComponent, CellTemplateDirective, ColumnDef } from '../../shared';
 import { GeneralLedgerAccountService, GetGLAccountsResponse } from '../../api';
 import { TranslatePipe } from '../../core/adapters';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { ButtonComponent } from '../../ui/button/button.component';
 
 @Component({
   selector: 'app-chart-of-accounts',
   standalone: true,
-  imports: [
-    TranslateModule,
-    DataTableComponent,
-    CellTemplateDirective,
-    TranslatePipe,
-    NgClass,
-    IonIcon,
-    IonButton,
-  ],
+  imports: [DataTableComponent, CellTemplateDirective, TranslatePipe, NgClass, ButtonComponent],
   template: `
     <app-data-table
       [hasError]="hasError()"
+      [errorStatus]="errorStatus()"
       (retry)="onRetry()"
       title="nav.chartOfAccounts"
       helpTextKey="HELP.CHART_OF_ACCOUNTS_DESC"
       createButtonLabel="ACCOUNTING.ADD_LEDGER_ACCOUNT"
+      createPermission="CREATE_GLACCOUNT"
       [columns]="columns"
       [data]="accounts()"
       [localLogic]="true"
@@ -59,14 +53,14 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
       </ng-template>
 
       <ng-template appCellTemplate="actions" let-account>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [title]="'ACCOUNTING.EDIT_ACCOUNT' | appTranslate"
+        <app-button
+          type="button"
+          emphasis="quiet"
+          intent="primary"
+          icon="create-outline"
           (click)="onEditAccount(account)"
-        >
-          <ion-icon name="create-outline"></ion-icon>
-        </ion-button>
+          [label]="'ACCOUNTING.EDIT_ACCOUNT' | appTranslate"
+        />
       </ng-template>
     </app-data-table>
   `,
@@ -104,16 +98,22 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
 export class ChartOfAccountsComponent {
   /** True when the last load failed, so the table offers a retry instead of an empty list. */
   readonly hasError = signal(false);
+  /**
+   * The status that failure came back with, so the table can tell a refused read from a broken
+   * one. READ_GLACCOUNT is a permission a role may simply not hold, and "try again" is the wrong
+   * thing to offer someone whose next attempt will be refused in exactly the same way.
+   */
+  readonly errorStatus = signal<number | null>(null);
 
   private readonly glAccountService = inject(GeneralLedgerAccountService);
   private readonly router = inject(Router);
 
   columns: ColumnDef[] = [
-    { key: 'glCode', label: 'GL Code', sortable: true },
-    { key: 'name', label: 'Account Name', sortable: true },
-    { key: 'type', label: 'Type', sortable: true },
-    { key: 'usage', label: 'Usage', sortable: true },
-    { key: 'actions', label: 'Actions', sortable: false },
+    { key: 'glCode', label: 'ACCOUNTING.GL_CODE', sortable: true },
+    { key: 'name', label: 'ACCOUNTING.ACCOUNT_NAME', sortable: true },
+    { key: 'type', label: 'COMMON.TYPE', sortable: true },
+    { key: 'usage', label: 'TELLERS.USAGE', sortable: true },
+    { key: 'actions', label: 'COMMON.ACTIONS', sortable: false },
   ];
 
   readonly accounts = signal<GetGLAccountsResponse[]>([]);
@@ -131,9 +131,13 @@ export class ChartOfAccountsComponent {
       .getGlaccounts()
       .pipe(
         startWith([]),
-        tap(() => this.hasError.set(false)),
-        catchError(() => {
+        tap(() => {
+          this.hasError.set(false);
+          this.errorStatus.set(null);
+        }),
+        catchError((error: HttpErrorResponse) => {
           this.hasError.set(true);
+          this.errorStatus.set(error.status);
           return of([]);
         }),
       )

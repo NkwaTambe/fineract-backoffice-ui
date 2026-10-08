@@ -63,8 +63,10 @@ async function createAndOpenClient(page: Page, suffix: string): Promise<string> 
   const firstName = `E2ETransfer${suffix}`;
   await page.goto('/clients/create');
   await selectOption(page, 'Office', HEAD_OFFICE);
+  await page.getByRole('button', { name: 'Next' }).click();
   await page.getByRole('textbox', { name: 'First Name' }).fill(firstName);
   await page.getByRole('textbox', { name: 'Last Name' }).fill('Tester');
+  await page.getByRole('button', { name: 'Next' }).click();
   await page.getByRole('button', { name: /^save$/i }).click();
   await expect(page).toHaveURL(/\/clients$/, { timeout: 20000 });
 

@@ -17,12 +17,26 @@
  * under the License.
  */
 
-import { Component, OnInit, signal, inject } from '@angular/core';
-import { Router } from '@angular/router';
+import {
+  Component,
+  OnInit,
+  AfterViewInit,
+  signal,
+  inject,
+  viewChild,
+  DestroyRef,
+} from '@angular/core';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { RouterModule } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../core/adapters';
 import { SearchAPIService, GetSearchResponse } from '../../api';
+
+export { SearchAPIService, GetSearchResponse };
+import {
+  NavigationConfigService,
+  NavSearchResult,
+} from '../../core/services/navigation-config.service';
 import { CdkTableModule } from '@angular/cdk/table';
 import {
   IonButton,
@@ -46,7 +60,7 @@ import {
     FormsModule,
     CdkTableModule,
     RouterModule,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonSpinner,
     IonInput,
@@ -63,29 +77,34 @@ import {
   template: `
     <ion-card>
       <ion-card-header>
-        <ion-card-title>{{ 'SEARCH.TITLE' | translate }}</ion-card-title>
+        <ion-card-title>{{ 'SEARCH.TITLE' | appTranslate }}</ion-card-title>
       </ion-card-header>
       <ion-card-content>
         <div class="search-form">
           <ion-item fill="outline">
-            <ion-label position="stacked">{{ 'SEARCH.QUERY' | translate }}</ion-label>
+            <ion-label position="stacked">{{ 'SEARCH.QUERY' | appTranslate }}</ion-label>
             <ion-input
-              [attr.aria-label]="'SEARCH.QUERY' | translate"
+              #searchInput
+              [attr.aria-label]="'SEARCH.QUERY' | appTranslate"
               [(ngModel)]="query"
               name="query"
+              [autofocus]="true"
               required
+              (keyup.enter)="onSearch()"
             ></ion-input>
           </ion-item>
 
           <ion-item fill="outline">
-            <ion-label position="stacked">{{ 'SEARCH.RESOURCE_TYPE' | translate }}</ion-label>
+            <ion-label position="stacked">{{ 'SEARCH.RESOURCE_TYPE' | appTranslate }}</ion-label>
             <ion-select
-              [attr.aria-label]="'SEARCH.RESOURCE_TYPE' | translate"
+              [attr.aria-label]="'SEARCH.RESOURCE_TYPE' | appTranslate"
               interface="popover"
               [(ngModel)]="selectedResource"
               name="resource"
             >
-              <ion-select-option value="">{{ 'SEARCH.ALL_TYPES' | translate }}</ion-select-option>
+              <ion-select-option value="">{{
+                'SEARCH.ALL_TYPES' | appTranslate
+              }}</ion-select-option>
               @for (type of allowedSearchTypes(); track type) {
                 <ion-select-option [value]="type">{{ type }}</ion-select-option>
               }
@@ -93,11 +112,11 @@ import {
           </ion-item>
 
           <ion-checkbox [(ngModel)]="exactMatch" name="exactMatch">
-            {{ 'SEARCH.EXACT_MATCH' | translate }}
+            {{ 'SEARCH.EXACT_MATCH' | appTranslate }}
           </ion-checkbox>
 
           <ion-button color="primary" [disabled]="!query || isLoading()" (click)="onSearch()">
-            {{ 'SEARCH.SEARCH_BTN' | translate }}
+            {{ 'SEARCH.SEARCH_BTN' | appTranslate }}
           </ion-button>
         </div>
 
@@ -107,34 +126,65 @@ import {
           </div>
         }
 
-        @if (!isLoading() && searched() && results().length === 0) {
-          <p class="no-results">{{ 'SEARCH.NO_RESULTS' | translate }}</p>
+        @if (!isLoading() && searched() && results().length === 0 && navResults().length === 0) {
+          <p class="no-results">{{ 'SEARCH.NO_RESULTS' | appTranslate }}</p>
+        }
+
+        @if (!isLoading() && navResults().length > 0) {
+          <h3 class="results-section-title">{{ 'SEARCH.PAGES_SECTION' | appTranslate }}</h3>
+          <table cdk-table [dataSource]="navResults()" class="results-table nav-results-table">
+            <ng-container cdkColumnDef="pageType">
+              <th cdk-header-cell *cdkHeaderCellDef>{{ 'SEARCH.ENTITY_TYPE' | appTranslate }}</th>
+              <td cdk-cell *cdkCellDef="let row">{{ 'SEARCH.PAGE_TYPE' | appTranslate }}</td>
+            </ng-container>
+
+            <ng-container cdkColumnDef="pageName">
+              <th cdk-header-cell *cdkHeaderCellDef>{{ 'SEARCH.ENTITY_NAME' | appTranslate }}</th>
+              <td cdk-cell *cdkCellDef="let row">{{ row.label }}</td>
+            </ng-container>
+
+            <ng-container cdkColumnDef="pageSection">
+              <th cdk-header-cell *cdkHeaderCellDef>{{ 'SEARCH.SECTION' | appTranslate }}</th>
+              <td cdk-cell *cdkCellDef="let row">{{ row.groupLabel }}</td>
+            </ng-container>
+
+            <tr cdk-header-row *cdkHeaderRowDef="navDisplayedColumns"></tr>
+            <tr
+              cdk-row
+              *cdkRowDef="let row; columns: navDisplayedColumns"
+              class="clickable-row"
+              (click)="onNavResultClick(row)"
+            ></tr>
+          </table>
         }
 
         @if (!isLoading() && results().length > 0) {
+          @if (navResults().length > 0) {
+            <h3 class="results-section-title">{{ 'SEARCH.ENTITIES_SECTION' | appTranslate }}</h3>
+          }
           <table cdk-table [dataSource]="results()" class="results-table">
             <ng-container cdkColumnDef="entityType">
-              <th cdk-header-cell *cdkHeaderCellDef>{{ 'SEARCH.ENTITY_TYPE' | translate }}</th>
+              <th cdk-header-cell *cdkHeaderCellDef>{{ 'SEARCH.ENTITY_TYPE' | appTranslate }}</th>
               <td cdk-cell *cdkCellDef="let row">{{ row.entityType }}</td>
             </ng-container>
 
             <ng-container cdkColumnDef="entityName">
-              <th cdk-header-cell *cdkHeaderCellDef>{{ 'SEARCH.ENTITY_NAME' | translate }}</th>
+              <th cdk-header-cell *cdkHeaderCellDef>{{ 'SEARCH.ENTITY_NAME' | appTranslate }}</th>
               <td cdk-cell *cdkCellDef="let row">{{ row.entityName }}</td>
             </ng-container>
 
             <ng-container cdkColumnDef="entityAccountNo">
-              <th cdk-header-cell *cdkHeaderCellDef>{{ 'SEARCH.ACCOUNT_NO' | translate }}</th>
+              <th cdk-header-cell *cdkHeaderCellDef>{{ 'SEARCH.ACCOUNT_NO' | appTranslate }}</th>
               <td cdk-cell *cdkCellDef="let row">{{ row.entityAccountNo }}</td>
             </ng-container>
 
             <ng-container cdkColumnDef="entityExternalId">
-              <th cdk-header-cell *cdkHeaderCellDef>{{ 'SEARCH.EXTERNAL_ID' | translate }}</th>
+              <th cdk-header-cell *cdkHeaderCellDef>{{ 'SEARCH.EXTERNAL_ID' | appTranslate }}</th>
               <td cdk-cell *cdkCellDef="let row">{{ row.entityExternalId }}</td>
             </ng-container>
 
             <ng-container cdkColumnDef="parentName">
-              <th cdk-header-cell *cdkHeaderCellDef>{{ 'SEARCH.PARENT' | translate }}</th>
+              <th cdk-header-cell *cdkHeaderCellDef>{{ 'SEARCH.PARENT' | appTranslate }}</th>
               <td cdk-cell *cdkCellDef="let row">{{ row.parentName }}</td>
             </ng-container>
 
@@ -175,6 +225,14 @@ import {
       .results-table {
         width: 100%;
       }
+      .nav-results-table {
+        margin-bottom: 24px;
+      }
+      .results-section-title {
+        margin: 24px 0 12px;
+        font-size: 1rem;
+        font-weight: 600;
+      }
       .clickable-row {
         cursor: pointer;
       }
@@ -184,9 +242,14 @@ import {
     `,
   ],
 })
-export class GlobalSearchComponent implements OnInit {
+export class GlobalSearchComponent implements OnInit, AfterViewInit {
   private searchApiService = inject(SearchAPIService);
+  private navigationConfig = inject(NavigationConfigService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
+  private destroyRef = inject(DestroyRef);
+
+  readonly searchInput = viewChild<IonInput>('searchInput');
 
   query = '';
   selectedResource = '';
@@ -195,6 +258,7 @@ export class GlobalSearchComponent implements OnInit {
   readonly searched = signal(false);
   readonly allowedSearchTypes = signal<string[]>([]);
   readonly results = signal<GetSearchResponse[]>([]);
+  readonly navResults = signal<NavSearchResult[]>([]);
   displayedColumns = [
     'entityType',
     'entityName',
@@ -202,14 +266,35 @@ export class GlobalSearchComponent implements OnInit {
     'entityExternalId',
     'parentName',
   ];
+  navDisplayedColumns = ['pageType', 'pageName', 'pageSection'];
 
   ngOnInit(): void {
-    this.searchApiService.getSearchTemplate().subscribe({
-      next: (template) => {
-        this.allowedSearchTypes.set(
-          ((template as Record<string, unknown>)?.[`allowedSearchTypes`] as string[]) ?? [],
-        );
-      },
+    this.searchApiService
+      .getSearchTemplate()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (template) => {
+          this.allowedSearchTypes.set(
+            ((template as Record<string, unknown>)?.[`allowedSearchTypes`] as string[]) ?? [],
+          );
+        },
+      });
+
+    this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+      const q = params.get('q');
+      if (q && q !== this.query) {
+        this.query = q;
+        this.onSearch();
+      }
+    });
+  }
+
+  ngAfterViewInit(): void {
+    setTimeout(() => {
+      const input = this.searchInput();
+      if (input && typeof input.setFocus === 'function') {
+        input.setFocus();
+      }
     });
   }
 
@@ -217,6 +302,7 @@ export class GlobalSearchComponent implements OnInit {
     if (!this.query) return;
     this.isLoading.set(true);
     this.searched.set(false);
+    this.navResults.set(this.navigationConfig.searchRoutes(this.query));
     const resource = this.selectedResource || undefined;
     this.searchApiService.getSearch(this.query, resource, this.exactMatch).subscribe({
       next: (data) => {
@@ -230,6 +316,10 @@ export class GlobalSearchComponent implements OnInit {
         this.searched.set(true);
       },
     });
+  }
+
+  onNavResultClick(result: NavSearchResult): void {
+    this.router.navigateByUrl(result.route);
   }
 
   onRowClick(row: GetSearchResponse): void {

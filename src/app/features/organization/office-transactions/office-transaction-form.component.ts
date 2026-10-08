@@ -20,7 +20,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import { DefaultService } from '../../../api';
 import { NotificationService } from '../../../core/services/notification.service';
 import {
@@ -44,6 +44,7 @@ import {
   FINERACT_LOCALE,
   toIsoDate,
 } from '../../../core/utils/date-formatter';
+import { createPickersReady } from '../../../shared/utils/pickers-ready';
 
 @Component({
   selector: 'app-office-transaction-form',
@@ -51,7 +52,7 @@ import {
   imports: [
     FormsModule,
     RouterModule,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonInput,
     IonItem,
@@ -70,7 +71,7 @@ import {
     <div class="form-container">
       <ion-card>
         <ion-card-header>
-          <ion-card-title>{{ 'OFFICE_TRANSACTIONS.CREATE' | translate }}</ion-card-title>
+          <ion-card-title>{{ 'OFFICE_TRANSACTIONS.CREATE' | appTranslate }}</ion-card-title>
         </ion-card-header>
 
         <ion-card-content>
@@ -78,10 +79,10 @@ import {
             <div class="form-grid">
               <ion-item fill="outline">
                 <ion-label position="stacked">{{
-                  'OFFICE_TRANSACTIONS.FROM_OFFICE' | translate
+                  'OFFICE_TRANSACTIONS.FROM_OFFICE' | appTranslate
                 }}</ion-label>
                 <ion-select
-                  [attr.aria-label]="'OFFICE_TRANSACTIONS.FROM_OFFICE' | translate"
+                  [attr.aria-label]="'OFFICE_TRANSACTIONS.FROM_OFFICE' | appTranslate"
                   interface="popover"
                   name="fromOfficeId"
                   [(ngModel)]="fromOfficeId"
@@ -95,10 +96,10 @@ import {
 
               <ion-item fill="outline">
                 <ion-label position="stacked">{{
-                  'OFFICE_TRANSACTIONS.TO_OFFICE' | translate
+                  'OFFICE_TRANSACTIONS.TO_OFFICE' | appTranslate
                 }}</ion-label>
                 <ion-select
-                  [attr.aria-label]="'OFFICE_TRANSACTIONS.TO_OFFICE' | translate"
+                  [attr.aria-label]="'OFFICE_TRANSACTIONS.TO_OFFICE' | appTranslate"
                   interface="popover"
                   name="toOfficeId"
                   [(ngModel)]="toOfficeId"
@@ -112,10 +113,10 @@ import {
 
               <ion-item fill="outline">
                 <ion-label position="stacked">{{
-                  'OFFICE_TRANSACTIONS.AMOUNT' | translate
+                  'OFFICE_TRANSACTIONS.AMOUNT' | appTranslate
                 }}</ion-label>
                 <ion-input
-                  [attr.aria-label]="'OFFICE_TRANSACTIONS.AMOUNT' | translate"
+                  [attr.aria-label]="'OFFICE_TRANSACTIONS.AMOUNT' | appTranslate"
                   type="number"
                   name="amount"
                   [(ngModel)]="amount"
@@ -126,9 +127,11 @@ import {
 
               <ion-item fill="outline">
                 <ion-label position="stacked">{{
-                  'OFFICE_TRANSACTIONS.DATE' | translate
+                  'OFFICE_TRANSACTIONS.DATE' | appTranslate
                 }}</ion-label>
-                <ion-datetime-button datetime="transactionDate-picker"></ion-datetime-button>
+                @if (pickersReady()) {
+                  <ion-datetime-button datetime="transactionDate-picker"></ion-datetime-button>
+                }
                 <ion-modal [keepContentsMounted]="true">
                   <ng-template>
                     <ion-datetime
@@ -145,10 +148,10 @@ import {
 
               <ion-item fill="outline" class="full-span">
                 <ion-label position="stacked">{{
-                  'OFFICE_TRANSACTIONS.DESC' | translate
+                  'OFFICE_TRANSACTIONS.DESC' | appTranslate
                 }}</ion-label>
                 <ion-input
-                  [attr.aria-label]="'OFFICE_TRANSACTIONS.DESC' | translate"
+                  [attr.aria-label]="'OFFICE_TRANSACTIONS.DESC' | appTranslate"
                   name="description"
                   [(ngModel)]="description"
                 ></ion-input>
@@ -157,10 +160,10 @@ import {
 
             <div class="form-actions">
               <ion-button fill="clear" type="button" routerLink="/organization/office-transactions">
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               <ion-button color="primary" type="submit" [disabled]="txForm.invalid || isSaving()">
-                {{ isSaving() ? ('COMMON.SAVING' | translate) : ('COMMON.SAVE' | translate) }}
+                {{ isSaving() ? ('COMMON.SAVING' | appTranslate) : ('COMMON.SAVE' | appTranslate) }}
               </ion-button>
             </div>
           </form>
@@ -182,7 +185,7 @@ import {
       }
       .form-grid {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
         gap: 16px;
       }
       .full-span {
@@ -197,6 +200,9 @@ import {
   ],
 })
 export class OfficeTransactionFormComponent implements OnInit {
+  /** See `createPickersReady` — the date buttons must not outrun their pickers. */
+  readonly pickersReady = createPickersReady();
+
   private readonly api = inject(DefaultService);
   private readonly router = inject(Router);
   private readonly notifications = inject(NotificationService);

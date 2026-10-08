@@ -5,12 +5,19 @@
  * regarding copyright ownership.  The ASF licenses this file
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
- * with the License.  See the NOTICE file BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
 
+import { mockClientTextSearch } from './utils/client-search-mock';
 import { test, expect } from './fixtures';
 
 const HEAD_OFFICE = 'Head Office';
@@ -96,6 +103,8 @@ test.describe('Client Management', () => {
       }
     });
 
+    await mockClientTextSearch(page, createdClients);
+
     // Intercept Clients List GET
     await page.route('**/api/v1/clients?**', async (route) => {
       await route.fulfill({
@@ -129,21 +138,26 @@ test.describe('Client Management', () => {
     await expect(page).toHaveURL('/clients/create');
     await expect(page.locator('ion-card-title').first()).toContainText('Create Client');
 
-    // Fill Client Form
+    // Step 1 — Client Type: legal form, office. Wizard-only for create; edit stays flat.
     await page.locator('ion-select[name="legalFormId"]').click();
     await page.locator('ion-alert, ion-popover').getByRole('radio', { name: 'Person' }).click();
 
+    await page.locator('ion-select[name="officeId"]').click();
+    await page.locator('ion-alert, ion-popover').getByRole('radio').first().click();
+
+    await page.getByRole('button', { name: 'Next' }).click();
+
+    // Step 2 — Personal Details: submitted-on/activation dates default to today, so only the
+    // name fields are needed here.
     const firstName = `TestUser${Date.now()}`;
     const lastName = 'E2E';
 
     await page.locator('input[name="firstname"]').fill(firstName);
     await page.locator('input[name="lastname"]').fill(lastName);
 
-    // Select Office (assuming HEAD_OFFICE is available)
-    await page.locator('ion-select[name="officeId"]').click();
-    await page.locator('ion-alert, ion-popover').getByRole('radio').first().click();
+    await page.getByRole('button', { name: 'Next' }).click();
 
-    // Submit
+    // Step 3 — Contact Details (all optional): submit straight away.
     await page.getByRole('button', { name: 'Save' }).click();
 
     // Verify redirection to list and presence of new client

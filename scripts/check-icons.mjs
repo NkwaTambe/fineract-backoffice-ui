@@ -33,14 +33,26 @@ import { join, relative } from 'node:path';
 
 const SRC = 'src';
 const REGISTRY = 'src/app/core/icons.ts';
+const NAVIGATION_CONFIG = 'src/app/core/services/navigation-config.service.ts';
 
-/** Static `name="foo-outline"` on an ion-icon. */
-const STATIC_ICON = /<ion-icon\b[^>]*?\bname="([a-z0-9-]+)"/g;
+// Both the vendor tag and the app-owned primitive that wraps it (ADR 0005). A migration that
+// swapped `<ion-icon>` for `<app-icon>` without this would quietly take those call sites out of
+// scope, and an unregistered name renders as blank space with no error — exactly the failure
+// this script exists to catch.
+const ICON_TAG = '(?:ion-icon|app-icon)';
+/** Static `name="foo-outline"` on an icon. */
+const STATIC_ICON = new RegExp(`<${ICON_TAG}\\b[^>]*?\\bname="([a-z0-9-]+)"`, 'g');
 /** Bound `[name]="cond ? 'a-outline' : 'b-outline'"` — collect every quoted literal. */
-const BOUND_ICON = /<ion-icon\b[^>]*?\[name\]="([^"]*)"/g;
+const BOUND_ICON = new RegExp(`<${ICON_TAG}\\b[^>]*?\\[name\\]="([^"]*)"`, 'g');
+/** `<app-button icon="foo-outline">` renders the same icon from an input rather than a tag. */
+const BUTTON_ICON = /<app-button\b[^>]*?\bicon="([a-z0-9-]+)"/g;
+const BOUND_BUTTON_ICON = /<app-button\b[^>]*?\[icon\]="([^"]*)"/g;
 const QUOTED = /'([a-z0-9-]+)'/g;
 /** Operands of a comparison are test values, not icon names: `direction === 'asc' ? ... : ...`. */
 const COMPARISON_OPERAND = /(?:===|!==|==|!=)\s*'[^']*'/g;
+/** Literal icon names and hoisted icon constants in the application navigation config. */
+const NAV_ICON = /\bicon:\s*'([a-z0-9-]+)'/g;
+const NAV_ICON_CONSTANT = /\bconst\s+ICON_[A-Z0-9_]+\s*=\s*'([a-z0-9-]+)'/g;
 
 function walk(dir) {
   const out = [];
@@ -76,9 +88,16 @@ for (const file of walk(SRC)) {
   const used = new Set();
 
   for (const [, name] of source.matchAll(STATIC_ICON)) used.add(name);
-  for (const [, expression] of source.matchAll(BOUND_ICON)) {
-    const branches = expression.replace(COMPARISON_OPERAND, '');
-    for (const [, name] of branches.matchAll(QUOTED)) used.add(name);
+  for (const [, name] of source.matchAll(BUTTON_ICON)) used.add(name);
+  for (const pattern of [BOUND_ICON, BOUND_BUTTON_ICON]) {
+    for (const [, expression] of source.matchAll(pattern)) {
+      const branches = expression.replace(COMPARISON_OPERAND, '');
+      for (const [, name] of branches.matchAll(QUOTED)) used.add(name);
+    }
+  }
+  if (file === NAVIGATION_CONFIG) {
+    for (const [, name] of source.matchAll(NAV_ICON)) used.add(name);
+    for (const [, name] of source.matchAll(NAV_ICON_CONSTANT)) used.add(name);
   }
 
   for (const name of used) {
@@ -100,4 +119,4 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-console.log(`All ion-icon names are registered (${registered.size} icons in the registry).`);
+console.log(`All icon names are registered (${registered.size} icons in the registry).`);

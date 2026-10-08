@@ -19,12 +19,12 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import { ColumnDef, CellTemplateDirective } from '../../../shared';
 import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 import { SpmSurveysService, SurveyData } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 /**
  * Lists SPM surveys (poverty / social-performance questionnaires). Surveys are small
@@ -35,11 +35,10 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
   selector: 'app-spm-surveys-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
@@ -47,6 +46,7 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       title="nav.spmSurveys"
       helpTextKey="HELP.SPM_SURVEYS_DESC"
       createButtonLabel="SPM_SURVEYS.CREATE"
+      createPermission="REGISTER_SURVEY"
       [columns]="columns"
       [data]="surveys()"
       [totalRecords]="surveys().length"
@@ -54,24 +54,24 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       (create)="onCreate()"
     >
       <ng-template appCellTemplate="actions" let-row>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'SCORECARDS.VIEW' | translate"
-          [appTooltip]="'SCORECARDS.VIEW' | translate"
+        <app-button
+          type="button"
+          intent="primary"
+          emphasis="quiet"
+          [label]="'SCORECARDS.VIEW' | appTranslate"
+          icon="bar-chart-outline"
+          [appTooltip]="'SCORECARDS.VIEW' | appTranslate"
           (click)="onScorecards(row)"
-        >
-          <ion-icon name="bar-chart-outline"></ion-icon>
-        </ion-button>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'COMMON.EDIT' | translate"
-          [appTooltip]="'COMMON.EDIT' | translate"
+        />
+        <app-button
+          type="button"
+          intent="primary"
+          emphasis="quiet"
+          [label]="'COMMON.EDIT' | appTranslate"
+          icon="create-outline"
+          [appTooltip]="'COMMON.EDIT' | appTranslate"
           (click)="onEdit(row)"
-        >
-          <ion-icon name="create-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,

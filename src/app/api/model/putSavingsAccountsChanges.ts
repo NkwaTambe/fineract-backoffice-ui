@@ -28,5 +28,7 @@
 export interface PutSavingsAccountsChanges { 
     locale?: string;
     nominalAnnualInterestRate?: number;
+    submittedOnDate?: string;
+    withHoldTax?: boolean;
 }
 

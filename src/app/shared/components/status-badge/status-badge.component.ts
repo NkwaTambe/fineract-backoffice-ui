@@ -39,6 +39,15 @@ export type StatusLike =
     }
   | Record<string, unknown>;
 
+/** Substrings of a status code or value that map to each badge colour. */
+const ACTIVE_KEYWORDS: readonly string[] = ['active', 'approved'];
+const PENDING_KEYWORDS: readonly string[] = ['pending', 'submitted'];
+const CLOSED_KEYWORDS: readonly string[] = ['closed', 'rejected', 'deleted'];
+
+/** Whole-word processing outcomes (audit log results). */
+const SUCCESS_OUTCOMES: ReadonlySet<string> = new Set(['processed', 'success']);
+const FAILURE_OUTCOMES: ReadonlySet<string> = new Set(['failure', 'failed', 'error']);
+
 @Component({
   selector: 'app-status-badge',
   standalone: true,
@@ -64,13 +73,13 @@ export type StatusLike =
 
       .status-active {
         background-color: #e6f4ea;
-        color: #1e8e3e;
+        color: #126330;
         border: 1px solid #ceead6;
       }
 
       .status-pending {
         background-color: #fef7e0;
-        color: #f29900;
+        color: #8a5300;
         border: 1px solid #feefc3;
       }
 
@@ -143,19 +152,19 @@ export class StatusBadgeComponent {
         ? status.toLowerCase()
         : (statusObj['value'] as string)?.toLowerCase() || '';
 
-    if (code.includes('active') || value.includes('active') || value.includes('approved')) {
+    const matchesAny = (keywords: readonly string[]): boolean =>
+      keywords.some((keyword) => code.includes(keyword) || value.includes(keyword));
+    // Outcomes rather than lifecycle states — the audit log's processing result. Matched whole,
+    // so "unprocessed" is not read as success.
+    const outcome = value || code;
+
+    if (matchesAny(ACTIVE_KEYWORDS) || SUCCESS_OUTCOMES.has(outcome)) {
       return 'status-active';
     }
-    if (code.includes('pending') || value.includes('pending') || value.includes('submitted')) {
+    if (matchesAny(PENDING_KEYWORDS)) {
       return 'status-pending';
     }
-    if (
-      code.includes('closed') ||
-      value.includes('closed') ||
-      code.includes('rejected') ||
-      value.includes('rejected') ||
-      code.includes('deleted')
-    ) {
+    if (matchesAny(CLOSED_KEYWORDS) || FAILURE_OUTCOMES.has(outcome)) {
       return 'status-closed';
     }
 

@@ -20,7 +20,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { I18N, TranslatePipe } from '../../../core/adapters';
 import {
   IonCard,
   IonCardHeader,
@@ -39,6 +39,16 @@ import {
   IonCol,
 } from '@ionic/angular/standalone';
 import { ProductsService, PostProductsTypeRequest } from '../../../api';
+import { ProductAccountingSectionComponent } from '../accounting/product-accounting-section.component';
+import {
+  ACCOUNTING_RULE,
+  AccountingMappings,
+  GlAccountOptions,
+  SHARE_ACCOUNTING_FIELDS,
+  SHARE_ACCOUNTING_RULES,
+  mappingsForRule,
+  mappingsFromResponse,
+} from '../accounting/product-accounting.model';
 
 const DEFAULT_CURRENCY = 'USD';
 const DEFAULT_LOCALE = 'en';
@@ -50,7 +60,8 @@ const PRODUCT_TYPE = 'share';
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
+    ProductAccountingSectionComponent,
     IonCard,
     IonCardHeader,
     IonCardTitle,
@@ -74,8 +85,8 @@ const PRODUCT_TYPE = 'share';
           <ion-card-title>
             {{
               isEditMode()
-                ? ('PRODUCTS.EDIT_SHARE_PRODUCT' | translate)
-                : ('PRODUCTS.CREATE_SHARE_PRODUCT' | translate)
+                ? ('PRODUCTS.EDIT_SHARE_PRODUCT' | appTranslate)
+                : ('PRODUCTS.CREATE_SHARE_PRODUCT' | appTranslate)
             }}
           </ion-card-title>
         </ion-card-header>
@@ -86,9 +97,9 @@ const PRODUCT_TYPE = 'share';
               <ion-row>
                 <ion-col size="12" size-md="6">
                   <ion-item fill="outline" class="form-item">
-                    <ion-label position="stacked">{{ 'COMMON.NAME' | translate }}</ion-label>
+                    <ion-label position="stacked">{{ 'COMMON.NAME' | appTranslate }}</ion-label>
                     <ion-input
-                      [attr.aria-label]="'COMMON.NAME' | translate"
+                      [attr.aria-label]="'COMMON.NAME' | appTranslate"
                       id="share-product-name"
                       data-testid="share-product-name"
                       name="name"
@@ -101,10 +112,10 @@ const PRODUCT_TYPE = 'share';
                 <ion-col size="12" size-md="6">
                   <ion-item fill="outline" class="form-item">
                     <ion-label position="stacked">{{
-                      'PRODUCTS.SHORT_NAME' | translate
+                      'PRODUCTS.SHORT_NAME' | appTranslate
                     }}</ion-label>
                     <ion-input
-                      [attr.aria-label]="'PRODUCTS.SHORT_NAME' | translate"
+                      [attr.aria-label]="'PRODUCTS.SHORT_NAME' | appTranslate"
                       id="share-product-short-name"
                       data-testid="share-product-short-name"
                       name="shortName"
@@ -118,10 +129,10 @@ const PRODUCT_TYPE = 'share';
                 <ion-col size="12">
                   <ion-item fill="outline" class="form-item">
                     <ion-label position="stacked">{{
-                      'PRODUCTS.DESCRIPTION' | translate
+                      'PRODUCTS.DESCRIPTION' | appTranslate
                     }}</ion-label>
                     <ion-textarea
-                      [attr.aria-label]="'PRODUCTS.DESCRIPTION' | translate"
+                      [attr.aria-label]="'PRODUCTS.DESCRIPTION' | appTranslate"
                       id="share-product-description"
                       data-testid="share-product-description"
                       name="description"
@@ -133,9 +144,11 @@ const PRODUCT_TYPE = 'share';
 
                 <ion-col size="12" size-md="6">
                   <ion-item fill="outline" class="form-item">
-                    <ion-label position="stacked">{{ 'PRODUCTS.CURRENCY' | translate }}</ion-label>
+                    <ion-label position="stacked">{{
+                      'PRODUCTS.CURRENCY' | appTranslate
+                    }}</ion-label>
                     <ion-select
-                      [attr.aria-label]="'PRODUCTS.CURRENCY' | translate"
+                      [attr.aria-label]="'PRODUCTS.CURRENCY' | appTranslate"
                       interface="popover"
                       id="share-product-currency-code"
                       data-testid="share-product-currency-code"
@@ -155,10 +168,10 @@ const PRODUCT_TYPE = 'share';
                 <ion-col size="12" size-md="6">
                   <ion-item fill="outline" class="form-item">
                     <ion-label position="stacked">{{
-                      'PRODUCTS.TOTAL_SHARES' | translate
+                      'PRODUCTS.TOTAL_SHARES' | appTranslate
                     }}</ion-label>
                     <ion-input
-                      [attr.aria-label]="'PRODUCTS.TOTAL_SHARES' | translate"
+                      [attr.aria-label]="'PRODUCTS.TOTAL_SHARES' | appTranslate"
                       id="share-product-total-shares"
                       data-testid="share-product-total-shares"
                       type="number"
@@ -172,10 +185,10 @@ const PRODUCT_TYPE = 'share';
                 <ion-col size="12" size-md="6">
                   <ion-item fill="outline" class="form-item">
                     <ion-label position="stacked">{{
-                      'PRODUCTS.UNIT_PRICE' | translate
+                      'PRODUCTS.UNIT_PRICE' | appTranslate
                     }}</ion-label>
                     <ion-input
-                      [attr.aria-label]="'PRODUCTS.UNIT_PRICE' | translate"
+                      [attr.aria-label]="'PRODUCTS.UNIT_PRICE' | appTranslate"
                       id="share-product-unit-price"
                       data-testid="share-product-unit-price"
                       type="number"
@@ -189,10 +202,10 @@ const PRODUCT_TYPE = 'share';
                 <ion-col size="12" size-md="6">
                   <ion-item fill="outline" class="form-item">
                     <ion-label position="stacked">{{
-                      'PRODUCTS.NOMINAL_SHARES' | translate
+                      'PRODUCTS.NOMINAL_SHARES' | appTranslate
                     }}</ion-label>
                     <ion-input
-                      [attr.aria-label]="'PRODUCTS.NOMINAL_SHARES' | translate"
+                      [attr.aria-label]="'PRODUCTS.NOMINAL_SHARES' | appTranslate"
                       id="share-product-nominal-shares"
                       data-testid="share-product-nominal-shares"
                       type="number"
@@ -205,6 +218,16 @@ const PRODUCT_TYPE = 'share';
               </ion-row>
             </ion-grid>
 
+            <app-product-accounting-section
+              [fields]="accountingFields"
+              [accountOptions]="accountOptions()"
+              [ruleOptions]="ruleOptions"
+              [accountingRule]="product().accountingRule ?? 1"
+              (accountingRuleChange)="product().accountingRule = $event"
+              [mappings]="accountingMappings()"
+              (mappingsChange)="accountingMappings.set($event)"
+            ></app-product-accounting-section>
+
             <div class="form-actions">
               <ion-button
                 id="share-product-cancel-btn"
@@ -215,7 +238,7 @@ const PRODUCT_TYPE = 'share';
                 (click)="onCancel()"
                 [disabled]="isSaving()"
               >
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               <ion-button
                 id="share-product-submit-btn"
@@ -226,9 +249,9 @@ const PRODUCT_TYPE = 'share';
               >
                 @if (isSaving()) {
                   <ion-spinner name="crescent" slot="start"></ion-spinner>
-                  {{ 'COMMON.SAVING' | translate }}
+                  {{ 'COMMON.SAVING' | appTranslate }}
                 } @else {
-                  {{ 'COMMON.SAVE' | translate }}
+                  {{ 'COMMON.SAVE' | appTranslate }}
                 }
               </ion-button>
             </div>
@@ -263,6 +286,7 @@ const PRODUCT_TYPE = 'share';
 })
 export class ShareProductFormComponent implements OnInit {
   private readonly productService = inject(ProductsService);
+  private readonly i18n = inject(I18N);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
@@ -272,6 +296,26 @@ export class ShareProductFormComponent implements OnInit {
   readonly isEditMode = signal(false);
   readonly isSaving = signal(false);
 
+  protected readonly accountingFields = SHARE_ACCOUNTING_FIELDS;
+  readonly accountOptions = signal<GlAccountOptions>({});
+  readonly accountingMappings = signal<AccountingMappings>({});
+
+  /**
+   * The rule selector's options.
+   *
+   * Every other product family reads these from `accountingRuleOptions` on its template. The
+   * share template does not carry that key, so the two rules a share product can meaningfully
+   * hold are named here — see {@link SHARE_ACCOUNTING_RULES} for why accrual is not among them.
+   */
+  readonly ruleOptions = SHARE_ACCOUNTING_RULES.map((id) => ({
+    id,
+    value: this.i18n.translate(
+      id === ACCOUNTING_RULE.NONE
+        ? 'PRODUCTS.ACCOUNTING.RULE_NONE'
+        : 'PRODUCTS.ACCOUNTING.RULE_CASH',
+    ),
+  }));
+
   readonly product = signal<PostProductsTypeRequest>({
     currencyCode: DEFAULT_CURRENCY,
     digitsAfterDecimal: 2,
@@ -279,11 +323,12 @@ export class ShareProductFormComponent implements OnInit {
     totalShares: 1000,
     unitPrice: 1,
     nominalShares: 1,
-    accountingRule: 1,
+    accountingRule: ACCOUNTING_RULE.NONE,
     allowDividendCalculationForInactiveClients: false,
   });
 
   ngOnInit() {
+    this.loadTemplate();
     this.route.paramMap.subscribe((params) => {
       const id = params.get('id');
       if (id) {
@@ -291,6 +336,25 @@ export class ShareProductFormComponent implements OnInit {
         this.isEditMode.set(true);
         this.loadProductData();
       }
+    });
+  }
+
+  /**
+   * Reads the chart of accounts the mapping selects offer.
+   *
+   * The response is typed `string` by the document although it is JSON, hence the cast. Note
+   * that Fineract omits an option list entirely when the tenant holds no accounts of that class
+   * — a chart with no equity account returns no `equityAccountOptions` at all, rather than an
+   * empty array — so the section is written to tolerate any of them being absent.
+   */
+  private loadTemplate(): void {
+    this.productService.getProductsTypeTemplate(PRODUCT_TYPE).subscribe({
+      next: (template) => {
+        const options = (template as unknown as { accountingMappingOptions?: GlAccountOptions })
+          .accountingMappingOptions;
+        this.accountOptions.set(options ?? {});
+      },
+      error: () => this.accountOptions.set({}),
     });
   }
 
@@ -306,24 +370,50 @@ export class ShareProductFormComponent implements OnInit {
         totalShares: data.totalShares,
         unitPrice: data.unitPrice,
         nominalShares: data.nominalShares,
-        accountingRule: 1,
+        accountingRule: data.accountingRule?.id ?? ACCOUNTING_RULE.NONE,
       });
+      this.accountingMappings.set(
+        mappingsFromResponse(
+          this.accountingFields,
+          (data as unknown as { accountingMappings?: object }).accountingMappings,
+        ),
+      );
     });
+  }
+
+  /**
+   * The product plus the mapping ids the selected rule requires, and no others.
+   *
+   * `accountingRule` used to be pinned to `1` here and on load, so every share product this
+   * screen created was unaccounted and editing an accounted one silently reset it. Share capital
+   * is the members' stake in the institution; posting nothing against it is the one line on the
+   * balance sheet that cannot be reconstructed afterwards.
+   */
+  private buildRequest(): PostProductsTypeRequest {
+    return {
+      ...this.product(),
+      locale: DEFAULT_LOCALE,
+      ...mappingsForRule(
+        this.accountingFields,
+        this.product().accountingRule ?? ACCOUNTING_RULE.NONE,
+        this.accountingMappings(),
+      ),
+    };
   }
 
   onSubmit() {
     this.isSaving.set(true);
-    this.product().locale = DEFAULT_LOCALE;
+    const request = this.buildRequest();
 
     if (this.isEditMode() && this.productId) {
       this.productService
-        .putProductsTypeProductId(PRODUCT_TYPE, this.productId, this.product())
+        .putProductsTypeProductId(PRODUCT_TYPE, this.productId, request)
         .subscribe({
           next: () => this.router.navigate([REDIRECT_URL]),
           error: () => this.isSaving.set(false),
         });
     } else {
-      this.productService.postProductsType(PRODUCT_TYPE, this.product()).subscribe({
+      this.productService.postProductsType(PRODUCT_TYPE, request).subscribe({
         next: () => this.router.navigate([REDIRECT_URL]),
         error: () => this.isSaving.set(false),
       });

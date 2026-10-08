@@ -1,0 +1,384 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { CLIENT_TAB, ClientViewComponent } from './client-view.component';
+import {
+  ClientService,
+  NotesService,
+  ClientsAddressService,
+  DocumentsService,
+  ClientFamilyMemberService,
+  ClientIdentifierService,
+  ShareAccountService,
+} from '../../api';
+import { AuthService } from '../../core/services/auth.service';
+import { ActivatedRoute, Router, provideRouter } from '@angular/router';
+import { HttpErrorResponse } from '@angular/common/http';
+import { of, throwError } from 'rxjs';
+import { SKIP_ERROR_TOAST } from '../../core/http/http-context';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import { signal } from '@angular/core';
+import { provideIonicTesting } from '../../testing/ionic-testing';
+import { createSpyObj, SpyObj } from '../../testing/mocks';
+import { provideTranslateTesting } from '../../testing/i18n-testing';
+
+describe('ClientViewComponent', () => {
+  let component: ClientViewComponent;
+  let fixture: ComponentFixture<ClientViewComponent>;
+  let clientServiceSpy: SpyObj<ClientService>;
+  let notesServiceSpy: SpyObj<NotesService>;
+  let addressServiceSpy: SpyObj<ClientsAddressService>;
+  let documentServiceSpy: SpyObj<DocumentsService>;
+  let familyMemberServiceSpy: SpyObj<ClientFamilyMemberService>;
+  let identifierServiceSpy: SpyObj<ClientIdentifierService>;
+  let authServiceSpy: SpyObj<AuthService>;
+  let shareAccountServiceSpy: SpyObj<ShareAccountService>;
+  let routerSpy: Router;
+
+  beforeEach(async () => {
+    clientServiceSpy = createSpyObj(['getClientsClientId', 'getClientsClientIdAccounts']);
+    notesServiceSpy = createSpyObj([
+      'postResourceTypeResourceIdNotes',
+      'getResourceTypeResourceIdNotes',
+    ]);
+    addressServiceSpy = createSpyObj(['getClientClientidAddresses']);
+    documentServiceSpy = createSpyObj(['getEntityTypeEntityIdDocuments']);
+    familyMemberServiceSpy = createSpyObj(['getClientsClientIdFamilymembers']);
+    identifierServiceSpy = createSpyObj(['getClientsClientIdIdentifiers']);
+
+    shareAccountServiceSpy = createSpyObj(['getAccountsType']);
+    shareAccountServiceSpy.getAccountsType.mockReturnValue(of({ pageItems: [] }) as any);
+
+    authServiceSpy = Object.assign(createSpyObj<AuthService>(['hasPermission']), {
+      currentUser: signal({
+        username: 'mifos',
+        base64EncodedAuthenticationKey: 'key',
+        authenticated: true,
+        officeId: 1,
+        officeName: 'Head Office',
+        userId: 1,
+        permissions: ['ALL_FUNCTIONS'],
+      }),
+    });
+    authServiceSpy.hasPermission.mockReturnValue(true);
+
+    await TestBed.configureTestingModule({
+      imports: [ClientViewComponent],
+      providers: [
+        ...provideTranslateTesting(),
+        provideIonicTesting(),
+        provideNoopAnimations(),
+        { provide: ClientService, useValue: clientServiceSpy },
+        { provide: NotesService, useValue: notesServiceSpy },
+        { provide: ClientsAddressService, useValue: addressServiceSpy },
+        { provide: DocumentsService, useValue: documentServiceSpy },
+        { provide: ClientFamilyMemberService, useValue: familyMemberServiceSpy },
+        { provide: ClientIdentifierService, useValue: identifierServiceSpy },
+        { provide: AuthService, useValue: authServiceSpy },
+        { provide: ShareAccountService, useValue: shareAccountServiceSpy },
+        provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            paramMap: of({
+              get: (key: string) => (key === 'id' ? '123' : null),
+            }),
+          },
+        },
+      ],
+    }).compileComponents();
+
+    clientServiceSpy.getClientsClientId.mockReturnValue(
+      of({
+        id: 123,
+        accountNo: 'CL00123',
+        displayName: 'John Doe',
+        firstname: 'John',
+        lastname: 'Doe',
+        officeName: 'Head Office',
+        activationDate: [2026, 5, 30] as any,
+      }) as any,
+    );
+
+    clientServiceSpy.getClientsClientIdAccounts.mockReturnValue(
+      of({
+        loanAccounts: [] as any,
+        savingsAccounts: [] as any,
+      }) as any,
+    );
+
+    addressServiceSpy.getClientClientidAddresses.mockReturnValue(of([]) as any);
+    documentServiceSpy.getEntityTypeEntityIdDocuments.mockReturnValue(of([]) as any);
+    familyMemberServiceSpy.getClientsClientIdFamilymembers.mockReturnValue(of([]) as any);
+    identifierServiceSpy.getClientsClientIdIdentifiers.mockReturnValue(of([]) as any);
+    notesServiceSpy.getResourceTypeResourceIdNotes.mockReturnValue(of([]) as any);
+
+    routerSpy = TestBed.inject(Router);
+    vi.spyOn(routerSpy, 'navigate').mockResolvedValue(true);
+
+    fixture = TestBed.createComponent(ClientViewComponent);
+    component = fixture.componentInstance;
+    fixture.detectChanges();
+  });
+
+  it('should create', () => {
+    expect(component).toBeTruthy();
+  });
+
+  it('should load client details and accounts on init', () => {
+    const [id, , observe, reportProgress, options] =
+      clientServiceSpy.getClientsClientId.mock.calls[0];
+    expect(id).toBe(123);
+    expect(observe).toBe('body');
+    expect(reportProgress).toBe(false);
+    // The screen renders a failed load itself, so the global toast must not also report it.
+    expect(options?.context?.get(SKIP_ERROR_TOAST)).toBe(true);
+    expect(clientServiceSpy.getClientsClientIdAccounts).toHaveBeenCalledWith(123);
+    expect(component.client()?.displayName).toBe('John Doe');
+    expect(component.loadError()).toBeNull();
+  });
+
+  describe('failed load', () => {
+    /**
+     * A fresh instance, not the shared `fixture`/`component` from the outer `beforeEach` — that
+     * one has already loaded successfully by the time a test body runs, and reusing it here
+     * would leave `client()` holding stale data from that earlier success rather than exercising
+     * what a first visit to a bad id actually renders.
+     */
+    function createFailingInstance(status: number): ComponentFixture<ClientViewComponent> {
+      clientServiceSpy.getClientsClientId.mockReturnValue(
+        throwError(() => new HttpErrorResponse({ status })),
+      );
+      const freshFixture = TestBed.createComponent(ClientViewComponent);
+      freshFixture.detectChanges();
+      return freshFixture;
+    }
+
+    it('shows a not-found state and offers to go back for a 404', () => {
+      const freshFixture = createFailingInstance(404);
+      const freshComponent = freshFixture.componentInstance;
+
+      expect(freshComponent.loadError()).toBe('not-found');
+      expect(freshComponent.client()).toBeNull();
+
+      const errorState = freshFixture.nativeElement.querySelector(
+        '[data-testid="client-load-error"]',
+      );
+      expect(errorState).not.toBeNull();
+      // `provideTranslateTesting()` has no loader in this spec, so the key itself renders — this
+      // confirms the not-found branch is wired to the right translation key.
+      expect(errorState.textContent).toContain('CLIENTS.ERRORS.NOT_FOUND');
+
+      freshFixture.nativeElement.querySelector('[data-testid="client-load-error-action"]').click();
+      expect(routerSpy.navigate).toHaveBeenCalledWith(['/clients']);
+    });
+
+    it('shows a not-found state for a 403 as well, without revealing which is true', () => {
+      const freshComponent = createFailingInstance(403).componentInstance;
+      expect(freshComponent.loadError()).toBe('not-found');
+    });
+
+    it('offers a retry rather than a not-found state for a transient failure', () => {
+      const freshFixture = createFailingInstance(500);
+      const freshComponent = freshFixture.componentInstance;
+      expect(freshComponent.loadError()).toBe('failed');
+
+      clientServiceSpy.getClientsClientId.mockReturnValue(
+        of({
+          id: 123,
+          accountNo: 'CL00123',
+          displayName: 'John Doe',
+          officeName: 'Head Office',
+        } as any),
+      );
+      freshFixture.nativeElement.querySelector('[data-testid="client-load-error-action"]').click();
+      freshFixture.detectChanges();
+
+      expect(freshComponent.loadError()).toBeNull();
+      expect(freshComponent.client()?.displayName).toBe('John Doe');
+    });
+  });
+
+  describe('empty account tabs', () => {
+    for (const { tab, testId, permission } of [
+      {
+        tab: CLIENT_TAB.savings,
+        testId: 'client-create-savings-account',
+        permission: 'CREATE_SAVINGSACCOUNT',
+      },
+      {
+        tab: CLIENT_TAB.loans,
+        testId: 'client-create-loan-account',
+        permission: 'CREATE_LOAN',
+      },
+    ]) {
+      it(`disables the ${tab} action without ${permission}`, () => {
+        authServiceSpy.hasPermission.mockReturnValue(false);
+        component.onTabChange(tab);
+        fixture.detectChanges();
+
+        const button = fixture.nativeElement.querySelector(`[data-testid="${CSS.escape(testId)}"]`);
+        expect(button).not.toBeNull();
+        expect(button.disabled).toBe(true);
+        expect(button.getAttribute('aria-disabled')).toBe('true');
+        expect(authServiceSpy.hasPermission).toHaveBeenCalledWith(permission, false);
+      });
+
+      it(`removes the ${tab} empty-state action when accounts arrive`, () => {
+        component.onTabChange(tab);
+        fixture.detectChanges();
+        expect(
+          fixture.nativeElement.querySelector(`[data-testid="${CSS.escape(testId)}"]`).disabled,
+        ).toBe(false);
+
+        clientServiceSpy.getClientsClientIdAccounts.mockReturnValue(
+          of({
+            savingsAccounts: [{ id: 2, accountNo: 'S002', depositType: { id: 100 } }],
+            loanAccounts: [{ id: 3, accountNo: 'L003' }],
+          }) as any,
+        );
+        component.loadClientAccounts();
+        fixture.detectChanges();
+
+        expect(
+          fixture.nativeElement.querySelector(`[data-testid="${CSS.escape(testId)}"]`),
+        ).toBeNull();
+        expect(fixture.nativeElement.querySelector('table')).not.toBeNull();
+      });
+    }
+
+    it('offers a contextual action to create a savings account', () => {
+      component.onTabChange(CLIENT_TAB.savings);
+      fixture.detectChanges();
+
+      fixture.nativeElement.querySelector('[data-testid="client-create-savings-account"]').click();
+
+      expect(routerSpy.navigate).toHaveBeenCalledWith(['/products/savings-accounts/create'], {
+        queryParams: { clientId: 123 },
+      });
+    });
+
+    it('offers a contextual action to create a loan', () => {
+      component.onTabChange(CLIENT_TAB.loans);
+      fixture.detectChanges();
+
+      fixture.nativeElement.querySelector('[data-testid="client-create-loan-account"]').click();
+
+      expect(routerSpy.navigate).toHaveBeenCalledWith(['/loans/create'], {
+        queryParams: { clientId: 123 },
+      });
+    });
+  });
+
+  describe('deposit accounts', () => {
+    /**
+     * The platform returns savings, fixed deposits and recurring deposits in one array, told
+     * apart only by `depositType.id` — 100, 200 and 300, confirmed by opening one of each against
+     * a running Fineract. Before this split all three were listed as savings accounts and linked
+     * to the savings screen.
+     */
+    beforeEach(() => {
+      clientServiceSpy.getClientsClientIdAccounts.mockReturnValue(
+        of({
+          loanAccounts: [] as any,
+          savingsAccounts: [
+            { id: 2, accountNo: '2', depositType: { id: 100, value: 'Savings' } },
+            { id: 6, accountNo: '6', depositType: { id: 200, value: 'Fixed Deposit' } },
+            { id: 7, accountNo: '7', depositType: { id: 300, value: 'Recurring Deposit' } },
+          ] as any,
+        }) as any,
+      );
+      component.loadClientAccounts();
+    });
+
+    it('keeps only true savings on the savings tab', () => {
+      expect(component.plainSavingsAccounts().map((account) => account.id)).toEqual([2]);
+    });
+
+    it('separates fixed from recurring deposits', () => {
+      expect(component.fixedDepositAccounts().map((account) => account.id)).toEqual([6]);
+      expect(component.recurringDepositAccounts().map((account) => account.id)).toEqual([7]);
+    });
+
+    it('treats an account with no deposit type as savings, which is what it is', () => {
+      clientServiceSpy.getClientsClientIdAccounts.mockReturnValue(
+        of({ savingsAccounts: [{ id: 11, accountNo: '11' }] as any }) as any,
+      );
+      component.loadClientAccounts();
+
+      expect(component.plainSavingsAccounts().map((account) => account.id)).toEqual([11]);
+    });
+  });
+
+  describe('share accounts', () => {
+    beforeEach(() => {
+      shareAccountServiceSpy.getAccountsType.mockReturnValue(
+        of({
+          pageItems: [
+            { id: 1, accountNo: '000000001', clientId: 123, productName: 'Shares' },
+            { id: 2, accountNo: '000000002', clientId: 999, productName: 'Shares' },
+          ],
+        }) as any,
+      );
+    });
+
+    it('is not fetched until the tab is opened', () => {
+      component.loadClientAccounts();
+
+      // Most visits to a client never open this tab, and the request is not free.
+      expect(shareAccountServiceSpy.getAccountsType).not.toHaveBeenCalled();
+    });
+
+    it('shows only the accounts belonging to this client', () => {
+      component.onTabChange(CLIENT_TAB.shares);
+
+      expect(component.shareAccounts().map((account) => account.id)).toEqual([1]);
+    });
+
+    it('does not refetch when the tab is opened again', () => {
+      component.onTabChange(CLIENT_TAB.shares);
+      component.onTabChange(CLIENT_TAB.details);
+      component.onTabChange(CLIENT_TAB.shares);
+
+      expect(shareAccountServiceSpy.getAccountsType).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('teardown', () => {
+    it('dismisses popovers when destroyed', () => {
+      const withPopovers = component as unknown as {
+        popovers: () => readonly { dismiss: () => Promise<boolean> }[];
+      };
+      const popovers = withPopovers.popovers();
+      expect(popovers.length).toBeGreaterThan(0);
+      const dismissSpies = popovers.map((popover) =>
+        vi.spyOn(popover, 'dismiss').mockResolvedValue(true),
+      );
+
+      fixture.destroy();
+
+      for (const spy of dismissSpies) {
+        expect(spy).toHaveBeenCalled();
+      }
+    });
+  });
+});

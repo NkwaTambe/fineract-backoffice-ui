@@ -3,7 +3,12 @@
   "version": 1,
   "cli": {
     "packageManager": "npm",
-    "schematicCollections": ["angular-eslint"]
+    "schematicCollections": ["angular-eslint"],
+    "cache": {
+      "enabled": true,
+      "environment": "all",
+      "path": ".angular/cache"
+    }
   },
   "newProjectRoot": "projects",
   "projects": {
@@ -45,22 +50,6 @@
         "extract-i18n": {
           "builder": "@angular/build:extract-i18n"
         },
-        "test": {
-          "builder": "@angular/build:karma",
-          "options": {
-            "polyfills": ["zone.js", "zone.js/testing"],
-            "tsConfig": "tsconfig.spec.json",
-            "inlineStyleLanguage": "scss",
-            "assets": [
-              "src/assets",
-              {
-                "glob": "**/*",
-                "input": "public"
-              }
-            ],
-            "styles": ["node_modules/@ionic/angular/css/ionic.bundle.css", "src/styles.scss"]
-          }
-        },
         "lint": {
           "builder": "@angular-eslint/builder:lint",
           "options": {
@@ -98,6 +87,15 @@
                   "maximumError": "8kB"
                 }
               ],
+              "optimization": {
+                "scripts": true,
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": false,
+                  "removeSpecialComments": true
+                },
+                "fonts": true
+              },
               "outputHashing": "all"
             },
             "sandbox": {
@@ -142,6 +140,17 @@
             }
           },
           "defaultConfiguration": "development"
+        },
+        "unit-test": {
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "buildTarget": "fineract-backoffice-ui:esbuild:development",
+            "tsConfig": "tsconfig.vitest.json",
+            "runner": "vitest",
+            "include": ["**/*.test.ts"],
+            "runnerConfig": "vitest.config.ts",
+            "setupFiles": ["src/testing/vitest-setup.ts"]
+          }
         }
       }
     },
@@ -183,19 +192,14 @@
             "port": 0
           }
         },
-        "test": {
-          "builder": "@angular/build:karma",
+        "unit-test": {
+          "builder": "@angular/build:unit-test",
           "options": {
-            "polyfills": ["zone.js", "zone.js/testing"],
+            "buildTarget": "fineract-mfe:esbuild:development",
             "tsConfig": "projects/fineract-mfe/tsconfig.spec.json",
-            "inlineStyleLanguage": "scss",
-            "assets": [
-              {
-                "glob": "**/*",
-                "input": "projects/fineract-mfe/public"
-              }
-            ],
-            "styles": ["projects/fineract-mfe/src/styles.scss"]
+            "runner": "vitest",
+            "include": ["**/*.test.ts"],
+            "runnerConfig": "vitest.config.ts"
           }
         },
         "lint": {
@@ -237,6 +241,15 @@
                   "maximumError": "8kB"
                 }
               ],
+              "optimization": {
+                "scripts": true,
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": false,
+                  "removeSpecialComments": true
+                },
+                "fonts": true
+              },
               "outputHashing": "all"
             },
             "development": {

@@ -19,12 +19,13 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { I18N, TranslatePipe } from '../../../core/adapters';
 import { ColumnDef, CellTemplateDirective } from '../../../shared';
 import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 import { LoanOriginatorsService, GetLoanOriginatorsResponse } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { DialogService } from '../../../core/services/dialog.service';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 /**
  * Lists loan originator master-data records (name + external id + type/channel/status).
@@ -34,11 +35,10 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
   selector: 'app-loan-originators-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
@@ -46,6 +46,7 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       title="nav.loanOriginators"
       helpTextKey="HELP.LOAN_ORIGINATORS_DESC"
       createButtonLabel="LOAN_ORIGINATORS.CREATE"
+      createPermission="CREATE_LOAN_ORIGINATOR"
       [columns]="columns"
       [data]="originators()"
       [totalRecords]="originators().length"
@@ -59,24 +60,24 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
         {{ row.channelType?.name }}
       </ng-template>
       <ng-template appCellTemplate="actions" let-row>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'COMMON.EDIT' | translate"
-          [appTooltip]="'COMMON.EDIT' | translate"
+        <app-button
+          type="button"
+          intent="primary"
+          emphasis="quiet"
+          [label]="'COMMON.EDIT' | appTranslate"
+          icon="create-outline"
+          [appTooltip]="'COMMON.EDIT' | appTranslate"
           (click)="onEdit(row)"
-        >
-          <ion-icon name="create-outline"></ion-icon>
-        </ion-button>
-        <ion-button
-          fill="clear"
-          color="danger"
-          [attr.aria-label]="'COMMON.DELETE' | translate"
-          [appTooltip]="'COMMON.DELETE' | translate"
+        />
+        <app-button
+          type="button"
+          intent="danger"
+          emphasis="quiet"
+          [label]="'COMMON.DELETE' | appTranslate"
+          icon="trash-outline"
+          [appTooltip]="'COMMON.DELETE' | appTranslate"
           (click)="onDelete(row)"
-        >
-          <ion-icon name="trash-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,
@@ -84,6 +85,8 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
 export class LoanOriginatorsListComponent implements OnInit {
   private readonly originatorsService = inject(LoanOriginatorsService);
   private readonly router = inject(Router);
+  private readonly dialogService = inject(DialogService);
+  private readonly i18n = inject(I18N);
 
   readonly columns: ColumnDef[] = [
     { key: 'name', label: 'LOAN_ORIGINATORS.NAME', sortable: true },
@@ -119,8 +122,14 @@ export class LoanOriginatorsListComponent implements OnInit {
     this.router.navigate(['/products/loan-originators/edit', row.id]);
   }
 
-  onDelete(row: GetLoanOriginatorsResponse): void {
-    if (!row.id || !window.confirm('Delete this loan originator?')) return;
+  async onDelete(row: GetLoanOriginatorsResponse): Promise<void> {
+    if (!row.id) return;
+    const confirmed = await this.dialogService.confirm({
+      title: this.i18n.translate('LOAN_ORIGINATORS.DELETE'),
+      message: this.i18n.translate('LOAN_ORIGINATORS.CONFIRM_DELETE', { name: row.name ?? '' }),
+      destructive: true,
+    });
+    if (!confirmed) return;
     this.originatorsService.deleteLoanOriginatorsOriginatorId(row.id).subscribe({
       next: () => this.load(),
       error: (err: unknown) => console.error('Failed to delete loan originator', err),

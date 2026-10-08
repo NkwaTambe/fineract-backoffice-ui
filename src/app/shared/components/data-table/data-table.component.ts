@@ -29,7 +29,7 @@ import {
 } from '@angular/core';
 import { CdkTableModule } from '@angular/cdk/table';
 import { NgTemplateOutlet } from '@angular/common';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import {
   IonButton,
   IonCard,
@@ -45,12 +45,19 @@ import { PaginatorComponent } from '../paginator/paginator.component';
 import { PageEvent, SortDirection, SortEvent } from '../../models/table.model';
 import { CellTemplateDirective } from './cell-template.directive';
 import { TooltipDirective } from '../../directives/tooltip.directive';
+import { HasPermissionDirective } from '../../directives/has-permission.directive';
 
 export interface ColumnDef {
   key: string;
   label: string;
   sortable?: boolean;
   tooltip?: string;
+  /**
+   * Fixed column width (any valid CSS width, e.g. '48px', '10%'). The table uses
+   * `table-layout: fixed`, so a column left unset shares the width remaining after
+   * sized columns are subtracted, rather than shrinking to its content.
+   */
+  width?: string;
 }
 
 /** Tri-state cycle used by the sortable column headers, matching the previous mat-sort behaviour. */
@@ -78,7 +85,7 @@ const NEXT_DIRECTION: Record<SortDirection, SortDirection> = {
   },
   imports: [
     CdkTableModule,
-    TranslateModule,
+    TranslatePipe,
     NgTemplateOutlet,
     IonCard,
     IonCardHeader,
@@ -91,6 +98,7 @@ const NEXT_DIRECTION: Record<SortDirection, SortDirection> = {
     SearchFilterComponent,
     PaginatorComponent,
     TooltipDirective,
+    HasPermissionDirective,
   ],
   template: `
     <ion-card class="data-table-card">
@@ -101,16 +109,21 @@ const NEXT_DIRECTION: Record<SortDirection, SortDirection> = {
       }
       <ion-card-header>
         <ion-card-title>
-          {{ title() | translate }}
+          {{ title() | appTranslate }}
           @if (helpTextKey()) {
             <app-help-icon [helpTextKey]="helpTextKey()"></app-help-icon>
           }
         </ion-card-title>
         <div class="header-actions">
           @if (createButtonLabel()) {
-            <ion-button data-testid="data-table-create" color="primary" (click)="onCreate()">
+            <ion-button
+              data-testid="data-table-create"
+              color="primary"
+              *appHasPermission="createPermission()"
+              (click)="onCreate()"
+            >
               <ion-icon name="add-outline" slot="start"></ion-icon>
-              {{ createButtonLabel() | translate }}
+              {{ createButtonLabel() | appTranslate }}
             </ion-button>
           }
           <ng-content select="[headerActions]"></ng-content>
@@ -122,8 +135,8 @@ const NEXT_DIRECTION: Record<SortDirection, SortDirection> = {
           @if (showSearch()) {
             <div class="search-container">
               <app-search-filter
-                [label]="searchLabel() | translate"
-                [placeholder]="searchPlaceholder() | translate"
+                [label]="searchLabel() | appTranslate"
+                [placeholder]="searchPlaceholder() | appTranslate"
                 (searchChange)="onSearch($event)"
               >
               </app-search-filter>
@@ -138,17 +151,29 @@ const NEXT_DIRECTION: Record<SortDirection, SortDirection> = {
                empty, and an empty table reads as "there is nothing here" — the opposite of
                what happened. -->
           <div class="error-state" role="alert" data-testid="data-table-error">
-            <ion-icon name="alert-circle-outline" class="error-icon"></ion-icon>
-            <p class="error-text">{{ 'COMMON.ERRORS.LOAD_FAILED' | translate }}</p>
-            <ion-button
-              fill="outline"
-              size="small"
-              data-testid="data-table-retry"
-              (click)="onRetry()"
-            >
-              <ion-icon name="refresh-outline" slot="start"></ion-icon>
-              {{ 'COMMON.RETRY' | translate }}
-            </ion-button>
+            <ion-icon
+              [name]="isForbidden() ? 'lock-closed-outline' : 'alert-circle-outline'"
+              class="error-icon"
+            ></ion-icon>
+            <p class="error-text">
+              {{
+                (isForbidden() ? 'COMMON.ERRORS.LOAD_FORBIDDEN' : 'COMMON.ERRORS.LOAD_FAILED')
+                  | appTranslate
+              }}
+            </p>
+            <!-- No retry for a refusal: the same request made again is refused again, so the
+                 button offers a loop rather than a way out. -->
+            @if (!isForbidden()) {
+              <ion-button
+                fill="outline"
+                size="small"
+                data-testid="data-table-retry"
+                (click)="onRetry()"
+              >
+                <ion-icon name="refresh-outline" slot="start"></ion-icon>
+                {{ 'COMMON.RETRY' | appTranslate }}
+              </ion-button>
+            }
           </div>
         } @else {
           <div class="table-container">
@@ -161,25 +186,34 @@ const NEXT_DIRECTION: Record<SortDirection, SortDirection> = {
                     [appTooltip]="col.tooltip || ''"
                     [attr.aria-sort]="ariaSortFor(col)"
                     [class.sortable]="col.sortable"
+                    [style.width]="col.width"
                   >
                     @if (col.sortable) {
                       <button type="button" class="sort-button" (click)="onSortHeaderClick(col)">
-                        {{ col.label | translate }}
-                        @if (sort().active === col.key && sort().direction) {
+                        {{ col.label | appTranslate }}
+                        @if (currentSort().active === col.key && currentSort().direction) {
                           <ion-icon
                             aria-hidden="true"
                             class="sort-indicator"
                             [name]="
-                              sort().direction === 'asc' ? 'arrow-up-outline' : 'arrow-down-outline'
+                              currentSort().direction === 'asc'
+                                ? 'arrow-up-outline'
+                                : 'arrow-down-outline'
                             "
                           ></ion-icon>
                         }
                       </button>
                     } @else {
-                      {{ col.label | translate }}
+                      {{ col.label | appTranslate }}
                     }
                   </th>
-                  <td cdk-cell *cdkCellDef="let row">
+                  <!--
+                    data-label is what makes the card layout possible without a second
+                    template: below the breakpoint the header row is hidden and each cell
+                    renders its own label from this attribute. One source of truth for the
+                    columns, so a column added to columns() appears in both layouts.
+                  -->
+                  <td cdk-cell *cdkCellDef="let row" [attr.data-label]="col.label | appTranslate">
                     @if (columnTemplates()[col.key]) {
                       <ng-container
                         *ngTemplateOutlet="columnTemplates()[col.key]; context: { $implicit: row }"
@@ -198,7 +232,7 @@ const NEXT_DIRECTION: Record<SortDirection, SortDirection> = {
 
               <tr class="no-data-row" *cdkNoDataRow>
                 <td [attr.colspan]="displayedColumns().length">
-                  {{ 'COMMON.NO_DATA' | translate }}
+                  {{ 'COMMON.NO_DATA' | appTranslate }}
                 </td>
               </tr>
             </table>
@@ -208,6 +242,7 @@ const NEXT_DIRECTION: Record<SortDirection, SortDirection> = {
               [pageSize]="effectivePageSize"
               [pageIndex]="effectivePageIndex"
               [pageSizeOptions]="pageSizeOptions()"
+              [exactTotal]="localLogic() || exactTotal()"
               (page)="onPage($event)"
             ></app-paginator>
           </div>
@@ -217,52 +252,26 @@ const NEXT_DIRECTION: Record<SortDirection, SortDirection> = {
   `,
   styles: [
     `
-      .data-table-card {
-        margin: 24px;
-        position: relative;
-      }
-      /* ion-card-header stacks its children in a column by default. The title and its
-         actions belong on one line — the action is a response to the title, not a
-         separate thought. */
-      ion-card-header {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-4);
-        padding-bottom: var(--space-3);
-        border-bottom: 1px solid var(--border-color);
-      }
-      ion-card-title {
-        display: flex;
-        align-items: center;
-        margin: 0;
-        font-size: 1.125rem;
-        font-weight: 600;
-        color: var(--secondary-color);
-      }
-      .header-actions {
-        display: flex;
-        align-items: center;
-        gap: var(--space-2);
-        flex-shrink: 0;
-      }
-      .table-header {
-        display: flex;
-        justify-content: flex-start;
-        align-items: center;
-        gap: var(--space-4);
-        margin: var(--space-4) 0 var(--space-2);
-      }
+      /* The narrow-viewport card layout lives in styles/_common.scss, not here. Angular scopes
+         these rules with an _ngcontent attribute, and the <tbody> cdk-table renders into is
+         created by the HTML parser rather than by this template — so it never carries that
+         attribute and a scoped tbody selector silently does not match it. It stayed
+         display: table-row-group, shrank to its content, and the cards came out narrower than
+         the page. */
+      /* The help icon describes the search field, so it has to sit beside it. The class carried
+         no rule at all, which left it display: block — the icon wrapped onto its own line and
+         rendered as a lone "?" under the search box, on every list screen using this component. */
       .search-container {
         display: flex;
         align-items: center;
+        gap: var(--space-2);
       }
       .table-container {
         overflow: auto;
       }
       .data-table {
         width: 100%;
+        table-layout: fixed;
         border-collapse: collapse;
       }
       .data-table th,
@@ -280,7 +289,7 @@ const NEXT_DIRECTION: Record<SortDirection, SortDirection> = {
         user-select: none;
       }
       .data-table th.sortable:hover {
-        color: var(--primary-color);
+        color: var(--primary-text);
       }
       .sort-button {
         display: inline-flex;
@@ -298,7 +307,7 @@ const NEXT_DIRECTION: Record<SortDirection, SortDirection> = {
         border-radius: 2px;
       }
       .data-table th[aria-sort] {
-        color: var(--primary-color);
+        color: var(--primary-text);
       }
       .data-table tr:hover td {
         background-color: var(--hover-bg);
@@ -310,7 +319,7 @@ const NEXT_DIRECTION: Record<SortDirection, SortDirection> = {
       }
       .no-data-row td {
         text-align: center;
-        color: var(--text-muted, #7f8c8d);
+        color: var(--text-muted);
       }
       .error-state {
         display: flex;
@@ -343,12 +352,11 @@ const NEXT_DIRECTION: Record<SortDirection, SortDirection> = {
         border-radius: 12px;
       }
       .truncate-text {
-        display: inline-block;
-        max-width: 200px;
+        display: block;
+        max-width: 100%;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        vertical-align: middle;
       }
     `,
   ],
@@ -357,10 +365,22 @@ export class DataTableComponent<T> {
   readonly title = input('');
   readonly helpTextKey = input('');
   readonly createButtonLabel = input('');
+  /**
+   * Permission the create button requires, if any.
+   *
+   * The route behind the button is gated too, so leaving this unset is safe rather than
+   * dangerous — a user without the permission simply meets Access Denied instead of being
+   * refused up front. Setting it is about not offering the action at all: a button that leads
+   * only to a refusal is a worse answer than no button. An empty value shows it to everyone,
+   * which keeps every list that has not been reviewed behaving exactly as before.
+   */
+  readonly createPermission = input<string | string[]>('');
   readonly columns = input<ColumnDef[]>([]);
   readonly data = input<T[]>([]);
   /** Total number of records. If server-side, this comes from API response. */
   readonly totalRecords = input(0);
+  /** Set when a server endpoint returns an exact count rather than an unknown-total sentinel. */
+  readonly exactTotal = input(false);
   readonly pageSize = input(10);
   readonly pageIndex = input(0);
   readonly pageSizeOptions = input([5, 10, 25, 100]);
@@ -379,6 +399,26 @@ export class DataTableComponent<T> {
    */
   readonly hasError = input(false);
 
+  /**
+   * The HTTP status the failed load came back with, when the caller knows it.
+   *
+   * A refused read and a broken one are the same picture to {@link hasError} alone, and they are
+   * not the same situation: "this list could not be loaded, try again" told to someone whose role
+   * does not cover the read sends them round a loop that cannot end, because the request is
+   * refused on every attempt. Passing the status lets the table say which of the two happened.
+   *
+   * `null` keeps the generic treatment, so a caller that does not forward the status is unchanged.
+   */
+  readonly errorStatus = input<number | null>(null);
+
+  /**
+   * Whether the failure was Fineract declining the read rather than failing at it.
+   *
+   * This is a presentation decision, not an authorization one — Fineract has already refused by
+   * the time anything here runs. See `security.md`.
+   */
+  protected readonly isForbidden = computed(() => this.hasError() && this.errorStatus() === 403);
+
   readonly create = output<void>();
   readonly searchChange = output<string>();
   readonly sortChange = output<SortEvent>();
@@ -395,7 +435,11 @@ export class DataTableComponent<T> {
    */
   readonly cellTemplates = contentChildren(CellTemplateDirective);
 
-  readonly sort = signal<SortEvent>({ active: '', direction: '' });
+  /** Lets a server-backed table visibly reset sorting when its query mode changes. */
+  readonly sortState = input<SortEvent>();
+  readonly currentSort = linkedSignal<SortEvent>(
+    () => this.sortState() ?? { active: '', direction: '' },
+  );
 
   protected readonly columnTemplates = computed<Record<string, TemplateRef<unknown>>>(() => {
     const map: Record<string, TemplateRef<unknown>> = {};
@@ -451,7 +495,7 @@ export class DataTableComponent<T> {
     if (filter) {
       result = result.filter((row) => this.matchesFilter(row, filter));
     }
-    const { active, direction } = this.sort();
+    const { active, direction } = this.currentSort();
     if (active && direction) {
       result = this.sortRows(result, active, direction);
     }
@@ -495,15 +539,15 @@ export class DataTableComponent<T> {
   onSortHeaderClick(col: ColumnDef): void {
     if (!col.sortable) return;
 
-    const current = this.sort();
+    const current = this.currentSort();
     const direction =
       current.active === col.key ? NEXT_DIRECTION[current.direction] : ('asc' as SortDirection);
-    this.sort.set({ active: direction ? col.key : '', direction });
+    this.currentSort.set({ active: direction ? col.key : '', direction });
 
     // Re-sorting reorders the whole set, so the current page no longer means
     // anything; server-side parents reset to offset 0 for the same reason.
     this.localPageIndex.set(0);
-    this.sortChange.emit(this.sort());
+    this.sortChange.emit(this.currentSort());
   }
 
   onPage(event: PageEvent): void {
@@ -513,7 +557,7 @@ export class DataTableComponent<T> {
   }
 
   ariaSortFor(col: ColumnDef): string | null {
-    const { active, direction } = this.sort();
+    const { active, direction } = this.currentSort();
     if (!col.sortable || active !== col.key || !direction) return null;
     return direction === 'asc' ? 'ascending' : 'descending';
   }
@@ -550,7 +594,7 @@ export class DataTableComponent<T> {
   private sortRows(rows: T[], active: string, direction: SortDirection): T[] {
     const factor = direction === 'asc' ? 1 : -1;
 
-    return rows.sort((a, b) => {
+    return rows.toSorted((a, b) => {
       const left = this.getCellValue(a, active);
       const right = this.getCellValue(b, active);
 

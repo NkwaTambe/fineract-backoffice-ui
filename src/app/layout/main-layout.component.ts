@@ -17,15 +17,18 @@
  * under the License.
  */
 
-import { Component, inject } from '@angular/core';
+import { Component, HostListener, inject } from '@angular/core';
 
-import { RouterModule } from '@angular/router';
+import { Router, RouterModule } from '@angular/router';
 import { IonProgressBar } from '@ionic/angular/standalone';
 import { HeaderComponent } from './header.component';
 import { SidebarComponent } from './sidebar.component';
+import { BreadcrumbComponent } from './breadcrumb.component';
 import { GuidanceTourComponent } from '../shared';
 import { LoadingService } from '../core/services/loading.service';
 import { SidebarService } from '../core/services/sidebar.service';
+import { GuidanceService } from '../core/services/guidance.service';
+import { isTypingTarget, matchShortcut } from './keyboard-shortcuts';
 
 /**
  * The primary application layout component (App Shell).
@@ -36,7 +39,14 @@ import { SidebarService } from '../core/services/sidebar.service';
 @Component({
   selector: 'app-main-layout',
   standalone: true,
-  imports: [RouterModule, IonProgressBar, HeaderComponent, SidebarComponent, GuidanceTourComponent],
+  imports: [
+    RouterModule,
+    IonProgressBar,
+    HeaderComponent,
+    SidebarComponent,
+    BreadcrumbComponent,
+    GuidanceTourComponent,
+  ],
   template: `
     <div class="app-container" [class.sidebar-collapsed]="sidebarService.isCollapsed()">
       @if (loadingService.isLoading()) {
@@ -44,8 +54,21 @@ import { SidebarService } from '../core/services/sidebar.service';
       }
       <app-header />
       <div class="main-wrapper">
+        @if (sidebarService.isDrawerOpen()) {
+          <!--
+            Dismisses the drawer on a press outside it. Not focusable and hidden from assistive
+            technology: Escape and the drawer's own close control are the accessible routes out,
+            and a backdrop in the tab order is a stop that announces nothing.
+          -->
+          <div
+            class="drawer-backdrop"
+            (click)="sidebarService.closeDrawer()"
+            aria-hidden="true"
+          ></div>
+        }
         <app-sidebar />
         <main class="content-area" role="main">
+          <app-breadcrumb />
           <router-outlet />
         </main>
       </div>
@@ -57,7 +80,10 @@ import { SidebarService } from '../core/services/sidebar.service';
       .app-container {
         display: flex;
         flex-direction: column;
-        height: 100vh;
+        /* dvh, not vh. Mobile browsers report vh against the viewport with the URL bar hidden,
+           so 100vh is taller than what is actually on screen and the bottom of every page sits
+           under the browser chrome. */
+        height: 100dvh;
         overflow: hidden;
         position: relative;
       }
@@ -79,9 +105,31 @@ import { SidebarService } from '../core/services/sidebar.service';
       }
       .content-area {
         flex: 1;
-        padding: 2rem;
+        padding: var(--content-padding);
         background-color: var(--bg-color);
         overflow-y: auto;
+        /* The drawer overlays this rather than displacing it, so the content keeps the full
+           width and does not reflow when the drawer opens. */
+        width: 100%;
+      }
+      .drawer-backdrop {
+        position: fixed;
+        inset: var(--header-height) 0 0;
+        background: rgba(0, 0, 0, 0.45);
+        z-index: 900;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .drawer-backdrop {
+          animation: backdrop-in 0.15s ease-out;
+        }
+      }
+      @keyframes backdrop-in {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
       }
     `,
   ],
@@ -89,4 +137,22 @@ import { SidebarService } from '../core/services/sidebar.service';
 export class MainLayoutComponent {
   protected readonly loadingService = inject(LoadingService);
   protected readonly sidebarService = inject(SidebarService);
+  private readonly guidanceService = inject(GuidanceService);
+  private readonly router = inject(Router);
+
+  /** Global navigation shortcuts (Alt+letter) — see `keyboard-shortcuts.ts` for the bindings. */
+  @HostListener('window:keydown', ['$event'])
+  onKeydown(event: KeyboardEvent): void {
+    if (isTypingTarget(event.target)) return;
+
+    const shortcut = matchShortcut(event);
+    if (!shortcut) return;
+
+    event.preventDefault();
+    if (shortcut.action === 'help') {
+      this.guidanceService.startTour(this.router.url);
+    } else if (shortcut.route) {
+      this.router.navigate([shortcut.route]);
+    }
+  }
 }

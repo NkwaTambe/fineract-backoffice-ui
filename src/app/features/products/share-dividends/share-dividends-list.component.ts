@@ -19,13 +19,14 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { I18N, TranslatePipe } from '../../../core/adapters';
 import { ColumnDef, CellTemplateDirective } from '../../../shared';
 import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 import { formatArrayDate } from '../../../core/utils/date-formatter';
 import { SelfDividendService } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { DialogService } from '../../../core/services/dialog.service';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 /**
  * A single share dividend row as returned (within a paged envelope) by the share dividend
@@ -48,11 +49,10 @@ interface ShareDividendRow {
   selector: 'app-share-dividends-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
@@ -60,6 +60,7 @@ interface ShareDividendRow {
       title="SHARE_DIVIDENDS.TITLE"
       helpTextKey="HELP.SHARE_DIVIDENDS_DESC"
       createButtonLabel="SHARE_DIVIDENDS.CREATE"
+      createPermission="CREATE_DIVIDEND_SHAREPRODUCT"
       [columns]="columns"
       [data]="dividends()"
       [totalRecords]="dividends().length"
@@ -73,15 +74,15 @@ interface ShareDividendRow {
         {{ formatDate(row.dividendPeriodEndDate) }}
       </ng-template>
       <ng-template appCellTemplate="actions" let-row>
-        <ion-button
-          fill="clear"
-          color="danger"
-          [attr.aria-label]="'COMMON.DELETE' | translate"
-          [appTooltip]="'COMMON.DELETE' | translate"
+        <app-button
+          type="button"
+          intent="danger"
+          emphasis="quiet"
+          [label]="'COMMON.DELETE' | appTranslate"
+          icon="trash-outline"
+          [appTooltip]="'COMMON.DELETE' | appTranslate"
           (click)="onDelete(row)"
-        >
-          <ion-icon name="trash-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,
@@ -90,6 +91,8 @@ export class ShareDividendsListComponent implements OnInit {
   private readonly selfDividendService = inject(SelfDividendService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly dialogService = inject(DialogService);
+  private readonly i18n = inject(I18N);
 
   readonly columns: ColumnDef[] = [
     { key: 'dividendPeriodStartDate', label: 'SHARE_DIVIDENDS.PERIOD_START_DATE', sortable: false },
@@ -132,8 +135,18 @@ export class ShareDividendsListComponent implements OnInit {
     this.router.navigate(['/products/shares', this.productId, 'dividends', 'create']);
   }
 
-  onDelete(row: ShareDividendRow): void {
-    if (!row.id || !window.confirm('Delete this dividend?')) return;
+  async onDelete(row: ShareDividendRow): Promise<void> {
+    if (!row.id) return;
+    const confirmed = await this.dialogService.confirm({
+      title: this.i18n.translate('SHARE_DIVIDENDS.DELETE'),
+      message: this.i18n.translate('SHARE_DIVIDENDS.CONFIRM_DELETE', {
+        amount: row.amount ?? '',
+        startDate: this.formatDate(row.dividendPeriodStartDate),
+        endDate: this.formatDate(row.dividendPeriodEndDate),
+      }),
+      destructive: true,
+    });
+    if (!confirmed) return;
     this.selfDividendService
       .deleteShareproductProductIdDividendDividendId(this.productId, row.id)
       .subscribe({

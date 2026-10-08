@@ -19,26 +19,26 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { I18N, TranslatePipe } from '../../../core/adapters';
 import { ColumnDef, CellTemplateDirective } from '../../../shared';
 import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 import { LoanInterestPauseService, InterestPauseResponseDto } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { DialogService } from '../../../core/services/dialog.service';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 /**
  * Lists interest pause periods (start/end date) for a specific loan and allows
- * creating a new pause or deleting an existing one. The loan id is taken from the route.
+ * creating, editing, or deleting them. The loan id is taken from the route.
  */
 @Component({
   selector: 'app-interest-pauses-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
@@ -46,6 +46,7 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       title="INTEREST_PAUSES.TITLE"
       helpTextKey="HELP.INTEREST_PAUSES_DESC"
       createButtonLabel="INTEREST_PAUSES.CREATE"
+      createPermission="CREATE_INTEREST_PAUSE"
       [columns]="columns"
       [data]="pauses()"
       [totalRecords]="pauses().length"
@@ -54,15 +55,24 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       (create)="onCreate()"
     >
       <ng-template appCellTemplate="actions" let-row>
-        <ion-button
-          fill="clear"
-          color="danger"
-          [attr.aria-label]="'COMMON.DELETE' | translate"
-          [appTooltip]="'COMMON.DELETE' | translate"
+        <app-button
+          type="button"
+          intent="primary"
+          emphasis="quiet"
+          [label]="'COMMON.EDIT' | appTranslate"
+          icon="create-outline"
+          [appTooltip]="'COMMON.EDIT' | appTranslate"
+          (click)="onEdit(row)"
+        />
+        <app-button
+          type="button"
+          intent="danger"
+          emphasis="quiet"
+          [label]="'COMMON.DELETE' | appTranslate"
+          icon="trash-outline"
+          [appTooltip]="'COMMON.DELETE' | appTranslate"
           (click)="onDelete(row)"
-        >
-          <ion-icon name="trash-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,
@@ -71,6 +81,8 @@ export class InterestPausesListComponent implements OnInit {
   private readonly pauseService = inject(LoanInterestPauseService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  private readonly dialogService = inject(DialogService);
+  private readonly i18n = inject(I18N);
 
   loanId: number | null = null;
 
@@ -108,11 +120,27 @@ export class InterestPausesListComponent implements OnInit {
     }
   }
 
-  onDelete(row: InterestPauseResponseDto): void {
-    if (!this.loanId || !row.id || !window.confirm('Delete this interest pause?')) return;
+  onEdit(row: InterestPauseResponseDto): void {
+    if (this.loanId && row.id) {
+      this.router.navigate(['/loans', this.loanId, 'interest-pauses', 'edit', row.id]);
+    }
+  }
+
+  async onDelete(row: InterestPauseResponseDto): Promise<void> {
+    if (!this.loanId || !row.id) return;
+    const confirmed = await this.dialogService.confirm({
+      title: this.i18n.translate('COMMON.DELETE'),
+      message: this.i18n.translate('INTEREST_PAUSES.CONFIRM_DELETE', {
+        startDate: row.startDate ?? '',
+        endDate: row.endDate ?? '',
+      }),
+      destructive: true,
+    });
+    if (!confirmed) return;
     this.pauseService.deleteLoansLoanIdInterestPausesVariationId(this.loanId, row.id).subscribe({
       next: () => this.load(),
-      error: (err: unknown) => console.error('Failed to delete interest pause', err),
+      // The global error interceptor displays Fineract's response to the user.
+      error: () => undefined,
     });
   }
 }

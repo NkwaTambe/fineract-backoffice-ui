@@ -21,7 +21,105 @@
 const eslint = require('@eslint/js');
 const tseslint = require('typescript-eslint');
 const angular = require('angular-eslint');
-const sonarjs = require('eslint-plugin-sonarjs');
+// Published as ESM; under CommonJS the plugin arrives behind `.default`.
+const unicorn = require('eslint-plugin-unicorn').default;
+const security = require('eslint-plugin-security');
+const importPlugin = require('eslint-plugin-import');
+const cognitiveComplexity = require('./eslint-rules/cognitive-complexity.js');
+const noVendorUiImport = require('./eslint-rules/no-vendor-ui-import.js');
+const noGeneratedApiImport = require('./eslint-rules/no-generated-api-import.js');
+
+/**
+ * Rules written for this repository, kept here rather than published.
+ *
+ * `cognitive-complexity` replaces the rule of the same name that used to arrive with
+ * `eslint-plugin-sonarjs`. That plugin is LGPL-3.0-only — Apache Category X — so it was removed;
+ * see DOCS/LINT_POLICY.md for what took over each of its rules and what has no replacement.
+ *
+ * `no-vendor-ui-import` holds the ADR 0005 component boundary. It is a rule of its own rather
+ * than another `no-restricted-imports` pattern because suppression counts are per rule id, and
+ * sharing one counter with the Material and i18n backlogs let an Ionic violation be traded for
+ * an i18n one without the ratchet moving. See the rule's own header.
+ *
+ * `no-generated-api-import` holds the ADR 0006 generated-client boundary, a separate rule id for
+ * the same reason.
+ */
+const local = {
+  rules: {
+    'cognitive-complexity': cognitiveComplexity,
+    'no-vendor-ui-import': noVendorUiImport,
+    'no-generated-api-import': noGeneratedApiImport,
+  },
+};
+
+// ADR 0003's imperative boundaries. Ionic *components* are not here — they are the ADR 0005
+// boundary and live on `local/no-vendor-ui-import`, so the two migrations ratchet separately.
+/** Ionic's imperative surface — ADR 0003's boundary, reached through the OVERLAY adapter. */
+const IONIC_CONTROLLERS = [
+  'ModalController',
+  'ToastController',
+  'AlertController',
+  'LoadingController',
+  'ActionSheetController',
+  'PopoverController',
+];
+
+const restrictedImportPatterns = [
+  {
+    group: ['@angular/material', '@angular/material/*'],
+    message:
+      'Angular Material has been removed. Use app-owned primitives in src/app/ui. @angular/cdk is still allowed.',
+  },
+  {
+    group: ['@ionic/angular', '@ionic/angular/*'],
+    importNames: IONIC_CONTROLLERS,
+    message:
+      "Use the OVERLAY adapter from 'app/core/adapters' instead of Ionic's controllers. See DOCS/adr/0003-adapter-boundary.md.",
+  },
+  {
+    group: ['@ngx-translate/*'],
+    message:
+      "Use the I18N adapter (or the | appTranslate pipe) from 'app/core/adapters'. See DOCS/adr/0003-adapter-boundary.md.",
+  },
+];
+
+/** Where naming Ionic directly is the point, rather than a leftover to migrate. */
+const VENDOR_UI_ALLOWED = [
+  // The UI implementations themselves — that is what ADR 0005 makes them for.
+  'src/app/ui/**/*.ts',
+  // Harness that stands up Ionic for specs of components not yet migrated.
+  'src/app/testing/ionic-testing.ts',
+  // The adapter that wraps Ionic's imperative surface, and the composition roots that
+  // configure the library rather than call it.
+  'src/app/core/adapters/**/*.ts',
+  'src/app/app.config.ts',
+];
+
+/**
+ * ADR 0006's generated-client boundary. `dir` is matched on the *resolved* path, so it catches
+ * `'../../api'` and `'../api/model/x'` alike without a glob per directory depth.
+ */
+const generatedApiImport = [
+  'error',
+  {
+    dir: 'src/app/api',
+    message:
+      "Depend on an application contract in 'app/core/adapters/api' instead of the generated client. See DOCS/adr/0006-generated-api-boundary.md.",
+  },
+];
+
+const vendorUiImport = [
+  'error',
+  {
+    patterns: ['@ionic/angular', '@ionic/angular/*'],
+    // An import of nothing but controllers is already reported by `no-restricted-imports`
+    // above. Exempting it here keeps one import statement on one boundary, so migrating it
+    // decrements one counter rather than two.
+    ignoreNames: IONIC_CONTROLLERS,
+    message:
+      "Use app-owned primitives from 'app/ui'; Ionic implementations belong inside src/app/ui. See DOCS/adr/0005-ui-boundary.md.",
+  },
+];
 
 module.exports = tseslint.config(
   {
@@ -45,10 +143,74 @@ module.exports = tseslint.config(
       ...tseslint.configs.recommended,
       ...tseslint.configs.stylistic,
       ...angular.configs.tsRecommended,
-      sonarjs.configs.recommended,
+      // `unopinionated` rather than `recommended`: unicorn's recommended set carries a large
+      // stylistic component (filename casing, abbreviation expansion, `for…of` over `.forEach`)
+      // that would rewrite a great deal of working code to no benefit. The unopinionated set is
+      // the correctness half — the rules that catch a bug rather than a preference.
+      unicorn.configs.unopinionated,
+      // Apache-2.0, and it covers most of what the removed plugin's security rules did:
+      // eval, unsafe regex, non-literal fs paths, timing-unsafe comparison, pseudo-random.
+      security.configs.recommended,
+      // Import correctness only. The resolver is configured below; without it every
+      // `@angular/*` import reads as unresolved.
+      importPlugin.flatConfigs.recommended,
+      importPlugin.flatConfigs.typescript,
     ],
+    plugins: { local },
     processor: angular.processInlineTemplates,
+    settings: {
+      'import/resolver': {
+        typescript: { alwaysTryTypes: true, project: ['tsconfig.json'] },
+      },
+    },
     rules: {
+      // Replaces sonarjs/cognitive-complexity at the same threshold it enforced, so this is a
+      // like-for-like swap rather than a quiet relaxation. See eslint-rules/.
+      'local/cognitive-complexity': ['error', { threshold: 15 }],
+      // The ADR 0005 component boundary, on its own rule id so its migration backlog
+      // ratchets independently of the Material and i18n ones above.
+      'local/no-vendor-ui-import': vendorUiImport,
+
+      // --- rules switched off from the sets above, each for a reason -------------------------
+      //
+      // Off because enforcing it would defeat `no-restricted-globals` below. That rule names
+      // `localStorage` and `sessionStorage`, and it matches a bare global — `globalThis.localStorage`
+      // sails past it. The adapter boundary is a trust boundary (security.md §4), so a style rule
+      // does not get to open a hole in it. `window` is also the more honest name here: this is a
+      // browser application and nothing in it runs in a worker or on the server.
+      'unicorn/prefer-global-this': 'off',
+      // Off because it reports every `obj[key]` where the key is not a literal, which in a typed
+      // codebase is the normal way to read a keyed option map. All 35 reports were of that shape.
+      // Leaving it on trains reviewers to skim warnings, which costs more than the rule returns.
+      'security/detect-object-injection': 'off',
+      // Off: `.forEach` is not a defect, and rewriting 11 call sites to `for…of` would change
+      // working code to satisfy a preference.
+      'unicorn/no-array-for-each': 'off',
+      // Off: whether `if (!a)` or `if (a)` reads better depends on which branch is the common
+      // case, which a rule cannot know.
+      'unicorn/no-negated-condition': 'off',
+      // Off: `signal<T | undefined>(undefined)` and an explicit `return undefined` are how this
+      // codebase states "absent" in a typed signature. Removing them makes the type read as an
+      // accident rather than a decision.
+      'unicorn/no-useless-undefined': 'off',
+      // Off: top-level await changes a module's evaluation semantics, and the two reports are in
+      // `main.ts` and `bootstrap.ts`, where native-federation controls the bootstrap order. That
+      // is a deliberate change to make on its own, not a lint autofix.
+      'unicorn/prefer-top-level-await': 'off',
+      // Off because its autofix does not compile here. It rewrites `.filter(p).pop()` to
+      // `.findLast(p)`, which needs lib ES2023; tsconfig targets ES2022, so the fix produces
+      // TS2550. Caught by `npm run build` — ESLint does not type-check, so lint stayed green on
+      // code the compiler rejects. Reconsider when the target moves.
+      'unicorn/prefer-array-find': 'off',
+      // Off for the same reason, from the other direction: it rewrites
+      // `setAttribute('data-theme', …)` to `dataset.theme`, and `noPropertyAccessFromIndexSignature`
+      // is on, so the fix produces TS4111. `DOMStringMap` is an index signature and this project
+      // has deliberately chosen to require bracket access on those.
+      'unicorn/dom-node-dataset': 'off',
+      // Lowercase, because Prettier rewrites hex digits that way and `format:check` gates CI:
+      // the rule's uppercase default is unsatisfiable here. The rest of the rule still applies,
+      // such as the `0x` prefix and exponent casing.
+      'unicorn/number-literal-case': ['error', { hexadecimalValue: 'lowercase' }],
       '@angular-eslint/directive-selector': [
         'error',
         {
@@ -65,7 +227,6 @@ module.exports = tseslint.config(
           style: 'kebab-case',
         },
       ],
-      'sonarjs/no-duplicate-string': 'error',
       // The three rules below are on globally with every current violation recorded in
       // eslint-suppressions.json. That file only shrinks: CI runs --prune-suppressions, so a
       // fixed violation cannot be re-introduced, and anything new fails immediately. Turning
@@ -95,39 +256,14 @@ module.exports = tseslint.config(
       'no-restricted-imports': [
         'error',
         {
-          patterns: [
-            {
-              group: ['@angular/material', '@angular/material/*'],
-              message:
-                'Angular Material has been removed. Use Ionic (@ionic/angular/standalone) — see STYLE.md for the component mapping. @angular/cdk is still allowed.',
-            },
-            // Adapter boundary — DOCS/adr/0003-adapter-boundary.md.
-            //
-            // `<ion-*>` components are deliberately NOT restricted: they are the UI layer
-            // (AGENTS.md) and migrate one component at a time. What is restricted is Ionic's
-            // *imperative* surface, which services reach for and which has lifecycle
-            // semantics worth testing without a component library present.
-            {
-              group: ['@ionic/angular', '@ionic/angular/*'],
-              importNames: [
-                'ModalController',
-                'ToastController',
-                'AlertController',
-                'LoadingController',
-                'ActionSheetController',
-                'PopoverController',
-              ],
-              message:
-                "Use the OVERLAY adapter from 'app/core/adapters' instead of Ionic's controllers. Ion* components are unaffected. See DOCS/adr/0003-adapter-boundary.md.",
-            },
-            {
-              group: ['@ngx-translate/*'],
-              message:
-                "Use the I18N adapter (or the | appTranslate pipe) from 'app/core/adapters'. See DOCS/adr/0003-adapter-boundary.md.",
-            },
-          ],
+          patterns: restrictedImportPatterns,
         },
       ],
+      // The generated OpenAPI client is regenerated from an upstream spec on Fineract's
+      // cadence, so a change to an emitted shape reaches every file that binds one. ADR 0001
+      // stabilised the generated *names*; this holds the line on how far the generated *types*
+      // spread. Shrinking baseline, same as the Ionic one.
+      'local/no-generated-api-import': generatedApiImport,
       // Web Storage is a trust boundary (security.md §4) and reached through globals rather
       // than imports, so the boundary needs a second rule to hold. `STORAGE_KEYS` is the
       // reviewable inventory of what this origin persists; a direct `localStorage.setItem`
@@ -163,15 +299,15 @@ module.exports = tseslint.config(
     // that is what makes them adapters. Nothing else may reach past the boundary.
     files: [
       'src/app/core/adapters/**/*.ts',
-      // `TranslateModule.forRoot()` and `provideTranslateHttpLoader()` configure the library
-      // itself, which is composition-root work rather than a call site.
+      // `provideTranslateService()` and the loader and missing-translation plugins configure the
+      // library itself, which is composition-root work rather than a call site.
       'src/app/app.config.ts',
       // The fakes must implement the same contracts, and the storage spec asserts against
       // real Web Storage to prove the adapter writes where its scope says it does.
       'src/app/testing/adapters.ts',
       // Same composition-root argument as app.config.ts, for specs: a spec that renders a
       // shared component still using `| translate` needs the library configured. Keeping that
-      // in one helper stops `TranslateModule.forRoot()` from being re-imported by every spec,
+      // in one helper stops `provideTranslateService()` from being re-imported by every spec,
       // which is what would actually erode the boundary.
       'src/app/testing/i18n-testing.ts',
     ],
@@ -179,6 +315,28 @@ module.exports = tseslint.config(
       'no-restricted-imports': 'off',
       'no-restricted-globals': 'off',
       'no-restricted-properties': 'off',
+    },
+  },
+  {
+    // The places allowed to name the generated OpenAPI client: the adapters that map its types
+    // onto application models — including their specs, which must build generated payloads to
+    // prove the mapping — and the composition root that configures `BASE_PATH`.
+    //
+    // Feature specs are deliberately *not* exempt. A component's spec names the same generated
+    // types its component does, so exempting specs would let the coupling stay while the count
+    // said otherwise, and migrating a component means migrating its spec with it.
+    files: ['src/app/core/adapters/api/**/*.ts', 'src/app/app.config.ts'],
+    rules: {
+      'local/no-generated-api-import': 'off',
+    },
+  },
+  {
+    // The places allowed to name Ionic directly. Only the component boundary is lifted:
+    // `no-restricted-imports` still holds here, so Material, direct ngx-translate and Ionic's
+    // imperative controllers stay forbidden inside src/app/ui as well.
+    files: VENDOR_UI_ALLOWED,
+    rules: {
+      'local/no-vendor-ui-import': 'off',
     },
   },
   {

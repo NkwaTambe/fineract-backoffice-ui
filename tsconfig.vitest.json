@@ -1,0 +1,9 @@
+{
+  "license": "Apache-2.0",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./out-tsc/vitest",
+    "types": ["vitest/globals"]
+  },
+  "include": ["src/**/*.test.ts", "src/testing/**/*.ts", "src/**/*.d.ts"]
+}

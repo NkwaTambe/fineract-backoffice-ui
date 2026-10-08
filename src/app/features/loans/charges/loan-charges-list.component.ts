@@ -19,12 +19,13 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { I18N, TranslatePipe } from '../../../core/adapters';
 import { ColumnDef, CellTemplateDirective } from '../../../shared';
 import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 import { LoanChargesService, GetLoansLoanIdChargesChargeIdResponse } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { DialogService } from '../../../core/services/dialog.service';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 /**
  * Lists the charges attached to a single loan. The loan id is read from the route snapshot;
@@ -35,11 +36,10 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
   selector: 'app-loan-charges-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
@@ -47,6 +47,7 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       title="LOAN_CHARGES.TITLE"
       helpTextKey="HELP.LOAN_CHARGES_DESC"
       createButtonLabel="LOAN_CHARGES.ADD_TITLE"
+      createPermission="CREATE_LOANCHARGE"
       [columns]="columns"
       [data]="charges()"
       [totalRecords]="charges().length"
@@ -55,23 +56,23 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
     >
       <ng-template appCellTemplate="paid" let-row>
         @if (row.paid) {
-          <span class="badge badge-success">{{ 'COMMON.YES' | translate }}</span>
+          <span class="badge badge-success">{{ 'COMMON.YES' | appTranslate }}</span>
         } @else {
-          <span class="badge badge-neutral">{{ 'COMMON.NO' | translate }}</span>
+          <span class="badge badge-neutral">{{ 'COMMON.NO' | appTranslate }}</span>
         }
       </ng-template>
 
       <ng-template appCellTemplate="actions" let-row>
         @if (!row.paid) {
-          <ion-button
-            fill="clear"
-            color="danger"
-            [attr.aria-label]="'COMMON.DELETE' | translate"
-            [appTooltip]="'COMMON.DELETE' | translate"
+          <app-button
+            type="button"
+            intent="danger"
+            emphasis="quiet"
+            [label]="'COMMON.DELETE' | appTranslate"
+            icon="trash-outline"
+            [appTooltip]="'COMMON.DELETE' | appTranslate"
             (click)="onDelete(row)"
-          >
-            <ion-icon name="trash-outline"></ion-icon>
-          </ion-button>
+          />
         }
       </ng-template>
     </app-data-table>
@@ -81,6 +82,8 @@ export class LoanChargesListComponent implements OnInit {
   private readonly loanChargesService = inject(LoanChargesService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly dialogService = inject(DialogService);
+  private readonly i18n = inject(I18N);
 
   readonly columns: ColumnDef[] = [
     { key: 'name', label: 'LOAN_CHARGES.TITLE', sortable: true },
@@ -111,8 +114,17 @@ export class LoanChargesListComponent implements OnInit {
     this.router.navigate(['/loans', this.loanId, 'charges', 'add']);
   }
 
-  onDelete(row: GetLoansLoanIdChargesChargeIdResponse): void {
-    if (!row.id || !window.confirm('Delete this charge?')) return;
+  async onDelete(row: GetLoansLoanIdChargesChargeIdResponse): Promise<void> {
+    if (!row.id) return;
+    const confirmed = await this.dialogService.confirm({
+      title: this.i18n.translate('COMMON.DELETE'),
+      message: this.i18n.translate('LOAN_CHARGES.DELETE_CONFIRM', {
+        name: row.name ?? '',
+        amount: row.amount ?? '',
+      }),
+      destructive: true,
+    });
+    if (!confirmed) return;
     this.loanChargesService.deleteLoansLoanIdChargesLoanChargeId(this.loanId, row.id).subscribe({
       next: () => this.load(),
       error: (err: unknown) => console.error('Failed to delete loan charge', err),

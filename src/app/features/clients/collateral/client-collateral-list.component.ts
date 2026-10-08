@@ -19,12 +19,13 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { I18N, TranslatePipe } from '../../../core/adapters';
 import { ColumnDef, CellTemplateDirective } from '../../../shared';
 import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 import { ClientCollateralManagementService, ClientCollateralManagementData } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { DialogService } from '../../../core/services/dialog.service';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 /**
  * Lists the collateral attached to a single client. The client id is read from the route
@@ -34,11 +35,10 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
   selector: 'app-client-collateral-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
@@ -46,31 +46,34 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       title="CLIENT_COLLATERAL.TITLE"
       helpTextKey="HELP.CLIENT_COLLATERAL_DESC"
       createButtonLabel="CLIENT_COLLATERAL.CREATE"
+      createPermission="CREATE_CLIENT_COLLATERAL_PRODUCT"
       [columns]="columns"
       [data]="collaterals()"
       [totalRecords]="collaterals().length"
+      [hasError]="hasError()"
       [localLogic]="true"
       (create)="onCreate()"
+      (retry)="onRetry()"
     >
       <ng-template appCellTemplate="actions" let-row>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'COMMON.EDIT' | translate"
-          [appTooltip]="'COMMON.EDIT' | translate"
+        <app-button
+          type="button"
+          intent="primary"
+          emphasis="quiet"
+          [label]="'COMMON.EDIT' | appTranslate"
+          icon="create-outline"
+          [appTooltip]="'COMMON.EDIT' | appTranslate"
           (click)="onEdit(row)"
-        >
-          <ion-icon name="create-outline"></ion-icon>
-        </ion-button>
-        <ion-button
-          fill="clear"
-          color="danger"
-          [attr.aria-label]="'COMMON.DELETE' | translate"
-          [appTooltip]="'COMMON.DELETE' | translate"
+        />
+        <app-button
+          type="button"
+          intent="danger"
+          emphasis="quiet"
+          [label]="'COMMON.DELETE' | appTranslate"
+          icon="trash-outline"
+          [appTooltip]="'COMMON.DELETE' | appTranslate"
           (click)="onDelete(row)"
-        >
-          <ion-icon name="trash-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,
@@ -79,6 +82,8 @@ export class ClientCollateralListComponent implements OnInit {
   private readonly collateralService = inject(ClientCollateralManagementService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly dialogService = inject(DialogService);
+  private readonly i18n = inject(I18N);
 
   readonly columns: ColumnDef[] = [
     { key: 'name', label: 'CLIENT_COLLATERAL.NAME', sortable: true },
@@ -90,6 +95,7 @@ export class ClientCollateralListComponent implements OnInit {
 
   clientId!: number;
   readonly collaterals = signal<ClientCollateralManagementData[]>([]);
+  readonly hasError = signal(false);
 
   ngOnInit(): void {
     this.clientId = Number(this.route.snapshot.paramMap.get('clientId'));
@@ -100,11 +106,17 @@ export class ClientCollateralListComponent implements OnInit {
     this.collateralService.getClientsClientIdCollaterals(this.clientId).subscribe({
       next: (data: ClientCollateralManagementData[]) => {
         this.collaterals.set(data || []);
+        this.hasError.set(false);
       },
       error: (err: unknown) => {
         console.error('Failed to load client collaterals', err);
+        this.hasError.set(true);
       },
     });
+  }
+
+  onRetry(): void {
+    this.load();
   }
 
   onCreate(): void {
@@ -115,8 +127,17 @@ export class ClientCollateralListComponent implements OnInit {
     this.router.navigate(['/clients', this.clientId, 'collaterals', 'edit', row.id]);
   }
 
-  onDelete(row: ClientCollateralManagementData): void {
-    if (!row.id || !window.confirm('Delete this collateral?')) return;
+  async onDelete(row: ClientCollateralManagementData): Promise<void> {
+    if (!row.id) return;
+    const confirmed = await this.dialogService.confirm({
+      title: this.i18n.translate('COMMON.DELETE'),
+      message: this.i18n.translate('CLIENT_COLLATERAL.CONFIRM_DELETE', {
+        name: row.name ?? '',
+        quantity: row.quantity ?? '',
+      }),
+      destructive: true,
+    });
+    if (!confirmed) return;
     this.collateralService
       .deleteClientsClientIdCollateralsCollateralId(this.clientId, row.id)
       .subscribe({

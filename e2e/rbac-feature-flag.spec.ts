@@ -135,16 +135,36 @@ test.describe('RBAC permission gating (rbacEnabled = true)', () => {
     }
   });
 
-  test('a user with READ_USER sees the Security group', async ({ page }) => {
+  test('a user with READ_USER sees only the Security entries that permission covers', async ({
+    page,
+  }) => {
     await login(page, { permissions: ['READ_CLIENT', 'READ_USER'], institutionType: 'universal' });
 
     await expect(link(page, 'Users')).toBeVisible();
-    await expect(link(page, 'Roles')).toBeVisible();
-    await expect(link(page, 'Audit Logs')).toBeVisible();
+
+    // Every routed entry now carries the permission its own route declares, so a sibling in the
+    // same group is no longer admitted by a group-level gate: Roles needs READ_ROLE and Audit
+    // Logs needs READ_AUDIT. Both are also refused by URL, which is the point of gating them —
+    // see rbac-route-protection.spec.ts.
+    await expect(link(page, 'Roles')).toHaveCount(0);
+    await expect(link(page, 'Audit Logs')).toHaveCount(0);
 
     // Other gated groups the user has no permission for stay hidden.
     await expect(link(page, 'Data Tables')).toHaveCount(0);
     await expect(link(page, 'Global Configurations')).toHaveCount(0);
+  });
+
+  test('the Security group fills in as the user is granted each of its permissions', async ({
+    page,
+  }) => {
+    await login(page, {
+      permissions: ['READ_USER', 'READ_ROLE', 'READ_AUDIT'],
+      institutionType: 'universal',
+    });
+
+    await expect(link(page, 'Users')).toBeVisible();
+    await expect(link(page, 'Roles')).toBeVisible();
+    await expect(link(page, 'Audit Logs')).toBeVisible();
   });
 
   test('a superuser (ALL_FUNCTIONS) sees all permission-gated groups', async ({ page }) => {
@@ -213,16 +233,32 @@ test.describe('rbacEnabled = false', () => {
 });
 
 test.describe('deployment navigation overrides', () => {
-  test('removes the entries config.json names, leaving the rest alone', async ({ page }) => {
+  test('removes the entries the deployment names by id, leaving the rest alone', async ({
+    page,
+  }) => {
     await login(page, {
       permissions: ['ALL_FUNCTIONS'],
       institutionType: 'universal',
-      config: { nav: { hidden: ['nav.groups', 'SIDEBAR.SEARCH'] } },
+      config: { nav: { hidden: ['groups', 'search'] } },
     });
 
     await expect(link(page, 'Groups')).toHaveCount(0);
     await expect(link(page, 'Centers')).toBeVisible();
     await expect(link(page, 'Clients')).toBeVisible();
+  });
+
+  test('ignores a labelKey where an id is required', async ({ page }) => {
+    // `hidden` matched on labelKey until stable ids landed. A label is upstream's to rewrite, so
+    // an override keyed on one stopped matching after a rename and the entry the deployment meant
+    // to suppress came back, silently, in production. The old key has to be inert rather than
+    // quietly half-supported.
+    await login(page, {
+      permissions: ['ALL_FUNCTIONS'],
+      institutionType: 'universal',
+      config: { nav: { hidden: ['nav.groups'] } },
+    });
+
+    await expect(link(page, 'Groups')).toBeVisible();
   });
 
   test('removes them even where RBAC is off', async ({ page }) => {
@@ -231,7 +267,7 @@ test.describe('deployment navigation overrides', () => {
     await login(page, {
       permissions: ['ALL_FUNCTIONS'],
       institutionType: 'universal',
-      config: { rbacEnabled: false, nav: { hidden: ['nav.groups'] } },
+      config: { rbacEnabled: false, nav: { hidden: ['groups'] } },
     });
 
     await expect(link(page, 'Groups')).toHaveCount(0);

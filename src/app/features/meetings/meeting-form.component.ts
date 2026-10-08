@@ -20,7 +20,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../core/adapters';
 import { MeetingsService, MeetingCreateRequest } from '../../api';
 import {
   IonButton,
@@ -42,6 +42,7 @@ import {
   formatDateToFineract,
   toIsoDate,
 } from '../../core/utils/date-formatter';
+import { createPickersReady } from '../../shared/utils/pickers-ready';
 
 /**
  * Create / edit form for a group/center meeting. The entity type and entity id come
@@ -53,7 +54,7 @@ import {
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonSpinner,
     IonInput,
@@ -72,15 +73,17 @@ import {
       <ion-card>
         <ion-card-header>
           <ion-card-title>
-            {{ isEditMode ? ('MEETINGS.EDIT' | translate) : ('MEETINGS.CREATE' | translate) }}
+            {{ isEditMode ? ('MEETINGS.EDIT' | appTranslate) : ('MEETINGS.CREATE' | appTranslate) }}
           </ion-card-title>
         </ion-card-header>
 
         <ion-card-content>
           <form #meetingForm="ngForm" (ngSubmit)="onSubmit()" class="meeting-form">
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'MEETINGS.MEETING_DATE' | translate }}</ion-label>
-              <ion-datetime-button datetime="meetingDate-picker"></ion-datetime-button>
+              <ion-label position="stacked">{{ 'MEETINGS.MEETING_DATE' | appTranslate }}</ion-label>
+              @if (pickersReady()) {
+                <ion-datetime-button datetime="meetingDate-picker"></ion-datetime-button>
+              }
               <ion-modal [keepContentsMounted]="true">
                 <ng-template>
                   <ion-datetime
@@ -97,9 +100,9 @@ import {
             </ion-item>
 
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'MEETINGS.CALENDAR_ID' | translate }}</ion-label>
+              <ion-label position="stacked">{{ 'MEETINGS.CALENDAR_ID' | appTranslate }}</ion-label>
               <ion-input
-                [attr.aria-label]="'MEETINGS.CALENDAR_ID' | translate"
+                [attr.aria-label]="'MEETINGS.CALENDAR_ID' | appTranslate"
                 type="number"
                 name="calendarId"
                 [ngModel]="calendarId()"
@@ -110,7 +113,7 @@ import {
 
             <div class="form-actions">
               <ion-button fill="clear" type="button" (click)="onCancel()" [disabled]="isSaving()">
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               <ion-button
                 color="primary"
@@ -119,9 +122,9 @@ import {
               >
                 @if (isSaving()) {
                   <ion-spinner name="crescent"></ion-spinner>
-                  {{ 'COMMON.SAVING' | translate }}
+                  {{ 'COMMON.SAVING' | appTranslate }}
                 } @else {
-                  {{ 'COMMON.SAVE' | translate }}
+                  {{ 'COMMON.SAVE' | appTranslate }}
                 }
               </ion-button>
             </div>
@@ -146,6 +149,9 @@ import {
   ],
 })
 export class MeetingFormComponent implements OnInit {
+  /** See `createPickersReady` — the date buttons must not outrun their pickers. */
+  readonly pickersReady = createPickersReady();
+
   private readonly meetingsService = inject(MeetingsService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);

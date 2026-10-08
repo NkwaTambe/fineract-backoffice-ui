@@ -20,7 +20,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 
 import { Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import { CurrencyPipe } from '@angular/common';
 import {
   DataTableComponent,
@@ -29,7 +29,7 @@ import {
   StatusBadgeComponent,
 } from '../../../shared';
 import { RecurringDepositAccountService, GetRecurringDepositAccountsResponse } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { ButtonComponent } from '../../../ui/button/button.component';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
 
 /**
@@ -42,20 +42,20 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
   selector: 'app-recurring-deposits-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
     StatusBadgeComponent,
     CurrencyPipe,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
     <app-data-table
-      title="Recurring Deposit Accounts"
+      title="nav.recurringDeposits"
       helpTextKey="HELP.RECURRING_DEPOSITS_DESC"
       createButtonLabel="RECURRING_DEPOSITS.CREATE"
+      createPermission="CREATE_RECURRINGDEPOSITACCOUNT"
       [columns]="columns"
       [data]="accounts()"
       [totalRecords]="accounts().length"
@@ -73,24 +73,24 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
 
       <ng-template appCellTemplate="actions" let-account>
         @if (account.status?.value === 'Submitted and pending approval') {
-          <ion-button
-            fill="clear"
-            color="secondary"
-            [appTooltip]="'LOANS.APPROVE' | translate"
+          <app-button
+            type="button"
+            emphasis="quiet"
+            intent="secondary"
+            icon="checkmark-circle-outline"
+            [label]="'LOANS.APPROVE' | appTranslate"
+            [appTooltip]="'LOANS.APPROVE' | appTranslate"
             (click)="onApprove(account)"
-          >
-            <ion-icon name="checkmark-circle-outline"></ion-icon>
-          </ion-button>
+          />
         }
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'COMMON.EDIT' | translate"
-          title="Edit Account Details"
+        <app-button
+          type="button"
+          emphasis="quiet"
+          intent="primary"
+          icon="create-outline"
+          [label]="'COMMON.EDIT' | appTranslate"
           (click)="onEditAccount(account)"
-        >
-          <ion-icon name="create-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,

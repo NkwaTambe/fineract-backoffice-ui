@@ -18,7 +18,7 @@
  */
 
 import { Component, inject, signal } from '@angular/core';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../core/adapters';
 import { Router } from '@angular/router';
 import { NgClass } from '@angular/common';
 import { Subject, merge, of } from 'rxjs';
@@ -26,24 +26,17 @@ import { catchError, map, startWith, switchMap, tap } from 'rxjs/operators';
 import { DataTableComponent, CellTemplateDirective, ColumnDef } from '../../shared';
 import { ExternalAssetOwnersService, ExternalTransferData } from '../../api';
 import { PageEvent } from '../../shared/models/table.model';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { ButtonComponent } from '../../ui/button/button.component';
 
 @Component({
   selector: 'app-asset-owners-list',
   standalone: true,
-  imports: [
-    TranslateModule,
-    DataTableComponent,
-    CellTemplateDirective,
-    NgClass,
-    IonIcon,
-    IonButton,
-  ],
+  imports: [TranslatePipe, DataTableComponent, CellTemplateDirective, NgClass, ButtonComponent],
   template: `
     <app-data-table
       [hasError]="hasError()"
       (retry)="onRetry()"
-      title="External Asset Owners"
+      title="ASSET_OWNERS.TITLE"
       helpTextKey="HELP.ASSET_OWNERS_DESC"
       [columns]="columns"
       [data]="transfers()"
@@ -59,14 +52,14 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
       </ng-template>
 
       <ng-template appCellTemplate="actions" let-transfer>
-        <ion-button
-          fill="clear"
-          color="primary"
-          title="View Details"
+        <app-button
+          type="button"
+          intent="primary"
+          emphasis="quiet"
+          [label]="'COMMON.VIEW_DETAILS' | appTranslate"
+          icon="eye-outline"
           (click)="onViewDetails(transfer)"
-        >
-          <ion-icon name="eye-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,
@@ -81,11 +74,11 @@ import { IonButton, IonIcon } from '@ionic/angular/standalone';
       }
       .active {
         background-color: #e6f4ea;
-        color: #1e8e3e;
+        color: #126330;
       }
       .pending {
         background-color: #fef7e0;
-        color: #f29900;
+        color: #8a5300;
       }
     `,
   ],
@@ -101,12 +94,12 @@ export class ExternalAssetOwnersListComponent {
   private readonly router = inject(Router);
 
   columns: ColumnDef[] = [
-    { key: 'transferExternalId', label: 'Transfer ID', sortable: false },
-    { key: 'owner.externalId', label: 'Owner ID', sortable: false },
-    { key: 'loan.externalId', label: 'Loan Account', sortable: false },
-    { key: 'purchasePriceRatio', label: 'Purchase Ratio', sortable: false },
-    { key: 'status', label: 'Status', sortable: false },
-    { key: 'actions', label: 'Actions', sortable: false },
+    { key: 'transferExternalId', label: 'LOANS.TRANSFER_ID', sortable: false },
+    { key: 'owner.externalId', label: 'ASSET_OWNERS.OWNER_ID', sortable: false },
+    { key: 'loan.externalId', label: 'ACTIONS.LOAN_ACCOUNT', sortable: false },
+    { key: 'purchasePriceRatio', label: 'ASSET_OWNERS.PURCHASE_RATIO', sortable: false },
+    { key: 'status', label: 'COMMON.STATUS', sortable: false },
+    { key: 'actions', label: 'COMMON.ACTIONS', sortable: false },
   ];
 
   readonly transfers = signal<ExternalTransferData[]>([]);

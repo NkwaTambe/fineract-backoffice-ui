@@ -17,19 +17,25 @@
  * under the License.
  */
 
-import { Component, OnInit, inject, signal } from '@angular/core';
-import {} from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Subject, merge, of } from 'rxjs';
 import { catchError, map, startWith, switchMap, tap } from 'rxjs/operators';
-import { DataTableComponent, ColumnDef, CellTemplateDirective } from '../../../shared';
+import {
+  DataTableComponent,
+  ColumnDef,
+  CellTemplateDirective,
+  StatusBadgeComponent,
+} from '../../../shared';
 import { AuditsService } from '../../../api';
-import { DatePipe } from '@angular/common';
+import { DateTimePipe } from '../../../shared/pipes/date-time.pipe';
 import { ViewPayloadDialogComponent } from '../../tasks/checker-inbox/view-payload-dialog.component';
 import { PageEvent, SortEvent } from '../../../shared/models/table.model';
 import { DialogService } from '../../../core/services/dialog.service';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { DOWNLOAD, TranslatePipe } from '../../../core/adapters';
+import { toCsv } from '../../../core/utils/csv';
+import { toIsoDate } from '../../../core/utils/date-formatter';
 import {
   IonAccordion,
   IonAccordionGroup,
@@ -44,6 +50,7 @@ import {
   IonSelect,
   IonSelectOption,
 } from '@ionic/angular/standalone';
+import { createPickersReady } from '../../../shared/utils/pickers-ready';
 
 export interface AuditFilters {
   actionName: string;
@@ -59,11 +66,12 @@ export interface AuditFilters {
   selector: 'app-audit-logs-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     FormsModule,
     DataTableComponent,
     CellTemplateDirective,
-    DatePipe,
+    DateTimePipe,
+    StatusBadgeComponent,
     IonIcon,
     IonButton,
     IonInput,
@@ -84,32 +92,38 @@ export interface AuditFilters {
         <ion-accordion value="filters">
           <ion-item slot="header">
             <ion-icon slot="start" name="filter-outline"></ion-icon>
-            <ion-label>{{ 'COMMON.FILTERS' | translate }}</ion-label>
+            <ion-label>{{ 'COMMON.FILTERS' | appTranslate }}</ion-label>
           </ion-item>
           <div slot="content">
             <div class="filter-grid">
               <ion-item fill="outline">
-                <ion-label position="stacked">Action Name</ion-label>
+                <ion-label position="stacked">{{
+                  'SECURITY.ACTION_NAME' | appTranslate
+                }}</ion-label>
                 <ion-input
-                  aria-label="Action Name"
+                  [attr.aria-label]="'SECURITY.ACTION_NAME' | appTranslate"
                   [(ngModel)]="activeFilters.actionName"
                   (keyup.enter)="onApplyFilters()"
                 ></ion-input>
               </ion-item>
 
               <ion-item fill="outline">
-                <ion-label position="stacked">Entity Name</ion-label>
+                <ion-label position="stacked">{{
+                  'SECURITY.ENTITY_NAME' | appTranslate
+                }}</ion-label>
                 <ion-input
-                  aria-label="Entity Name"
+                  [attr.aria-label]="'SECURITY.ENTITY_NAME' | appTranslate"
                   [(ngModel)]="activeFilters.entityName"
                   (keyup.enter)="onApplyFilters()"
                 ></ion-input>
               </ion-item>
 
               <ion-item fill="outline">
-                <ion-label position="stacked">Resource ID</ion-label>
+                <ion-label position="stacked">{{
+                  'SECURITY.RESOURCE_ID' | appTranslate
+                }}</ion-label>
                 <ion-input
-                  aria-label="Resource ID"
+                  [attr.aria-label]="'SECURITY.RESOURCE_ID' | appTranslate"
                   type="number"
                   [(ngModel)]="activeFilters.resourceId"
                   (keyup.enter)="onApplyFilters()"
@@ -117,9 +131,9 @@ export interface AuditFilters {
               </ion-item>
 
               <ion-item fill="outline">
-                <ion-label position="stacked">Maker ID</ion-label>
+                <ion-label position="stacked">{{ 'SECURITY.MAKER_ID' | appTranslate }}</ion-label>
                 <ion-input
-                  aria-label="Maker ID"
+                  [attr.aria-label]="'SECURITY.MAKER_ID' | appTranslate"
                   type="number"
                   [(ngModel)]="activeFilters.makerId"
                   (keyup.enter)="onApplyFilters()"
@@ -127,10 +141,14 @@ export interface AuditFilters {
               </ion-item>
 
               <ion-item fill="outline">
-                <ion-label position="stacked">Maker Date From</ion-label>
-                <ion-datetime-button
-                  datetime="activeFiltersmakerDateTimeFrom-picker"
-                ></ion-datetime-button>
+                <ion-label position="stacked">{{
+                  'SECURITY.MAKER_DATE_FROM' | appTranslate
+                }}</ion-label>
+                @if (pickersReady()) {
+                  <ion-datetime-button
+                    datetime="activeFiltersmakerDateTimeFrom-picker"
+                  ></ion-datetime-button>
+                }
                 <ion-modal [keepContentsMounted]="true">
                   <ng-template>
                     <ion-datetime
@@ -145,10 +163,14 @@ export interface AuditFilters {
               </ion-item>
 
               <ion-item fill="outline">
-                <ion-label position="stacked">Maker Date To</ion-label>
-                <ion-datetime-button
-                  datetime="activeFiltersmakerDateTimeTo-picker"
-                ></ion-datetime-button>
+                <ion-label position="stacked">{{
+                  'SECURITY.MAKER_DATE_TO' | appTranslate
+                }}</ion-label>
+                @if (pickersReady()) {
+                  <ion-datetime-button
+                    datetime="activeFiltersmakerDateTimeTo-picker"
+                  ></ion-datetime-button>
+                }
                 <ion-modal [keepContentsMounted]="true">
                   <ng-template>
                     <ion-datetime
@@ -163,9 +185,11 @@ export interface AuditFilters {
               </ion-item>
 
               <ion-item fill="outline">
-                <ion-label position="stacked">Processing Result</ion-label>
+                <ion-label position="stacked">{{
+                  'SECURITY.PROCESSING_RESULT' | appTranslate
+                }}</ion-label>
                 <ion-select
-                  aria-label="Processing Result"
+                  [attr.aria-label]="'SECURITY.PROCESSING_RESULT' | appTranslate"
                   interface="popover"
                   [(ngModel)]="activeFilters.processingResult"
                 >
@@ -178,10 +202,10 @@ export interface AuditFilters {
 
             <div class="filter-actions">
               <ion-button fill="clear" color="danger" (click)="onResetFilters()">
-                {{ 'COMMON.RESET' | translate }}
+                {{ 'COMMON.RESET' | appTranslate }}
               </ion-button>
               <ion-button color="primary" (click)="onApplyFilters()">
-                {{ 'COMMON.APPLY' | translate }}
+                {{ 'COMMON.APPLY' | appTranslate }}
               </ion-button>
             </div>
           </div>
@@ -192,22 +216,36 @@ export interface AuditFilters {
         [hasError]="hasError()"
         (retry)="onRetry()"
         title="SECURITY.AUDIT_LOGS"
-        [columns]="columns"
-        [data]="auditLogs()"
+        [columns]="columns()"
+        [data]="visibleLogs()"
         [totalRecords]="totalRecords()"
         [pageSize]="pageSize()"
         [pageIndex]="pageIndex()"
         [isLoading]="isLoading()"
-        [showSearch]="false"
+        (searchChange)="onSearch($event)"
         (pageChange)="onPage($event)"
         (sortChange)="onSort($event)"
       >
+        <ion-button
+          headerActions
+          fill="outline"
+          (click)="onExportCsv()"
+          [disabled]="auditLogs().length === 0"
+        >
+          <ion-icon name="download-outline" slot="start"></ion-icon>
+          {{ 'COMMON.EXPORT_CSV' | appTranslate }}
+        </ion-button>
+
         <ng-template appCellTemplate="madeOnDate" let-row>
-          {{ row['madeOnDate'] | date: 'medium' }}
+          {{ row['madeOnDate'] | dateTime }}
         </ng-template>
 
         <ng-template appCellTemplate="checkedOnDate" let-row>
-          {{ row['checkedOnDate'] | date: 'medium' }}
+          {{ row['checkedOnDate'] | dateTime }}
+        </ng-template>
+
+        <ng-template appCellTemplate="processingResult" let-row>
+          <app-status-badge [status]="row['processingResult']"></app-status-badge>
         </ng-template>
 
         <ng-template appCellTemplate="actions" let-row>
@@ -215,7 +253,8 @@ export interface AuditFilters {
             fill="clear"
             color="primary"
             (click)="onViewDetails(row)"
-            [appTooltip]="'COMMON.VIEW_DETAILS' | translate"
+            [attr.aria-label]="'COMMON.VIEW_DETAILS' | appTranslate"
+            [appTooltip]="'COMMON.VIEW_DETAILS' | appTranslate"
           >
             <ion-icon name="eye-outline"></ion-icon>
           </ion-button>
@@ -235,8 +274,7 @@ export interface AuditFilters {
         padding: 8px 0;
       }
       .filter-panel {
-        margin: 24px;
-        margin-bottom: 0;
+        margin: 0 0 var(--space-4);
       }
       .filter-grid {
         display: grid;
@@ -248,6 +286,9 @@ export interface AuditFilters {
   ],
 })
 export class AuditLogsListComponent implements OnInit {
+  /** See `createPickersReady` — the date buttons must not outrun their pickers. */
+  readonly pickersReady = createPickersReady();
+
   /** True when the last load failed, so the table offers a retry instead of an empty list. */
   readonly hasError = signal(false);
 
@@ -256,21 +297,57 @@ export class AuditLogsListComponent implements OnInit {
 
   private readonly auditsService = inject(AuditsService);
   private readonly dialogService = inject(DialogService);
+  private readonly download = inject(DOWNLOAD);
 
-  columns: ColumnDef[] = [
-    { key: 'id', label: 'ID', sortable: true },
-    { key: 'resourceId', label: 'Resource ID', sortable: true },
-    { key: 'entityName', label: 'Entity', sortable: true },
-    { key: 'actionName', label: 'Action', sortable: true },
-    { key: 'maker', label: 'Maker', sortable: true },
-    { key: 'madeOnDate', label: 'Date', sortable: true },
-    { key: 'checker', label: 'Checker', sortable: true },
-    { key: 'checkedOnDate', label: 'Checked Date', sortable: true },
-    { key: 'processingResult', label: 'Result', sortable: true },
+  private static readonly CHECKER_COLUMNS = ['checker', 'checkedOnDate'];
+
+  private readonly allColumns: ColumnDef[] = [
+    { key: 'id', label: 'COMMON.ID', sortable: true },
+    { key: 'resourceId', label: 'SECURITY.RESOURCE_ID', sortable: true },
+    { key: 'entityName', label: 'COMMON.ENTITY', sortable: true },
+    { key: 'actionName', label: 'COMMON.ACTION', sortable: true },
+    { key: 'maker', label: 'COMMON.MAKER', sortable: true },
+    { key: 'madeOnDate', label: 'COMMON.DATE', sortable: true },
+    { key: 'checker', label: 'COMMON.CHECKER', sortable: true },
+    { key: 'checkedOnDate', label: 'COMMON.CHECKED_DATE', sortable: true },
+    { key: 'processingResult', label: 'INLINE_JOB.RESULT', sortable: true },
     { key: 'actions', label: 'COMMON.ACTIONS' },
   ];
 
   readonly auditLogs = signal<Record<string, unknown>[]>([]);
+
+  /** Free-text search, applied to the rows of the page that is currently loaded. */
+  private readonly searchText = signal('');
+
+  /**
+   * The rows on screen: the loaded page narrowed by the search box.
+   *
+   * The audits endpoint has no free-text parameter — only the structured filters above — so this
+   * matches against every visible field of the loaded page rather than querying the server.
+   */
+  readonly visibleLogs = computed(() => {
+    const needle = this.searchText();
+    const rows = this.auditLogs();
+    if (!needle) return rows;
+    return rows.filter((row) =>
+      this.allColumns.some((col) => {
+        const value = row[col.key];
+        return value != null && String(value).toLowerCase().includes(needle);
+      }),
+    );
+  });
+
+  /**
+   * Checker and Checked Date are only meaningful when maker-checker is in use. With it off,
+   * no entry is ever checked and the pair would be two permanently blank columns, so they are
+   * left out unless at least one loaded row has a checker.
+   */
+  readonly columns = computed<ColumnDef[]>(() => {
+    const anyChecked = this.auditLogs().some((row) => !!row['checker'] || !!row['checkedOnDate']);
+    return anyChecked
+      ? this.allColumns
+      : this.allColumns.filter((col) => !AuditLogsListComponent.CHECKER_COLUMNS.includes(col.key));
+  });
   readonly totalRecords = signal<number>(0);
   readonly isLoading = signal<boolean>(false);
   readonly pageSize = signal<number>(10);
@@ -303,11 +380,14 @@ export class AuditLogsListComponent implements OnInit {
           const orderBy = this.currentSort.active;
           const sortOrder = this.currentSort.direction.toUpperCase() || 'DESC';
 
+          // Through `toIsoDate`, not `toISOString()`: the latter converts to UTC first, so a
+          // filter set to today reads as tomorrow for anyone east of Greenwich once the local
+          // clock passes the offset, and as yesterday for anyone west of it.
           const fromDate = this.activeFilters.makerDateTimeFrom
-            ? this.activeFilters.makerDateTimeFrom.toISOString().split('T')[0]
+            ? toIsoDate(this.activeFilters.makerDateTimeFrom)
             : undefined;
           const toDate = this.activeFilters.makerDateTimeTo
-            ? this.activeFilters.makerDateTimeTo.toISOString().split('T')[0]
+            ? toIsoDate(this.activeFilters.makerDateTimeTo)
             : undefined;
 
           return this.auditsService
@@ -352,9 +432,7 @@ export class AuditLogsListComponent implements OnInit {
             string,
             unknown
           >;
-          const items = result['pageItems']
-            ? (result['pageItems'] as unknown[])
-            : (result as unknown);
+          const items = (result['pageItems'] as unknown[]) || (result as unknown);
 
           if (Array.isArray(items)) {
             const limit = this.pageSize();
@@ -398,6 +476,10 @@ export class AuditLogsListComponent implements OnInit {
     this.onApplyFilters();
   }
 
+  onSearch(value: string): void {
+    this.searchText.set(value.trim().toLowerCase());
+  }
+
   onPage(event: PageEvent): void {
     this.pageSize.set(event.pageSize);
     this.pageIndex.set(event.pageIndex);
@@ -419,5 +501,12 @@ export class AuditLogsListComponent implements OnInit {
 
   onRetry(): void {
     this.retrySubject.next();
+  }
+
+  /** Exports the currently-loaded page — matches what the table shows, not the full result set. */
+  onExportCsv(): void {
+    const exportColumns = this.columns().filter((c) => c.key !== 'actions');
+    const csv = toCsv(exportColumns, this.auditLogs());
+    this.download.saveText(csv, 'audit-logs.csv', 'text/csv');
   }
 }

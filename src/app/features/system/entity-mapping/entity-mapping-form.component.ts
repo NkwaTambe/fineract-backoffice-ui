@@ -20,7 +20,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import { FineractEntityService } from '../../../api';
 import {
   IonButton,
@@ -45,6 +45,13 @@ interface EntityMappingPayload {
   toId?: number;
 }
 
+/** Tolerates the JSON string the generated type promises and the object the API sends. */
+export function readMappingPayload(body: unknown): EntityMappingPayload {
+  if (body === null || body === undefined || body === '') return {};
+  const parsed: unknown = typeof body === 'string' ? JSON.parse(body) : body;
+  return (parsed ?? {}) as EntityMappingPayload;
+}
+
 /**
  * Create / edit form for an entity-to-entity mapping. The relationship id selects which
  * mapping type is created; from/to ids identify the linked entities.
@@ -54,7 +61,7 @@ interface EntityMappingPayload {
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonSpinner,
     IonInput,
@@ -72,8 +79,8 @@ interface EntityMappingPayload {
           <ion-card-title>
             {{
               isEditMode()
-                ? ('ENTITY_MAPPING.EDIT' | translate)
-                : ('ENTITY_MAPPING.CREATE' | translate)
+                ? ('ENTITY_MAPPING.EDIT' | appTranslate)
+                : ('ENTITY_MAPPING.CREATE' | appTranslate)
             }}
           </ion-card-title>
         </ion-card-header>
@@ -81,9 +88,9 @@ interface EntityMappingPayload {
         <ion-card-content>
           <form #mappingForm="ngForm" (ngSubmit)="onSubmit()" class="entity-form">
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'ENTITY_MAPPING.REL_ID' | translate }}</ion-label>
+              <ion-label position="stacked">{{ 'ENTITY_MAPPING.REL_ID' | appTranslate }}</ion-label>
               <ion-input
-                [attr.aria-label]="'ENTITY_MAPPING.REL_ID' | translate"
+                [attr.aria-label]="'ENTITY_MAPPING.REL_ID' | appTranslate"
                 type="number"
                 name="relId"
                 [ngModel]="relId()"
@@ -94,9 +101,11 @@ interface EntityMappingPayload {
             </ion-item>
 
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'ENTITY_MAPPING.FROM_ID' | translate }}</ion-label>
+              <ion-label position="stacked">{{
+                'ENTITY_MAPPING.FROM_ID' | appTranslate
+              }}</ion-label>
               <ion-input
-                [attr.aria-label]="'ENTITY_MAPPING.FROM_ID' | translate"
+                [attr.aria-label]="'ENTITY_MAPPING.FROM_ID' | appTranslate"
                 type="number"
                 name="fromId"
                 [(ngModel)]="payload().fromId"
@@ -105,9 +114,9 @@ interface EntityMappingPayload {
             </ion-item>
 
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'ENTITY_MAPPING.TO_ID' | translate }}</ion-label>
+              <ion-label position="stacked">{{ 'ENTITY_MAPPING.TO_ID' | appTranslate }}</ion-label>
               <ion-input
-                [attr.aria-label]="'ENTITY_MAPPING.TO_ID' | translate"
+                [attr.aria-label]="'ENTITY_MAPPING.TO_ID' | appTranslate"
                 type="number"
                 name="toId"
                 [(ngModel)]="payload().toId"
@@ -117,7 +126,7 @@ interface EntityMappingPayload {
 
             <div class="form-actions">
               <ion-button fill="clear" type="button" (click)="onCancel()" [disabled]="isSaving()">
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               <ion-button
                 color="primary"
@@ -126,9 +135,9 @@ interface EntityMappingPayload {
               >
                 @if (isSaving()) {
                   <ion-spinner name="crescent"></ion-spinner>
-                  {{ 'COMMON.SAVING' | translate }}
+                  {{ 'COMMON.SAVING' | appTranslate }}
                 } @else {
-                  {{ 'COMMON.SAVE' | translate }}
+                  {{ 'COMMON.SAVE' | appTranslate }}
                 }
               </ion-button>
             </div>
@@ -179,10 +188,17 @@ export class EntityMappingFormComponent implements OnInit {
 
   load(): void {
     if (!this.mapId) return;
-    this.entityService.getEntitytoentitymappingMapId(this.mapId).subscribe((body: string) => {
-      const data = body ? (JSON.parse(body) as EntityMappingPayload) : {};
-      this.payload.set({ fromId: data.fromId, toId: data.toId });
-      this.relId.set(data.relId);
+    this.entityService.getEntitytoentitymappingMapId(this.mapId).subscribe({
+      // Typed `string` by the generator, but `HttpClient` has already deserialised the JSON —
+      // parsing it again throws on the object it actually receives. See issue #611.
+      next: (body: unknown) => {
+        const data = readMappingPayload(body);
+        this.payload.set({ fromId: data.fromId, toId: data.toId });
+        this.relId.set(data.relId);
+      },
+      error: (err: unknown) => {
+        console.error('Failed to load entity mapping', err);
+      },
     });
   }
 

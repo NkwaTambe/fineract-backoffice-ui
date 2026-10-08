@@ -20,7 +20,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import {
   IonButton,
   IonCard,
@@ -54,6 +54,7 @@ import {
   FINERACT_DATE_FORMAT,
   FINERACT_LOCALE,
 } from '../../../core/utils/date-formatter';
+import { createPickersReady } from '../../../shared/utils/pickers-ready';
 
 /**
  * Create form for a Working Capital Loan application. Required fields are
@@ -66,7 +67,7 @@ import {
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonSpinner,
     IonInput,
@@ -87,15 +88,15 @@ import {
     <div class="form-container">
       <ion-card>
         <ion-card-header>
-          <ion-card-title>{{ 'WC_LOANS.CREATE' | translate }}</ion-card-title>
+          <ion-card-title>{{ 'WC_LOANS.CREATE' | appTranslate }}</ion-card-title>
         </ion-card-header>
 
         <ion-card-content>
           <form #loanForm="ngForm" (ngSubmit)="onSubmit()" class="wc-form">
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'WC_LOANS.CLIENT_ID' | translate }}</ion-label>
+              <ion-label position="stacked">{{ 'WC_LOANS.CLIENT_ID' | appTranslate }}</ion-label>
               <ion-input
-                [attr.aria-label]="'WC_LOANS.CLIENT_ID' | translate"
+                [attr.aria-label]="'WC_LOANS.CLIENT_ID' | appTranslate"
                 type="number"
                 name="clientId"
                 [(ngModel)]="loan.clientId"
@@ -104,9 +105,9 @@ import {
             </ion-item>
 
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'WC_LOANS.PRODUCT' | translate }}</ion-label>
+              <ion-label position="stacked">{{ 'WC_LOANS.PRODUCT' | appTranslate }}</ion-label>
               <ion-select
-                [attr.aria-label]="'WC_LOANS.PRODUCT' | translate"
+                [attr.aria-label]="'WC_LOANS.PRODUCT' | appTranslate"
                 interface="popover"
                 name="productId"
                 [(ngModel)]="loan.productId"
@@ -119,9 +120,9 @@ import {
             </ion-item>
 
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'WC_LOANS.PRINCIPAL' | translate }}</ion-label>
+              <ion-label position="stacked">{{ 'WC_LOANS.PRINCIPAL' | appTranslate }}</ion-label>
               <ion-input
-                [attr.aria-label]="'WC_LOANS.PRINCIPAL' | translate"
+                [attr.aria-label]="'WC_LOANS.PRINCIPAL' | appTranslate"
                 type="number"
                 name="principalAmount"
                 [(ngModel)]="loan.principalAmount"
@@ -131,9 +132,11 @@ import {
 
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'WC_LOANS.SUBMITTED_ON_DATE' | translate
+                'WC_LOANS.SUBMITTED_ON_DATE' | appTranslate
               }}</ion-label>
-              <ion-datetime-button datetime="submittedOnDate-picker"></ion-datetime-button>
+              @if (pickersReady()) {
+                <ion-datetime-button datetime="submittedOnDate-picker"></ion-datetime-button>
+              }
               <ion-modal [keepContentsMounted]="true">
                 <ng-template>
                   <ion-datetime
@@ -149,9 +152,13 @@ import {
 
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'WC_LOANS.EXPECTED_DISBURSEMENT_DATE' | translate
+                'WC_LOANS.EXPECTED_DISBURSEMENT_DATE' | appTranslate
               }}</ion-label>
-              <ion-datetime-button datetime="expectedDisbursementDate-picker"></ion-datetime-button>
+              @if (pickersReady()) {
+                <ion-datetime-button
+                  datetime="expectedDisbursementDate-picker"
+                ></ion-datetime-button>
+              }
               <ion-modal [keepContentsMounted]="true">
                 <ng-template>
                   <ion-datetime
@@ -166,9 +173,11 @@ import {
             </ion-item>
 
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'WC_LOANS.REPAYMENT_EVERY' | translate }}</ion-label>
+              <ion-label position="stacked">{{
+                'WC_LOANS.REPAYMENT_EVERY' | appTranslate
+              }}</ion-label>
               <ion-input
-                [attr.aria-label]="'WC_LOANS.REPAYMENT_EVERY' | translate"
+                [attr.aria-label]="'WC_LOANS.REPAYMENT_EVERY' | appTranslate"
                 type="number"
                 name="repaymentEvery"
                 [(ngModel)]="loan.repaymentEvery"
@@ -177,10 +186,10 @@ import {
 
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'WC_LOANS.REPAYMENT_FREQUENCY_TYPE' | translate
+                'WC_LOANS.REPAYMENT_FREQUENCY_TYPE' | appTranslate
               }}</ion-label>
               <ion-select
-                [attr.aria-label]="'WC_LOANS.REPAYMENT_FREQUENCY_TYPE' | translate"
+                [attr.aria-label]="'WC_LOANS.REPAYMENT_FREQUENCY_TYPE' | appTranslate"
                 interface="popover"
                 name="repaymentFrequencyType"
                 [(ngModel)]="loan.repaymentFrequencyType"
@@ -192,9 +201,9 @@ import {
             </ion-item>
 
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'WC_LOANS.BREACH' | translate }}</ion-label>
+              <ion-label position="stacked">{{ 'WC_LOANS.BREACH' | appTranslate }}</ion-label>
               <ion-select
-                [attr.aria-label]="'WC_LOANS.BREACH' | translate"
+                [attr.aria-label]="'WC_LOANS.BREACH' | appTranslate"
                 interface="popover"
                 name="breachId"
                 [(ngModel)]="loan.breachId"
@@ -206,9 +215,9 @@ import {
             </ion-item>
 
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'WC_LOANS.NEAR_BREACH' | translate }}</ion-label>
+              <ion-label position="stacked">{{ 'WC_LOANS.NEAR_BREACH' | appTranslate }}</ion-label>
               <ion-select
-                [attr.aria-label]="'WC_LOANS.NEAR_BREACH' | translate"
+                [attr.aria-label]="'WC_LOANS.NEAR_BREACH' | appTranslate"
                 interface="popover"
                 name="nearBreachId"
                 [(ngModel)]="loan.nearBreachId"
@@ -221,10 +230,10 @@ import {
 
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'WC_LOANS.DELINQUENCY_BUCKET' | translate
+                'WC_LOANS.DELINQUENCY_BUCKET' | appTranslate
               }}</ion-label>
               <ion-select
-                [attr.aria-label]="'WC_LOANS.DELINQUENCY_BUCKET' | translate"
+                [attr.aria-label]="'WC_LOANS.DELINQUENCY_BUCKET' | appTranslate"
                 interface="popover"
                 name="delinquencyBucketId"
                 [(ngModel)]="loan.delinquencyBucketId"
@@ -236,9 +245,9 @@ import {
             </ion-item>
 
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'WC_LOANS.FUND' | translate }}</ion-label>
+              <ion-label position="stacked">{{ 'WC_LOANS.FUND' | appTranslate }}</ion-label>
               <ion-select
-                [attr.aria-label]="'WC_LOANS.FUND' | translate"
+                [attr.aria-label]="'WC_LOANS.FUND' | appTranslate"
                 interface="popover"
                 name="fundId"
                 [(ngModel)]="loan.fundId"
@@ -251,10 +260,10 @@ import {
 
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'WC_LOANS.PERIOD_PAYMENT_RATE' | translate
+                'WC_LOANS.PERIOD_PAYMENT_RATE' | appTranslate
               }}</ion-label>
               <ion-input
-                [attr.aria-label]="'WC_LOANS.PERIOD_PAYMENT_RATE' | translate"
+                [attr.aria-label]="'WC_LOANS.PERIOD_PAYMENT_RATE' | appTranslate"
                 type="number"
                 name="periodPaymentRate"
                 [(ngModel)]="loan.periodPaymentRate"
@@ -263,10 +272,10 @@ import {
 
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'WC_LOANS.TOTAL_PAYMENT_VOLUME' | translate
+                'WC_LOANS.TOTAL_PAYMENT_VOLUME' | appTranslate
               }}</ion-label>
               <ion-input
-                [attr.aria-label]="'WC_LOANS.TOTAL_PAYMENT_VOLUME' | translate"
+                [attr.aria-label]="'WC_LOANS.TOTAL_PAYMENT_VOLUME' | appTranslate"
                 type="number"
                 name="totalPaymentVolume"
                 [(ngModel)]="loan.totalPaymentVolume"
@@ -274,9 +283,9 @@ import {
             </ion-item>
 
             <ion-item fill="outline">
-              <ion-label position="stacked">{{ 'WC_LOANS.EXTERNAL_ID' | translate }}</ion-label>
+              <ion-label position="stacked">{{ 'WC_LOANS.EXTERNAL_ID' | appTranslate }}</ion-label>
               <ion-input
-                [attr.aria-label]="'WC_LOANS.EXTERNAL_ID' | translate"
+                [attr.aria-label]="'WC_LOANS.EXTERNAL_ID' | appTranslate"
                 name="externalId"
                 [(ngModel)]="loan.externalId"
               ></ion-input>
@@ -284,10 +293,10 @@ import {
 
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'WC_LOANS.SUBMITTED_ON_NOTE' | translate
+                'WC_LOANS.SUBMITTED_ON_NOTE' | appTranslate
               }}</ion-label>
               <ion-textarea
-                [attr.aria-label]="'WC_LOANS.SUBMITTED_ON_NOTE' | translate"
+                [attr.aria-label]="'WC_LOANS.SUBMITTED_ON_NOTE' | appTranslate"
                 name="submittedOnNote"
                 [(ngModel)]="loan.submittedOnNote"
               ></ion-textarea>
@@ -295,14 +304,14 @@ import {
 
             <div class="form-actions">
               <ion-button fill="clear" type="button" (click)="onCancel()" [disabled]="isSaving()">
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               <ion-button color="primary" type="submit" [disabled]="loanForm.invalid || isSaving()">
                 @if (isSaving()) {
                   <ion-spinner name="crescent"></ion-spinner>
-                  {{ 'COMMON.SAVING' | translate }}
+                  {{ 'COMMON.SAVING' | appTranslate }}
                 } @else {
-                  {{ 'COMMON.SAVE' | translate }}
+                  {{ 'COMMON.SAVE' | appTranslate }}
                 }
               </ion-button>
             </div>
@@ -327,6 +336,9 @@ import {
   ],
 })
 export class WcLoanFormComponent implements OnInit {
+  /** See `createPickersReady` — the date buttons must not outrun their pickers. */
+  readonly pickersReady = createPickersReady();
+
   private readonly loansService = inject(WorkingCapitalLoansService);
   private readonly nearBreachService = inject(WorkingCapitalNearBreachService);
   private readonly router = inject(Router);

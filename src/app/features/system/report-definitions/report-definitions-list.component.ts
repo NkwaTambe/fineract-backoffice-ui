@@ -1,0 +1,169 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+import { Component, OnInit, inject, signal } from '@angular/core';
+import { Router } from '@angular/router';
+import { NgClass } from '@angular/common';
+import { ButtonComponent } from '../../../ui/button/button.component';
+
+import { GetReportsResponse, ReportsService } from '../../../api';
+import { I18N, TranslatePipe } from '../../../core/adapters';
+import { DialogService } from '../../../core/services/dialog.service';
+import { NotificationService } from '../../../core/services/notification.service';
+import { CellTemplateDirective, ColumnDef, DataTableComponent } from '../../../shared';
+
+/**
+ * The report catalogue — the definitions behind the reports the Reporting section runs.
+ *
+ * Fineract distinguishes core reports from tenant ones and enforces it in the database: a core
+ * report cannot be deleted at all, and only its "in use" flag can be changed. That distinction is
+ * shown here rather than discovered through a 403, because the two kinds of row differ in what the
+ * user is allowed to do with them and nothing else on the screen would explain why.
+ */
+@Component({
+  selector: 'app-report-definitions-list',
+  standalone: true,
+  imports: [TranslatePipe, DataTableComponent, CellTemplateDirective, NgClass, ButtonComponent],
+  template: `
+    <app-data-table
+      title="nav.reportDefinitions"
+      helpTextKey="HELP.REPORT_DEFINITIONS_DESC"
+      createButtonLabel="REPORT_DEFINITIONS.CREATE"
+      createPermission="CREATE_REPORT"
+      [columns]="columns"
+      [data]="reports()"
+      [localLogic]="true"
+      [hasError]="hasError()"
+      (retry)="load()"
+      (create)="onCreate()"
+    >
+      <ng-template appCellTemplate="coreReport" let-report>
+        <span class="status-chip" [ngClass]="report.coreReport ? 'core' : 'tenant'">
+          {{
+            (report.coreReport ? 'REPORT_DEFINITIONS.CORE' : 'REPORT_DEFINITIONS.TENANT')
+              | appTranslate
+          }}
+        </span>
+      </ng-template>
+
+      <ng-template appCellTemplate="useReport" let-report>
+        {{ (report.useReport ? 'COMMON.YES' : 'COMMON.NO') | appTranslate }}
+      </ng-template>
+
+      <ng-template appCellTemplate="actions" let-report>
+        <app-button
+          type="button"
+          emphasis="quiet"
+          data-testid="report-definition-edit"
+          icon="create-outline"
+          [label]="'COMMON.EDIT' | appTranslate"
+          (click)="onEdit(report)"
+        />
+        <app-button
+          type="button"
+          emphasis="quiet"
+          intent="danger"
+          data-testid="report-definition-delete"
+          icon="trash-outline"
+          [disabled]="report.coreReport"
+          [label]="'COMMON.DELETE' | appTranslate"
+          (click)="onDelete(report)"
+        />
+      </ng-template>
+    </app-data-table>
+  `,
+  styles: [
+    `
+      .status-chip {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: bold;
+      }
+      .core {
+        background-color: #e3f2fd;
+        color: #1565c0;
+      }
+      .tenant {
+        background-color: #e8f5e9;
+        color: #388e3c;
+      }
+    `,
+  ],
+})
+export class ReportDefinitionsListComponent implements OnInit {
+  private readonly reportsService = inject(ReportsService);
+  private readonly router = inject(Router);
+  private readonly dialog = inject(DialogService);
+  private readonly notifications = inject(NotificationService);
+  private readonly i18n = inject(I18N);
+
+  readonly reports = signal<GetReportsResponse[]>([]);
+  readonly hasError = signal(false);
+
+  readonly columns: ColumnDef[] = [
+    { key: 'reportName', label: 'COMMON.NAME', sortable: true },
+    { key: 'reportType', label: 'COMMON.TYPE', sortable: true },
+    { key: 'reportCategory', label: 'REPORT_DEFINITIONS.CATEGORY', sortable: true },
+    { key: 'coreReport', label: 'REPORT_DEFINITIONS.ORIGIN', sortable: true },
+    { key: 'useReport', label: 'REPORT_DEFINITIONS.IN_USE', sortable: true },
+    { key: 'actions', label: 'COMMON.ACTIONS', sortable: false },
+  ];
+
+  ngOnInit(): void {
+    this.load();
+  }
+
+  load(): void {
+    this.hasError.set(false);
+    this.reportsService.getReports().subscribe({
+      next: (reports) => this.reports.set(reports),
+      error: () => this.hasError.set(true),
+    });
+  }
+
+  onCreate(): void {
+    void this.router.navigate(['/system/report-definitions/create']);
+  }
+
+  onEdit(report: GetReportsResponse): void {
+    void this.router.navigate(['/system/report-definitions/edit', report.id]);
+  }
+
+  async onDelete(report: GetReportsResponse): Promise<void> {
+    if (report.coreReport || report.id === undefined) {
+      return;
+    }
+    const confirmed = await this.dialog.confirm({
+      title: this.i18n.translate('COMMON.DELETE'),
+      message: this.i18n.translate('REPORT_DEFINITIONS.DELETE_CONFIRM'),
+      details: [{ label: this.i18n.translate('COMMON.NAME'), value: report.reportName ?? '' }],
+      destructive: true,
+    });
+    if (!confirmed) {
+      return;
+    }
+    this.reportsService.deleteReportsId(report.id).subscribe({
+      next: () => {
+        this.notifications.success(this.i18n.translate('REPORT_DEFINITIONS.DELETED'));
+        this.load();
+      },
+    });
+  }
+}

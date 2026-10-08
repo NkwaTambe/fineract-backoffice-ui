@@ -19,12 +19,13 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { I18N, TranslatePipe } from '../../../core/adapters';
 import { ColumnDef, CellTemplateDirective } from '../../../shared';
 import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 import { AdhocQueryApiService, AdHocData } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { DialogService } from '../../../core/services/dialog.service';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 /**
  * Lists ad-hoc SQL queries that can be scheduled to write into report tables.
@@ -33,11 +34,10 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
   selector: 'app-adhoc-query-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
@@ -45,6 +45,7 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       title="nav.adhocQuery"
       helpTextKey="HELP.ADHOC_QUERY_DESC"
       createButtonLabel="ADHOC_QUERY.CREATE"
+      createPermission="CREATE_ADHOC"
       [columns]="columns"
       [data]="queries()"
       [totalRecords]="queries().length"
@@ -52,27 +53,27 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
       (create)="onCreate()"
     >
       <ng-template appCellTemplate="isActive" let-row>
-        {{ (row.isActive ? 'COMMON.YES' : 'COMMON.NO') | translate }}
+        {{ (row.isActive ? 'COMMON.YES' : 'COMMON.NO') | appTranslate }}
       </ng-template>
       <ng-template appCellTemplate="actions" let-row>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'COMMON.EDIT' | translate"
-          [appTooltip]="'COMMON.EDIT' | translate"
+        <app-button
+          type="button"
+          intent="primary"
+          emphasis="quiet"
+          [label]="'COMMON.EDIT' | appTranslate"
+          icon="create-outline"
+          [appTooltip]="'COMMON.EDIT' | appTranslate"
           (click)="onEdit(row)"
-        >
-          <ion-icon name="create-outline"></ion-icon>
-        </ion-button>
-        <ion-button
-          fill="clear"
-          color="danger"
-          [attr.aria-label]="'COMMON.DELETE' | translate"
-          [appTooltip]="'COMMON.DELETE' | translate"
+        />
+        <app-button
+          type="button"
+          intent="danger"
+          emphasis="quiet"
+          [label]="'COMMON.DELETE' | appTranslate"
+          icon="trash-outline"
+          [appTooltip]="'COMMON.DELETE' | appTranslate"
           (click)="onDelete(row)"
-        >
-          <ion-icon name="trash-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,
@@ -80,6 +81,8 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
 export class AdhocQueryListComponent implements OnInit {
   private readonly adhocService = inject(AdhocQueryApiService);
   private readonly router = inject(Router);
+  private readonly dialogService = inject(DialogService);
+  private readonly i18n = inject(I18N);
 
   readonly columns: ColumnDef[] = [
     { key: 'name', label: 'ADHOC_QUERY.NAME', sortable: true },
@@ -113,8 +116,17 @@ export class AdhocQueryListComponent implements OnInit {
     this.router.navigate(['/system/adhoc-query/edit', row.id]);
   }
 
-  onDelete(row: AdHocData): void {
-    if (!row.id || !window.confirm('Delete this ad-hoc query?')) return;
+  async onDelete(row: AdHocData): Promise<void> {
+    if (!row.id) return;
+    const confirmed = await this.dialogService.confirm({
+      title: this.i18n.translate('ADHOC_QUERY.DELETE'),
+      message: this.i18n.translate('ADHOC_QUERY.CONFIRM_DELETE', {
+        name: row.name ?? '',
+        tableName: row.tableName ?? '',
+      }),
+      destructive: true,
+    });
+    if (!confirmed) return;
     this.adhocService.deleteAdhocqueryAdHocId(row.id).subscribe({
       next: () => this.load(),
       error: (err: unknown) => console.error('Failed to delete ad-hoc query', err),

@@ -21,7 +21,7 @@ import { Component, OnInit, inject, signal } from '@angular/core';
 
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../core/adapters';
 import { ClientSearchComponent } from '../../shared/components/client-search/client-search.component';
 import { NotificationService } from '../../core/services/notification.service';
 import { TooltipDirective } from '../../shared/directives/tooltip.directive';
@@ -50,18 +50,20 @@ import {
   SavingsAccountData,
 } from '../../api';
 import {
+  formatArrayDate,
   formatDateToFineract,
   FINERACT_DATE_FORMAT,
   FINERACT_LOCALE,
   toIsoDate,
 } from '../../core/utils/date-formatter';
+import { createPickersReady } from '../../shared/utils/pickers-ready';
 
 @Component({
   selector: 'app-savings-account-form',
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     ClientSearchComponent,
     IonIcon,
     IonButton,
@@ -87,8 +89,8 @@ import {
           <ion-card-title>
             {{
               isEditMode()
-                ? ('SAVINGS.EDIT_ACCOUNT' | translate)
-                : ('SAVINGS.CREATE_ACCOUNT' | translate)
+                ? ('SAVINGS.EDIT_ACCOUNT' | appTranslate)
+                : ('SAVINGS.CREATE_ACCOUNT' | appTranslate)
             }}
           </ion-card-title>
         </ion-card-header>
@@ -99,7 +101,7 @@ import {
               <!-- Client Search with Create Option -->
               <div class="field-container-row">
                 <app-client-search
-                  [label]="'COMMON.CLIENT_ID' | translate"
+                  [label]="'COMMON.CLIENT_ID' | appTranslate"
                   [required]="true"
                   [initialClientId]="account().clientId || null"
                   (clientSelected)="account().clientId = $event"
@@ -109,7 +111,8 @@ import {
                 <ion-button
                   fill="clear"
                   type="button"
-                  [appTooltip]="'CLIENTS.CREATE_CLIENT' | translate"
+                  [attr.aria-label]="'CLIENTS.CREATE_CLIENT' | appTranslate"
+                  [appTooltip]="'CLIENTS.CREATE_CLIENT' | appTranslate"
                   (click)="onCreateClient()"
                   style="margin-top: 4px;"
                 >
@@ -121,12 +124,12 @@ import {
               <div class="field-container-row">
                 <ion-item
                   fill="outline"
-                  [appTooltip]="'HELP.SAVINGS_PRODUCT_DESC' | translate"
+                  [appTooltip]="'HELP.SAVINGS_PRODUCT_DESC' | appTranslate"
                   class="flex-grow"
                 >
-                  <ion-label position="stacked">{{ 'COMMON.PRODUCT' | translate }}</ion-label>
+                  <ion-label position="stacked">{{ 'COMMON.PRODUCT' | appTranslate }}</ion-label>
                   <ion-select
-                    [attr.aria-label]="'COMMON.PRODUCT' | translate"
+                    [attr.aria-label]="'COMMON.PRODUCT' | appTranslate"
                     interface="popover"
                     name="productId"
                     [(ngModel)]="account().productId"
@@ -141,7 +144,8 @@ import {
                 <ion-button
                   fill="clear"
                   type="button"
-                  [appTooltip]="'PRODUCTS.CREATE_SAVINGS_PRODUCT' | translate"
+                  [attr.aria-label]="'PRODUCTS.CREATE_SAVINGS_PRODUCT' | appTranslate"
+                  [appTooltip]="'PRODUCTS.CREATE_SAVINGS_PRODUCT' | appTranslate"
                   (click)="onCreateProduct()"
                   style="margin-top: 4px;"
                   [disabled]="isEditMode()"
@@ -151,9 +155,11 @@ import {
               </div>
 
               <!-- Submitted On -->
-              <ion-item fill="outline" [appTooltip]="'HELP.SUBMITTED_ON_DESC' | translate">
-                <ion-label position="stacked">{{ 'COMMON.SUBMITTED_ON' | translate }}</ion-label>
-                <ion-datetime-button datetime="submittedOnDate-picker"></ion-datetime-button>
+              <ion-item fill="outline" [appTooltip]="'HELP.SUBMITTED_ON_DESC' | appTranslate">
+                <ion-label position="stacked">{{ 'COMMON.SUBMITTED_ON' | appTranslate }}</ion-label>
+                @if (pickersReady()) {
+                  <ion-datetime-button datetime="submittedOnDate-picker"></ion-datetime-button>
+                }
                 <ion-modal [keepContentsMounted]="true">
                   <ng-template>
                     <ion-datetime
@@ -170,10 +176,12 @@ import {
               </ion-item>
 
               <!-- Nominal Annual Interest Rate -->
-              <ion-item fill="outline" [appTooltip]="'HELP.INTEREST_RATE_DESC' | translate">
-                <ion-label position="stacked">{{ 'COMMON.INTEREST_RATE' | translate }}</ion-label>
+              <ion-item fill="outline" [appTooltip]="'HELP.INTEREST_RATE_DESC' | appTranslate">
+                <ion-label position="stacked">{{
+                  'COMMON.INTEREST_RATE' | appTranslate
+                }}</ion-label>
                 <ion-input
-                  [attr.aria-label]="'COMMON.INTEREST_RATE' | translate"
+                  [attr.aria-label]="'COMMON.INTEREST_RATE' | appTranslate"
                   type="number"
                   name="nominalAnnualInterestRate"
                   [ngModel]="interestRate()"
@@ -184,7 +192,7 @@ import {
 
             <div class="form-actions">
               <ion-button fill="clear" type="button" (click)="onCancel()" [disabled]="isSaving()">
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               <ion-button
                 color="primary"
@@ -193,9 +201,9 @@ import {
               >
                 @if (isSaving()) {
                   <ion-spinner name="crescent"></ion-spinner>
-                  {{ 'COMMON.SAVING' | translate }}
+                  {{ 'COMMON.SAVING' | appTranslate }}
                 } @else {
-                  {{ 'COMMON.SAVE' | translate }}
+                  {{ 'COMMON.SAVE' | appTranslate }}
                 }
               </ion-button>
             </div>
@@ -218,7 +226,7 @@ import {
       }
       .form-grid {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
         gap: 16px;
       }
       .field-container-row {
@@ -233,6 +241,9 @@ import {
   ],
 })
 export class SavingsAccountFormComponent implements OnInit {
+  /** See `createPickersReady` — the date buttons must not outrun their pickers. */
+  readonly pickersReady = createPickersReady();
+
   private readonly savingsService = inject(SavingsAccountService);
   private readonly productService = inject(SavingsProductService);
   private readonly router = inject(Router);
@@ -295,9 +306,7 @@ export class SavingsAccountFormComponent implements OnInit {
       next: (data: SavingsAccountData) => {
         const dateArray = data.timeline?.submittedOnDate as unknown as number[];
         if (dateArray) {
-          this.submittedOnDate.set(
-            toIsoDate(new Date(dateArray[0], dateArray[1] - 1, dateArray[2])),
-          );
+          this.submittedOnDate.set(formatArrayDate(dateArray));
         }
         this.account.set({
           clientId: data.clientId,

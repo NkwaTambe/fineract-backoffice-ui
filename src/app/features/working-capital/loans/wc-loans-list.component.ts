@@ -19,12 +19,12 @@
 
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import { ColumnDef, CellTemplateDirective } from '../../../shared';
 import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 import { WorkingCapitalLoansService, GetWorkingCapitalLoansLoanIdResponse } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 /**
  * Lists Working Capital Loans. The list endpoint returns a Spring Data page
@@ -47,11 +47,10 @@ interface WcLoanRow {
   selector: 'app-wc-loans-list',
   standalone: true,
   imports: [
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     CellTemplateDirective,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
@@ -59,6 +58,7 @@ interface WcLoanRow {
       title="nav.wcLoans"
       helpTextKey="HELP.WC_LOANS_DESC"
       createButtonLabel="WC_LOANS.CREATE"
+      createPermission="CREATE_WORKINGCAPITALLOAN"
       [columns]="columns"
       [data]="loans()"
       [totalRecords]="loans().length"
@@ -66,15 +66,15 @@ interface WcLoanRow {
       (create)="onCreate()"
     >
       <ng-template appCellTemplate="actions" let-row>
-        <ion-button
-          fill="clear"
-          color="primary"
-          [attr.aria-label]="'COMMON.VIEW' | translate"
-          [appTooltip]="'COMMON.VIEW' | translate"
+        <app-button
+          type="button"
+          intent="primary"
+          emphasis="quiet"
+          [label]="'COMMON.VIEW' | appTranslate"
+          icon="eye-outline"
+          [appTooltip]="'COMMON.VIEW' | appTranslate"
           (click)="onView(row)"
-        >
-          <ion-icon name="eye-outline"></ion-icon>
-        </ion-button>
+        />
       </ng-template>
     </app-data-table>
   `,

@@ -19,7 +19,7 @@
 
 import { inject, input, signal, Component, OnInit } from '@angular/core';
 import { RouterModule } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { ENTITY_NOTES_API, TranslatePipe } from '../../../core/adapters';
 import { DatePipe } from '@angular/common';
 import {
   DataTableComponent,
@@ -27,34 +27,33 @@ import {
   HasPermissionDirective,
   CellTemplateDirective,
 } from '../../../shared';
-import { NotesService, NoteData } from '../../../api';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import type { EntityNote } from '../../../core/adapters';
 import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
+import { ButtonComponent } from '../../../ui/button/button.component';
 
 @Component({
   selector: 'app-client-notes-list',
   standalone: true,
   imports: [
     RouterModule,
-    TranslateModule,
+    TranslatePipe,
     DataTableComponent,
     HasPermissionDirective,
     CellTemplateDirective,
     DatePipe,
-    IonIcon,
-    IonButton,
+    ButtonComponent,
     TooltipDirective,
   ],
   template: `
     <div class="tab-actions">
-      <ion-button
-        color="primary"
-        [routerLink]="['/clients', clientId(), 'notes', 'create']"
-        *appHasPermission="'CREATE_NOTE'"
+      <app-button
+        type="button"
+        intent="primary"
+        [link]="['/clients', clientId(), 'notes', 'create']"
+        icon="add-outline"
+        *appHasPermission="'CREATE_CLIENTNOTE'"
+        >{{ 'CLIENTS.ADD_NOTE' | appTranslate }}</app-button
       >
-        <ion-icon name="add-outline"></ion-icon>
-        {{ 'CLIENTS.ADD_NOTE' | translate }}
-      </ion-button>
     </div>
 
     <app-data-table
@@ -69,24 +68,26 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
 
       <ng-template appCellTemplate="actions" let-row>
         <div class="action-buttons">
-          <ion-button
-            fill="clear"
-            color="primary"
-            [routerLink]="['/clients', clientId(), 'notes', 'edit', row.id]"
-            *appHasPermission="'UPDATE_NOTE'"
-            [appTooltip]="'COMMON.EDIT' | translate"
-          >
-            <ion-icon name="create-outline"></ion-icon>
-          </ion-button>
-          <ion-button
-            fill="clear"
-            color="danger"
+          <app-button
+            type="button"
+            intent="primary"
+            emphasis="quiet"
+            [label]="'COMMON.EDIT' | appTranslate"
+            [link]="['/clients', clientId(), 'notes', 'edit', row.id]"
+            icon="create-outline"
+            *appHasPermission="'UPDATE_CLIENTNOTE'"
+            [appTooltip]="'COMMON.EDIT' | appTranslate"
+          />
+          <app-button
+            type="button"
+            intent="danger"
+            emphasis="quiet"
+            [label]="'COMMON.DELETE' | appTranslate"
+            icon="trash-outline"
             (click)="onDelete(row.id)"
-            *appHasPermission="'DELETE_NOTE'"
-            [appTooltip]="'COMMON.DELETE' | translate"
-          >
-            <ion-icon name="trash-outline"></ion-icon>
-          </ion-button>
+            *appHasPermission="'DELETE_CLIENTNOTE'"
+            [appTooltip]="'COMMON.DELETE' | appTranslate"
+          />
         </div>
       </ng-template>
     </app-data-table>
@@ -108,9 +109,9 @@ import { TooltipDirective } from '../../../shared/directives/tooltip.directive';
 export class ClientNotesListComponent implements OnInit {
   readonly clientId = input.required<number>();
 
-  private readonly noteService = inject(NotesService);
+  private readonly notesApi = inject(ENTITY_NOTES_API);
 
-  readonly notes = signal<NoteData[]>([]);
+  readonly notes = signal<EntityNote[]>([]);
   readonly isLoading = signal<boolean>(false);
 
   columns: ColumnDef[] = [
@@ -138,8 +139,8 @@ export class ClientNotesListComponent implements OnInit {
 
   loadNotes(): void {
     this.isLoading.set(true);
-    this.noteService.getResourceTypeResourceIdNotes('clients', this.clientId()).subscribe({
-      next: (data: NoteData[]) => {
+    this.notesApi.list('clients', this.clientId()).subscribe({
+      next: (data: EntityNote[]) => {
         this.notes.set(data);
         this.isLoading.set(false);
       },
@@ -152,12 +153,10 @@ export class ClientNotesListComponent implements OnInit {
 
   onDelete(id: number): void {
     if (confirm('Are you sure you want to delete this note?')) {
-      this.noteService
-        .deleteResourceTypeResourceIdNotesNoteId('clients', this.clientId(), id)
-        .subscribe({
-          next: () => this.loadNotes(),
-          error: (err) => console.error('Failed to delete note', err),
-        });
+      this.notesApi.remove('clients', this.clientId(), id).subscribe({
+        next: () => this.loadNotes(),
+        error: (err) => console.error('Failed to delete note', err),
+      });
     }
   }
 }

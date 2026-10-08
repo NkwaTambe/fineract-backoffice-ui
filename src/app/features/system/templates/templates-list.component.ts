@@ -17,108 +17,109 @@
  * under the License.
  */
 
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { TranslateModule } from '@ngx-translate/core';
+import { of } from 'rxjs';
+import { catchError, tap } from 'rxjs/operators';
+import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { I18N, TranslatePipe } from '../../../core/adapters';
 import { TemplatesService, TemplateData } from '../../../api';
-import { CdkTableModule } from '@angular/cdk/table';
-import {
-  IonButton,
-  IonCard,
-  IonCardContent,
-  IonCardHeader,
-  IonCardTitle,
-  IonIcon,
-} from '@ionic/angular/standalone';
+import { DialogService } from '../../../core/services/dialog.service';
+import { CellTemplateDirective, ColumnDef } from '../../../shared';
+import { DataTableComponent } from '../../../shared/components/data-table/data-table.component';
 
 @Component({
   selector: 'app-templates-list',
   standalone: true,
-  imports: [
-    CdkTableModule,
-    TranslateModule,
-    IonIcon,
-    IonButton,
-    IonCardContent,
-    IonCardHeader,
-    IonCardTitle,
-    IonCard,
-  ],
+  imports: [TranslatePipe, DataTableComponent, CellTemplateDirective, IonIcon, IonButton],
   template: `
-    <ion-card>
-      <ion-card-header>
-        <ion-card-title>{{ 'TEMPLATES.TITLE' | translate }}</ion-card-title>
-        <span class="spacer"></span>
-        <ion-button color="primary" (click)="onCreate()">
-          <ion-icon name="add-outline"></ion-icon>
-          {{ 'TEMPLATES.CREATE_TITLE' | translate }}
+    <app-data-table
+      title="TEMPLATES.TITLE"
+      createButtonLabel="TEMPLATES.CREATE_TITLE"
+      createPermission="CREATE_TEMPLATE"
+      [columns]="columns"
+      [data]="rows()"
+      [totalRecords]="rows().length"
+      [showSearch]="true"
+      [localLogic]="true"
+      [isLoading]="loading()"
+      [hasError]="hasError()"
+      (retry)="loadTemplates()"
+      (create)="onCreate()"
+    >
+      <ng-template appCellTemplate="actions" let-row>
+        <ion-button
+          fill="clear"
+          color="primary"
+          (click)="onEdit(row)"
+          [attr.aria-label]="'COMMON.EDIT' | appTranslate"
+        >
+          <ion-icon name="create-outline" slot="icon-only"></ion-icon>
         </ion-button>
-      </ion-card-header>
-      <ion-card-content>
-        <table cdk-table [dataSource]="templates()" class="full-width">
-          <ng-container cdkColumnDef="name">
-            <th cdk-header-cell *cdkHeaderCellDef>{{ 'TEMPLATES.NAME' | translate }}</th>
-            <td cdk-cell *cdkCellDef="let row">{{ row.name }}</td>
-          </ng-container>
-
-          <ng-container cdkColumnDef="entity">
-            <th cdk-header-cell *cdkHeaderCellDef>{{ 'TEMPLATES.ENTITY' | translate }}</th>
-            <td cdk-cell *cdkCellDef="let row">{{ translateEntity(row.entity) }}</td>
-          </ng-container>
-
-          <ng-container cdkColumnDef="type">
-            <th cdk-header-cell *cdkHeaderCellDef>{{ 'TEMPLATES.TYPE' | translate }}</th>
-            <td cdk-cell *cdkCellDef="let row">{{ translateType(row.type) }}</td>
-          </ng-container>
-
-          <ng-container cdkColumnDef="actions">
-            <th cdk-header-cell *cdkHeaderCellDef></th>
-            <td cdk-cell *cdkCellDef="let row">
-              <ion-button fill="clear" color="primary" (click)="onEdit(row)">
-                <ion-icon name="create-outline"></ion-icon>
-              </ion-button>
-              <ion-button fill="clear" color="danger" (click)="onDelete(row)">
-                <ion-icon name="trash-outline"></ion-icon>
-              </ion-button>
-            </td>
-          </ng-container>
-
-          <tr cdk-header-row *cdkHeaderRowDef="displayedColumns"></tr>
-          <tr cdk-row *cdkRowDef="let row; columns: displayedColumns"></tr>
-        </table>
-      </ion-card-content>
-    </ion-card>
+        <ion-button
+          fill="clear"
+          color="danger"
+          (click)="onDelete(row)"
+          [attr.aria-label]="'COMMON.DELETE' | appTranslate"
+        >
+          <ion-icon name="trash-outline" slot="icon-only"></ion-icon>
+        </ion-button>
+      </ng-template>
+    </app-data-table>
   `,
-  styles: [
-    `
-      mat-card-header {
-        display: flex;
-        align-items: center;
-      }
-      .spacer {
-        flex: 1;
-      }
-      .full-width {
-        width: 100%;
-      }
-    `,
-  ],
 })
 export class TemplatesListComponent implements OnInit {
   private readonly templatesService = inject(TemplatesService);
   private readonly router = inject(Router);
+  private readonly dialogService = inject(DialogService);
+  private readonly i18n = inject(I18N);
 
   readonly templates = signal<TemplateData[]>([]);
-  displayedColumns = ['name', 'entity', 'type', 'actions'];
+  readonly loading = signal(false);
+  /** True when the last load failed, so the table offers a retry instead of an empty list. */
+  readonly hasError = signal(false);
+
+  readonly columns: ColumnDef[] = [
+    { key: 'name', label: 'TEMPLATES.NAME', sortable: true },
+    { key: 'entity', label: 'TEMPLATES.ENTITY', sortable: true },
+    { key: 'type', label: 'TEMPLATES.TYPE', sortable: true },
+    { key: 'actions', label: 'COMMON.ACTIONS', sortable: false },
+  ];
+
+  /**
+   * The table's own search and sort work against the raw row values (see
+   * `DataTableComponent.matchesFilter`/`sortRows`), so `entity`/`type` are resolved to the
+   * text the columns actually display before the rows reach the table — otherwise typing
+   * "Loan" would search for the string against the numeric code Fineract returns and never
+   * match.
+   */
+  readonly rows = computed(() =>
+    this.templates().map((row) => ({
+      ...row,
+      entity: this.translateEntity(row.entity),
+      type: this.translateType(row.type),
+    })),
+  );
 
   ngOnInit(): void {
     this.loadTemplates();
   }
 
   loadTemplates(): void {
-    this.templatesService.getTemplates().subscribe((data) => {
-      this.templates.set(data);
-    });
+    this.loading.set(true);
+    this.templatesService
+      .getTemplates()
+      .pipe(
+        tap(() => this.hasError.set(false)),
+        catchError(() => {
+          this.hasError.set(true);
+          return of([] as TemplateData[]);
+        }),
+      )
+      .subscribe((data) => {
+        this.templates.set(data || []);
+        this.loading.set(false);
+      });
   }
 
   translateEntity(entity?: number): string {
@@ -141,11 +142,17 @@ export class TemplatesListComponent implements OnInit {
     this.router.navigate(['/system/templates/edit', row.id]);
   }
 
-  onDelete(row: TemplateData): void {
-    if (confirm(`Delete template "${row.name}"?`)) {
-      this.templatesService.deleteTemplatesTemplateId(row.id!).subscribe(() => {
-        this.loadTemplates();
-      });
-    }
+  async onDelete(row: TemplateData): Promise<void> {
+    if (row.id === undefined) return;
+    const confirmed = await this.dialogService.confirm({
+      title: this.i18n.translate('TEMPLATES.DELETE'),
+      message: this.i18n.translate('TEMPLATES.DELETE_CONFIRM', { name: row.name ?? '' }),
+      destructive: true,
+    });
+    if (!confirmed) return;
+    this.templatesService.deleteTemplatesTemplateId(row.id).subscribe({
+      next: () => this.loadTemplates(),
+      error: () => this.hasError.set(true),
+    });
   }
 }

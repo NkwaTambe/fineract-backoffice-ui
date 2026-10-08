@@ -26,18 +26,37 @@
      WCAG AA minimum for body-sized text; this clears it at 5.3:1. Keep
      --primary-color for accents, borders and text on light backgrounds. */
   --primary-strong: #2471a3;
+  /* Darkened primary foreground for normal text/links/labels on light surfaces
+     to clear the 4.5:1 WCAG AA minimum (#1f6391 achieves ~6.54:1 on white). */
+  --primary-text: #1f6391;
+  --warning-text: #b45309;
+  --success-text: #1e8449;
   --secondary-color: #2c3e50;
   --bg-color: #f0f2f5;
   --card-bg: #ffffff;
   --text-color: #333333;
   --text-muted: #666666;
   --error-color: #e74c3c;
+  /* The --primary-strong of the error palette: white on --error-color is 3.82:1, short of the
+     4.5:1 AA minimum for the Logout button's label. Not theme-scoped, because a fill carries its
+     own contrast against the white drawn on it whatever the page behind it is doing. */
+  --error-strong: #c0392b;
   --success-color: #2ecc71;
   --warning-color: #f39c12;
+  /* The guided tour's highlight outline. Themed because one colour cannot serve both: measured
+     against the surfaces a highlight lands on, #b45309 is 4.23-5.02:1 in light and only
+     3.32-3.87:1 in dark, while #f59e0b is 7.76-9.05:1 in dark and 1.81-2.15:1 in light. WCAG
+     1.4.11 wants 3:1 for a non-text indicator, so each theme takes the one that clears it
+     comfortably. See DOCS/GUIDED_TOUR.md. */
+  --guidance-highlight-color: #b45309;
   --border-color: #dddddd;
   --border-radius: 8px;
   --header-height: 64px;
   --sidebar-width: 240px;
+  /* Gutter around the routed content. A token rather than a literal because it is the one
+     spacing value that has to shrink on a narrow viewport — 32px of a 360px screen is a tenth
+     of the width gone before any content — and because a deployment may set it. */
+  --content-padding: 2rem;
   --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
 
@@ -62,9 +81,23 @@
   --space-6: 32px;
 }
 
+/* The narrow layout. Only values that must change with width live here; everything else is the
+   same shell. See ViewportService for the matching breakpoint in TypeScript, and DOCS/MOBILE.md
+   for why the two have to agree. */
+@media (max-width: 768px) {
+  :root {
+    --content-padding: var(--space-3);
+    --header-height: 56px;
+  }
+}
+
 [data-theme='dark'] {
   --primary-color: #3498db;
   --primary-dark: #2980b9;
+  --primary-strong: #2471a3;
+  --primary-text: #5dade2;
+  --warning-text: #f39c12;
+  --success-text: #2ecc71;
   --secondary-color: #ecf0f1;
   --bg-color: #121212;
   --card-bg: #1e1e1e;
@@ -78,9 +111,164 @@
   --hover-bg: rgba(255, 255, 255, 0.06);
   --active-bg: rgba(255, 255, 255, 0.1);
   --overlay-bg: rgba(18, 18, 18, 0.7);
+  --guidance-highlight-color: #f59e0b;
 
   /* Ionic components take their colours from the variables above via
      _ionic-theme.scss, so dark mode needs no per-component overrides. */
+}
+
+/* ---- narrow viewport: record detail headers --------------------------------------------
+   Record views lay their title and action buttons out on one desktop row, and their overview
+   cards use a two-column grid. At phone widths the action row is clipped by the card's
+   `overflow-x: hidden` and the detail grid leaves no room between labels and values.
+
+   These screens share the same markup classes, so the layout lives here rather than in four
+   copied component styles. Every action remains visible in a single column, and each detail
+   item gets enough width to wrap instead of colliding. Breakpoint matches
+   ViewportService.MOBILE_BREAKPOINT_PX. See issue #574. */
+@media (max-width: 768px) {
+  .header-card .header-content {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .header-card .header-content > .client-title-area,
+  .header-card .header-content > .loan-title-area,
+  .header-card .header-content > .savings-title-area,
+  .header-card .header-content > .title-area {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .header-card .header-content .title-details {
+    min-width: 0;
+  }
+
+  .header-card .header-content .title-details h2,
+  .header-card .header-content .subtitle-row {
+    overflow-wrap: anywhere;
+  }
+
+  .header-card .header-content .subtitle-row {
+    flex-wrap: wrap;
+  }
+
+  .header-card .header-content > .actions-area {
+    display: grid;
+    flex: 1 1 100%;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    gap: var(--space-3);
+  }
+
+  .header-card .header-content > .actions-area > ion-button {
+    width: 100%;
+    margin: 0;
+  }
+
+  .header-card ~ .content-body .info-grid,
+  .header-card ~ .tab-content .info-grid,
+  .header-card ~ .tab-group .info-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+  }
+
+  .header-card ~ .content-body .detail-item,
+  .header-card ~ .tab-content .detail-item,
+  .header-card ~ .tab-group .detail-item {
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+
+  .header-card ~ .content-body .detail-item .label,
+  .header-card ~ .content-body .detail-item .value,
+  .header-card ~ .tab-content .detail-item .label,
+  .header-card ~ .tab-content .detail-item .value,
+  .header-card ~ .tab-group .detail-item .label,
+  .header-card ~ .tab-group .detail-item .value {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* ---- narrow viewport: one card per row -------------------------------------------------
+   A data table below 768px is a horizontal scroll with everything but the first column out of
+   sight. Each row becomes a stacked card of label/value pairs instead, driven by the
+   `data-label` attribute DataTableComponent puts on every cell — so there is one column
+   definition rather than a second template, and a new column cannot appear in one layout only.
+
+   Global rather than component-scoped on purpose: the <tbody> is created by the HTML parser,
+   not by the component's template, so it carries no _ngcontent attribute and a scoped selector
+   cannot reach it. Left as table-row-group it shrinks to its content and the cards come out
+   narrower than the page.
+
+   Breakpoint matches ViewportService.MOBILE_BREAKPOINT_PX. See DOCS/MOBILE.md. */
+@media (max-width: 768px) {
+  table[cdk-table],
+  table[cdk-table] tbody,
+  table[cdk-table] tr,
+  table[cdk-table] td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* The header row carried the labels; each cell renders its own now. */
+  table[cdk-table] tr[cdk-header-row] {
+    display: none;
+  }
+
+  table[cdk-table] tr[cdk-row] {
+    background-color: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    margin-bottom: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+  }
+
+  table[cdk-table] tr:hover td {
+    background-color: transparent;
+  }
+
+  table[cdk-table] td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    border-bottom: 1px solid var(--border-color);
+    padding: var(--space-2) 0;
+    /* Laid out for a fixed column on a wide viewport; in a card it should wrap. */
+    white-space: normal;
+  }
+
+  table[cdk-table] tr[cdk-row] td:last-child {
+    border-bottom: none;
+  }
+
+  table[cdk-table] td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--text-muted);
+    text-align: left;
+    flex: 0 0 auto;
+    max-width: 45%;
+  }
+
+  /* An action column has no label worth repeating. */
+  table[cdk-table] td[data-label='']::before {
+    content: none;
+  }
+  table[cdk-table] td[data-label=''] {
+    justify-content: flex-end;
+  }
+
+  /* Truncation is a column-width device and means nothing once the cell is its own row. */
+  table[cdk-table] td .truncate-text {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    text-align: right;
+  }
 }
 
 /* Base styling for CDK tables.
@@ -154,6 +342,7 @@ ion-segment:hover::-webkit-scrollbar-thumb {
 ion-segment-button {
   flex: 0 0 auto;
   min-width: max-content;
+  --color-checked: var(--primary-text);
 }
 
 /* ion-label defaults to ellipsis truncation; the width now comes from the text. */
@@ -220,6 +409,20 @@ ion-segment-button ion-label {
   color: var(--success-color);
 }
 
+.clickable-link {
+  color: var(--primary-text);
+  text-decoration: none;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
 .btn {
   padding: 0.75rem 1.5rem;
   border-radius: var(--border-radius);
@@ -236,7 +439,7 @@ ion-segment-button ion-label {
 
 .btn-primary {
   @extend .btn;
-  background-color: var(--primary-color);
+  background-color: var(--primary-strong);
   color: white;
 
   &:hover:not(:disabled) {
@@ -250,9 +453,18 @@ ion-segment-button ion-label {
   margin: 0 auto;
 }
 
+/*
+ * Two columns where there is room, one where there is not.
+ *
+ * `repeat(2, 1fr)` cannot narrow past its content: `1fr` resolves to `minmax(auto, 1fr)`, so the
+ * column holding the widest control keeps its intrinsic width and the other collapses. At 320px
+ * that produced 4px-wide fields on Create GL Account and pushed the right-hand column of Create
+ * Loan past the card. `min(240px, 100%)` is the floor a column may not shrink below *unless* the
+ * grid itself is narrower than 240px, at which point one column is all that fits.
+ */
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
   gap: 16px;
 
   ion-item,
@@ -270,8 +482,54 @@ ion-segment-button ion-label {
   margin-top: 16px;
 }
 
+/*
+ * A labelled native control inside a `.form-grid`.
+ *
+ * The house style for forms is Ionic, but `src/app/ui/` has no input, select or checkbox
+ * primitive yet and ADR 0005 puts direct Ionic imports out of bounds for new feature code. Native
+ * controls are the accepted third option — `login.component.ts` has used them from the start —
+ * and this lifts that component's field styling to where a second form can share it rather than
+ * copying it.
+ */
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+
+  label {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-weight: 500;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+  }
+
+  input,
+  select {
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    background: var(--card-bg);
+    color: var(--text-color);
+    font-family: inherit;
+    font-size: 0.9rem;
+    /* Without this a native control keeps its intrinsic width and re-creates the collapse the
+       grid above exists to avoid. */
+    min-width: 0;
+    width: 100%;
+  }
+
+  input:focus-visible,
+  select:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+}
+
 .full-width {
-  grid-column: span 2;
+  /* `span 2` would conjure a second column back when the grid has collapsed to one. */
+  grid-column: 1 / -1;
 
   ion-item,
   ion-input,
@@ -279,4 +537,29 @@ ion-segment-button ion-label {
   ion-textarea {
     width: 100%;
   }
+}
+
+/*
+ * A control the current role cannot use.
+ *
+ * Applied by `appRequiresPermission`, which disables the control rather than removing it: the
+ * action belongs to the record on screen, so its absence would read as a missing feature. The
+ * lock says the opposite — the feature is there, this role is not allowed it — and the
+ * directive's tooltip and accessible name carry the permission to ask for.
+ *
+ * The glyph is a pseudo-element so it needs no slot in the host component's template, and it
+ * is decorative: the accessible name the directive sets already says "Requires …".
+ */
+.app-requires-permission {
+  position: relative;
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.app-requires-permission::after {
+  content: '🔒';
+  margin-inline-start: 6px;
+  font-size: 0.85em;
+  line-height: 1;
+  vertical-align: middle;
 }

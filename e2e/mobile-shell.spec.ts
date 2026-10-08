@@ -1,0 +1,486 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+/**
+ * The shell at a phone viewport.
+ *
+ * Runs only in the `mobile` project (Pixel 7, 412x915, touch), because every assertion here is
+ * about behaviour that exists *because* the viewport is narrow. Running it at 1280px would
+ * assert the opposite of what the application should do.
+ *
+ * The static half of this contract — one breakpoint, no `100vh`, no unbounded fixed widths —
+ * is `scripts/check-responsive.mjs`. This is the half a regex cannot see: that the drawer is
+ * actually modal, that following a link dismisses it, that a table has stopped being a table.
+ */
+
+import { test, expect, type Page } from './fixtures';
+import { mockClientTextSearch } from './utils/client-search-mock';
+
+const TENANT = 'default';
+const USER = 'mifos';
+const PASSWORD = 'password';
+const HEAD_OFFICE = 'Head Office';
+const CLIENT_DETAIL_ID = 2001;
+const SAVINGS_DETAIL_ID = 33;
+
+/** Matches MOBILE_BREAKPOINT_PX. A viewport at or under this gets the narrow layout. */
+const MOBILE_BREAKPOINT_PX = 768;
+
+/** The smallest reliable touch target. Anything under it is a mis-tap waiting to happen. */
+const MIN_TAP_TARGET_PX = 44;
+
+async function mockBackend(page: Page): Promise<void> {
+  await mockClientTextSearch(page);
+  // Registration order is load-bearing: Playwright matches routes in *reverse* order, so the
+  // catch-all has to be registered first or it shadows every specific handler below it. With it
+  // last, the authentication call returns `{}`, the session carries no permissions, and RBAC
+  // quietly filters the navigation down to its ungated entries — which reads as a layout bug.
+  await page.route(/\/api\/v1\//, (r) =>
+    r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }),
+  );
+  await page.route('**/branding/**', (r) =>
+    r.fulfill({ status: 404, contentType: 'text/plain', body: 'Not Found' }),
+  );
+  await page.route('**/config.json*', (r) =>
+    r.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ fineractApiUrl: '/api/v1', defaultTenant: TENANT, rbacEnabled: true }),
+    }),
+  );
+  await page.route(/\/api\/v1\/businessdate/, (r) =>
+    r.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([{ type: 'BUSINESS_DATE', date: [2026, 8, 16] }]),
+    }),
+  );
+  await page.route('**/api/v1/authentication**', (r) =>
+    r.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        username: USER,
+        userId: 1,
+        base64EncodedAuthenticationKey: 'YmFzZTY0',
+        authenticated: true,
+        officeId: 1,
+        officeName: 'Head Office',
+        roles: [{ id: 1, name: 'Role', description: 'Role' }],
+        permissions: ['ALL_FUNCTIONS'],
+      }),
+    }),
+  );
+}
+
+async function signIn(page: Page): Promise<void> {
+  await mockBackend(page);
+  await page.goto('/login');
+  await page.locator('#tenantId').fill(TENANT);
+  await page.locator('#username').fill(USER);
+  await page.locator('#password').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Sign In' }).click();
+  await expect(page).toHaveURL('/dashboard');
+}
+
+const drawer = (page: Page) => page.locator('nav.sidebar');
+const hamburger = (page: Page) => page.locator('button.toggle-btn');
+const headerAction = (page: Page, name: string) =>
+  page.locator('.header-card .actions-area ion-button').filter({ hasText: name });
+
+function json(body: unknown) {
+  return { status: 200, contentType: 'application/json', body: JSON.stringify(body) };
+}
+
+/**
+ * The record headers share one responsive contract: every action stays inside the viewport,
+ * the action row does not hide overflow, and each overview item has room to wrap.
+ */
+async function expectRecordHeaderLayout(page: Page): Promise<void> {
+  const header = page.locator('.header-card');
+  const actions = header.locator('.actions-area');
+  const controls = actions.locator('ion-button:visible');
+  await expect(header).toBeVisible();
+  await expect(controls.first()).toBeVisible();
+  await expect(header.locator('ion-button').filter({ hasText: 'Back' })).toBeVisible();
+
+  const viewportWidth = page.viewportSize()?.width ?? 0;
+  const count = await controls.count();
+  for (let index = 0; index < count; index++) {
+    const box = await controls.nth(index).boundingBox();
+    expect(box, `record action ${index} has no box`).toBeTruthy();
+    expect(box!.x, `record action ${index} starts outside the viewport`).toBeGreaterThanOrEqual(
+      -0.5,
+    );
+    expect(
+      box!.x + box!.width,
+      `record action ${index} extends past the viewport`,
+    ).toBeLessThanOrEqual(viewportWidth + 0.5);
+  }
+
+  expect(await actions.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+    true,
+  );
+
+  const infoGrid = page.locator('.info-grid');
+  await expect(infoGrid).toBeVisible();
+  const columns = await infoGrid.evaluate(
+    (element) => getComputedStyle(element).gridTemplateColumns,
+  );
+  expect(columns.trim().split(/\s+/)).toHaveLength(1);
+
+  const collisions = await infoGrid.locator('.detail-item').evaluateAll(
+    (items) =>
+      items.filter((item) => {
+        const label = item.querySelector<HTMLElement>('.label');
+        const value = item.querySelector<HTMLElement>('.value');
+        if (!label || !value) return false;
+        const labelBox = label.getBoundingClientRect();
+        const valueBox = value.getBoundingClientRect();
+        return (
+          labelBox.right > valueBox.left &&
+          labelBox.left < valueBox.right &&
+          labelBox.bottom > valueBox.top &&
+          labelBox.top < valueBox.bottom
+        );
+      }).length,
+  );
+  expect(collisions).toBe(0);
+}
+
+test.describe('the shell at a phone viewport', () => {
+  test.beforeEach(async ({ page }) => {
+    await signIn(page);
+  });
+
+  test('runs at a viewport the narrow layout actually applies to', async ({ page }) => {
+    // Guards the project config itself. If someone widens the `mobile` device, every assertion
+    // below would quietly start testing the desktop shell and still pass.
+    const width = page.viewportSize()?.width ?? 0;
+    expect(width).toBeGreaterThan(0);
+    expect(width).toBeLessThanOrEqual(MOBILE_BREAKPOINT_PX);
+  });
+
+  test('does not scroll sideways', async ({ page }) => {
+    // The single most common mobile defect, and the one users notice first.
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+
+  test('fills the visible viewport rather than running under the browser chrome', async ({
+    page,
+  }) => {
+    // The 100dvh assertion, from the outside: the shell is exactly as tall as the viewport.
+    const { shell, viewport } = await page.evaluate(() => ({
+      shell: document.querySelector('.app-container')?.getBoundingClientRect().height ?? 0,
+      viewport: window.innerHeight,
+    }));
+    expect(Math.abs(shell - viewport)).toBeLessThanOrEqual(1);
+  });
+
+  test('stacks dashboard columns on a phone viewport', async ({ page }) => {
+    const layout = page.locator('.dashboard-layout');
+    await expect(layout).toBeVisible();
+
+    const columns = await layout.evaluate(
+      (element) => getComputedStyle(element).gridTemplateColumns,
+    );
+    expect(columns.trim().split(/\s+/)).toHaveLength(1);
+  });
+
+  test('keeps the paginator label intact on a phone viewport', async ({ page }) => {
+    await page.route('**/api/v2/clients/search', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          totalElements: 21,
+          content: [
+            {
+              id: 1,
+              accountNumber: '000000001',
+              displayName: 'Aisha Rahman',
+              status: { value: 'Active' },
+            },
+          ],
+        }),
+      }),
+    );
+    await page.goto('/clients');
+
+    const paginator = page.locator('app-paginator .paginator');
+    await expect(paginator).toBeVisible();
+    const styles = await paginator.evaluate((element) => {
+      const label = element.querySelector<HTMLElement>('.items-per-page')!;
+      return {
+        display: getComputedStyle(element).display,
+        labelWhiteSpace: getComputedStyle(label).whiteSpace,
+        labelFits: label.scrollWidth <= label.clientWidth,
+      };
+    });
+    expect(styles.display).toBe('grid');
+    expect(styles.labelWhiteSpace).toBe('nowrap');
+    expect(styles.labelFits).toBe(true);
+  });
+
+  test('keeps every client-creation step reachable on a phone viewport', async ({ page }) => {
+    await page.route(/\/api\/v1\/offices/, (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+    );
+    await page.goto('/clients/create');
+
+    const stepper = page.locator('app-stepper .stepper');
+    await expect(stepper).toBeVisible();
+    await expect(stepper.locator('.step')).toHaveCount(3);
+    await expect(stepper.locator('.step-active')).toHaveAttribute('aria-current', 'step');
+    await expect(stepper.locator('.step-label').nth(0)).toBeVisible();
+    await expect(stepper.locator('.step-label').nth(1)).toBeHidden();
+    await expect(stepper.locator('.step-label').nth(2)).toBeHidden();
+
+    const layout = await stepper.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      viewportWidth: document.documentElement.clientWidth,
+      markerEdges: Array.from(element.querySelectorAll<HTMLElement>('.step-marker'), (marker) => {
+        const box = marker.getBoundingClientRect();
+        return { left: box.left, right: box.right };
+      }),
+    }));
+
+    expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
+    expect(layout.markerEdges).toHaveLength(3);
+    for (const edge of layout.markerEdges) {
+      expect(edge.left).toBeGreaterThanOrEqual(0);
+      expect(edge.right).toBeLessThanOrEqual(layout.viewportWidth);
+    }
+  });
+
+  test('keeps client record actions and details reachable at 390px', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.route(`**/api/v1/clients/${CLIENT_DETAIL_ID}/accounts**`, (route) =>
+      route.fulfill(json({ loanAccounts: [], savingsAccounts: [] })),
+    );
+    await page.route(new RegExp(`/api/v1/clients/${CLIENT_DETAIL_ID}(?:\\?.*)?$`), (route) =>
+      route.fulfill(
+        json({
+          id: CLIENT_DETAIL_ID,
+          accountNo: '000002001',
+          displayName: 'Mobile Client',
+          firstname: 'Mobile',
+          lastname: 'Client',
+          officeName: HEAD_OFFICE,
+          status: { id: 300, value: 'Active' },
+          timeline: { submittedOnDate: [2026, 9, 21], activatedOnDate: [2026, 9, 21] },
+        }),
+      ),
+    );
+
+    await page.goto(`/clients/view/${CLIENT_DETAIL_ID}`);
+    await expect(page.getByText('Mobile Client')).toBeVisible();
+    await expectRecordHeaderLayout(page);
+  });
+
+  test('keeps savings record actions reachable at 390px', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.route(
+      new RegExp(`/api/v1/savingsaccounts/${SAVINGS_DETAIL_ID}(?:\\?.*)?$`),
+      (route) =>
+        route.fulfill(
+          json({
+            id: SAVINGS_DETAIL_ID,
+            accountNo: '000000033',
+            savingsProductName: 'Regular Savings',
+            clientName: 'Mobile Client',
+            fieldOfficerName: 'Grace Okoth',
+            accountBalance: 1500,
+            nominalAnnualInterestRate: 5,
+            interestCompoundingPeriodType: { value: 'Daily' },
+            interestPostingPeriodType: { value: 'Monthly' },
+            interestCalculationDaysInYearType: { value: '365 Days' },
+            status: {
+              id: 300,
+              value: 'Active',
+              active: true,
+              approved: true,
+              submittedAndPendingApproval: false,
+            },
+            timeline: { submittedOnDate: [2026, 9, 1], activatedOnDate: [2026, 9, 2] },
+          }),
+        ),
+    );
+
+    await page.goto(`/products/savings-accounts/view/${SAVINGS_DETAIL_ID}`);
+    await expect(page.getByText('Regular Savings')).toBeVisible();
+    await expectRecordHeaderLayout(page);
+    await expect(headerAction(page, 'Withdraw')).toBeVisible();
+  });
+
+  describe_drawer();
+
+  test('renders tables as cards instead of a sideways scroll', async ({ page }) => {
+    // The generic `/api/v1/` mock returns `{}`, which renders an empty state rather than a
+    // table — so this case has to supply rows before it can assert on how they are laid out.
+    await page.route('**/api/v2/clients/search', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          totalElements: 2,
+          content: [
+            {
+              id: 1,
+              accountNumber: '000000001',
+              displayName: 'Aisha Rahman',
+              status: { value: 'Active' },
+              officeName: 'Head Office',
+            },
+            {
+              id: 2,
+              accountNumber: '000000002',
+              displayName: 'Boubacar Diallo',
+              status: { value: 'Pending' },
+              officeName: 'Head Office',
+            },
+          ],
+        }),
+      }),
+    );
+    await page.goto('/clients');
+    const table = page.locator('table.data-table').first();
+    await expect(table).toBeVisible();
+
+    // The header row carries the column labels on a wide viewport; in card mode each cell
+    // renders its own, so the header is hidden and the labels move into the cells.
+    await expect(table.locator('tr[cdk-header-row]')).toBeHidden();
+
+    const cell = table.locator('td[cdk-cell]').first();
+    await expect(cell).toBeVisible();
+    // Stacked, not columnar: a card cell spans the row it lives in.
+    const [cellBox, rowBox] = await Promise.all([
+      cell.boundingBox(),
+      table.locator('tr[cdk-row]').first().boundingBox(),
+    ]);
+    expect(cellBox && rowBox).toBeTruthy();
+    expect(cellBox!.width).toBeGreaterThan(rowBox!.width * 0.8);
+  });
+
+  test('expands search inside the bar, not over the page', async ({ page }) => {
+    // The field is positioned against the header, which only works while the header is itself a
+    // containing block. When it was not, this rendered in the page content over the dashboard
+    // cards — and every other case here still passed, because none of them asks where it went.
+    await page.locator('button.icon-btn').first().tap();
+
+    const field = page.locator('ion-searchbar#global-search');
+    await expect(field).toBeVisible();
+
+    const [fieldBox, headerBox] = await Promise.all([
+      field.boundingBox(),
+      page.locator('.header').boundingBox(),
+    ]);
+    expect(fieldBox && headerBox).toBeTruthy();
+    expect(fieldBox!.y).toBeGreaterThanOrEqual(headerBox!.y - 1);
+    expect(fieldBox!.y + fieldBox!.height).toBeLessThanOrEqual(
+      headerBox!.y + headerBox!.height + 1,
+    );
+  });
+
+  test('gives every header control a thumb-sized target', async ({ page }) => {
+    const controls = page.locator('.header button:visible');
+    const count = await controls.count();
+    expect(count).toBeGreaterThan(0);
+
+    for (let index = 0; index < count; index++) {
+      const box = await controls.nth(index).boundingBox();
+      expect(box, `header control ${index} has no box`).toBeTruthy();
+      const smallest = Math.min(box!.width, box!.height);
+      expect(smallest, `header control ${index} is ${smallest}px`).toBeGreaterThanOrEqual(
+        MIN_TAP_TARGET_PX,
+      );
+    }
+  });
+});
+
+/** The drawer cases, grouped so the shared `beforeEach` above still applies. */
+function describe_drawer(): void {
+  test('starts with the navigation closed', async ({ page }) => {
+    await expect(drawer(page)).toHaveClass(/drawer/);
+    await expect(drawer(page)).not.toHaveClass(/open/);
+    await expect(hamburger(page)).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('opens on a tap, and reports itself as a modal', async ({ page }) => {
+    await hamburger(page).tap();
+
+    await expect(drawer(page)).toHaveClass(/open/);
+    await expect(hamburger(page)).toHaveAttribute('aria-expanded', 'true');
+    // It covers the page, so it has to say so — otherwise the reading order runs straight
+    // through content the drawer is hiding.
+    await expect(drawer(page)).toHaveAttribute('role', 'dialog');
+    await expect(drawer(page)).toHaveAttribute('aria-modal', 'true');
+  });
+
+  test('moves focus into itself when it opens', async ({ page }) => {
+    await hamburger(page).tap();
+    await expect(drawer(page)).toHaveClass(/open/);
+
+    const focusInside = await page.evaluate(() => {
+      const panel = document.querySelector('nav.sidebar');
+      return !!panel && !!document.activeElement && panel.contains(document.activeElement);
+    });
+    expect(focusInside).toBe(true);
+  });
+
+  test('closes on the backdrop, on Escape, and on its own control', async ({ page }) => {
+    for (const dismiss of ['backdrop', 'escape', 'close-button'] as const) {
+      await hamburger(page).tap();
+      await expect(drawer(page)).toHaveClass(/open/);
+
+      if (dismiss === 'backdrop') {
+        // The drawer covers the left of the backdrop, so its centre — where tap() aims by
+        // default — is behind the panel. Aim at the exposed strip instead.
+        const box = (await page.locator('.drawer-backdrop').boundingBox())!;
+        await page.locator('.drawer-backdrop').tap({ position: { x: box.width - 12, y: 80 } });
+      }
+      if (dismiss === 'escape') await page.keyboard.press('Escape');
+      if (dismiss === 'close-button') await page.locator('button.drawer-close').tap();
+
+      await expect(drawer(page), `dismissing via ${dismiss}`).not.toHaveClass(/open/);
+    }
+  });
+
+  test('closes when a destination is chosen', async ({ page }) => {
+    await hamburger(page).tap();
+    await drawer(page).getByRole('link', { name: 'Clients', exact: true }).tap();
+
+    await expect(page).toHaveURL(/\/clients/);
+    // Otherwise the page the user asked for renders behind the menu they used to ask for it.
+    await expect(drawer(page)).not.toHaveClass(/open/);
+  });
+
+  test('is out of the tab order while closed', async ({ page }) => {
+    // `inert` is what keeps a closed off-canvas panel from being a long run of invisible tab
+    // stops — the classic keyboard trap of a CSS-only drawer.
+    await expect(drawer(page)).toHaveAttribute('inert', '');
+
+    await hamburger(page).tap();
+    await expect(drawer(page)).not.toHaveAttribute('inert', '');
+  });
+}

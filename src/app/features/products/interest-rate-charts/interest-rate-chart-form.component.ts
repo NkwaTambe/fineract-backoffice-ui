@@ -20,7 +20,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslatePipe } from '../../../core/adapters';
 import {
   IonButton,
   IonCard,
@@ -47,6 +47,7 @@ import {
   FINERACT_LOCALE,
   toIsoDate,
 } from '../../../core/utils/date-formatter';
+import { createPickersReady } from '../../../shared/utils/pickers-ready';
 
 /**
  * Create / edit form for an interest rate chart's core fields. On create the chart's
@@ -58,7 +59,7 @@ import {
   standalone: true,
   imports: [
     FormsModule,
-    TranslateModule,
+    TranslatePipe,
     IonButton,
     IonSpinner,
     IonInput,
@@ -79,8 +80,8 @@ import {
           <ion-card-title>
             {{
               isEditMode()
-                ? ('INTEREST_RATE_CHARTS.EDIT' | translate)
-                : ('INTEREST_RATE_CHARTS.CREATE' | translate)
+                ? ('INTEREST_RATE_CHARTS.EDIT' | appTranslate)
+                : ('INTEREST_RATE_CHARTS.CREATE' | appTranslate)
             }}
           </ion-card-title>
         </ion-card-header>
@@ -89,10 +90,10 @@ import {
           <form #chartForm="ngForm" (ngSubmit)="onSubmit()" class="chart-form">
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'INTEREST_RATE_CHARTS.NAME' | translate
+                'INTEREST_RATE_CHARTS.NAME' | appTranslate
               }}</ion-label>
               <ion-input
-                [attr.aria-label]="'INTEREST_RATE_CHARTS.NAME' | translate"
+                [attr.aria-label]="'INTEREST_RATE_CHARTS.NAME' | appTranslate"
                 name="name"
                 [ngModel]="name()"
                 (ngModelChange)="name.set($event)"
@@ -102,10 +103,10 @@ import {
 
             <ion-item fill="outline">
               <ion-label position="stacked">{{
-                'INTEREST_RATE_CHARTS.DESCRIPTION' | translate
+                'INTEREST_RATE_CHARTS.DESCRIPTION' | appTranslate
               }}</ion-label>
               <ion-input
-                [attr.aria-label]="'INTEREST_RATE_CHARTS.DESCRIPTION' | translate"
+                [attr.aria-label]="'INTEREST_RATE_CHARTS.DESCRIPTION' | appTranslate"
                 name="description"
                 [ngModel]="description()"
                 (ngModelChange)="description.set($event)"
@@ -115,9 +116,11 @@ import {
             @if (!isEditMode()) {
               <ion-item fill="outline">
                 <ion-label position="stacked">{{
-                  'INTEREST_RATE_CHARTS.FROM_DATE' | translate
+                  'INTEREST_RATE_CHARTS.FROM_DATE' | appTranslate
                 }}</ion-label>
-                <ion-datetime-button datetime="fromDate-picker"></ion-datetime-button>
+                @if (pickersReady()) {
+                  <ion-datetime-button datetime="fromDate-picker"></ion-datetime-button>
+                }
                 <ion-modal [keepContentsMounted]="true">
                   <ng-template>
                     <ion-datetime
@@ -136,7 +139,7 @@ import {
 
             <div class="form-actions">
               <ion-button fill="clear" type="button" (click)="onCancel()" [disabled]="isSaving()">
-                {{ 'COMMON.CANCEL' | translate }}
+                {{ 'COMMON.CANCEL' | appTranslate }}
               </ion-button>
               <ion-button
                 color="primary"
@@ -145,9 +148,9 @@ import {
               >
                 @if (isSaving()) {
                   <ion-spinner name="crescent"></ion-spinner>
-                  {{ 'COMMON.SAVING' | translate }}
+                  {{ 'COMMON.SAVING' | appTranslate }}
                 } @else {
-                  {{ 'COMMON.SAVE' | translate }}
+                  {{ 'COMMON.SAVE' | appTranslate }}
                 }
               </ion-button>
             </div>
@@ -172,6 +175,9 @@ import {
   ],
 })
 export class InterestRateChartFormComponent implements OnInit {
+  /** See `createPickersReady` — the date buttons must not outrun their pickers. */
+  readonly pickersReady = createPickersReady();
+
   private readonly chartService = inject(InterestRateChartService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);

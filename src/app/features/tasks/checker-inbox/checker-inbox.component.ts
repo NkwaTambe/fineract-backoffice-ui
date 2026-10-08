@@ -19,20 +19,20 @@
 
 import { Component, inject, signal } from '@angular/core';
 
-import { TranslateModule } from '@ngx-translate/core';
 import { Subject, of } from 'rxjs';
 import { catchError, map, startWith, switchMap, tap } from 'rxjs/operators';
 import { DataTableComponent, CellTemplateDirective, ColumnDef } from '../../../shared';
 import { MakerCheckerOr4EyeFunctionalityService, AuditData } from '../../../api';
 import { ViewPayloadDialogComponent } from './view-payload-dialog.component';
-import { IonButton, IonIcon } from '@ionic/angular/standalone';
+import { ButtonComponent } from '../../../ui/button/button.component';
+import { I18N, TranslatePipe } from '../../../core/adapters';
 import { NotificationService } from '../../../core/services/notification.service';
 import { DialogService } from '../../../core/services/dialog.service';
 
 @Component({
   selector: 'app-checker-inbox',
   standalone: true,
-  imports: [TranslateModule, DataTableComponent, CellTemplateDirective, IonIcon, IonButton],
+  imports: [TranslatePipe, DataTableComponent, CellTemplateDirective, ButtonComponent],
   template: `
     <app-data-table
       [hasError]="hasError()"
@@ -50,20 +50,30 @@ import { DialogService } from '../../../core/services/dialog.service';
 
       <ng-template appCellTemplate="actions" let-task>
         <div class="action-buttons">
-          <ion-button
-            fill="clear"
-            color="primary"
-            title="View Payload"
+          <app-button
+            type="button"
+            emphasis="quiet"
+            intent="primary"
+            icon="eye-outline"
             (click)="onViewPayload(task)"
-          >
-            <ion-icon name="eye-outline"></ion-icon>
-          </ion-button>
-          <ion-button fill="clear" class="approve-btn" title="Approve" (click)="onApprove(task)">
-            <ion-icon name="checkmark-circle-outline"></ion-icon>
-          </ion-button>
-          <ion-button fill="clear" color="danger" title="Reject" (click)="onReject(task)">
-            <ion-icon name="close-circle-outline"></ion-icon>
-          </ion-button>
+            [label]="'CHECKER_INBOX.VIEW_PAYLOAD' | appTranslate"
+          />
+          <app-button
+            type="button"
+            emphasis="quiet"
+            class="approve-btn"
+            icon="checkmark-circle-outline"
+            (click)="onApprove(task)"
+            [label]="'ACTIONS.APPROVE' | appTranslate"
+          />
+          <app-button
+            type="button"
+            emphasis="quiet"
+            intent="danger"
+            icon="close-circle-outline"
+            (click)="onReject(task)"
+            [label]="'ACTIONS.REJECT' | appTranslate"
+          />
         </div>
       </ng-template>
     </app-data-table>
@@ -87,6 +97,7 @@ export class CheckerInboxComponent {
   private readonly makerCheckerService = inject(MakerCheckerOr4EyeFunctionalityService);
   private readonly notifications = inject(NotificationService);
   private readonly dialogService = inject(DialogService);
+  private readonly i18n = inject(I18N);
 
   columns: ColumnDef[] = [
     { key: 'id', label: 'COMMON.ID', sortable: true },
@@ -151,18 +162,23 @@ export class CheckerInboxComponent {
     });
   }
 
-  onReject(task: Record<string, unknown>) {
-    if (confirm('Are you sure you want to reject this task?')) {
-      this.makerCheckerService.deleteMakercheckersAuditId(task['id'] as number).subscribe({
-        next: () => {
-          this.notifications.success('Task rejected successfully');
-          this.refreshSubject.next();
-        },
-        error: () => {
-          this.notifications.error('Failed to reject task');
-        },
-      });
-    }
+  async onReject(task: Record<string, unknown>): Promise<void> {
+    const confirmed = await this.dialogService.confirm({
+      title: this.i18n.translate('CHECKER_INBOX.REJECT_TITLE'),
+      message: this.i18n.translate('CHECKER_INBOX.CONFIRM_REJECT'),
+      destructive: true,
+    });
+    if (!confirmed) return;
+
+    this.makerCheckerService.postMakercheckersAuditId(task['id'] as number, 'reject').subscribe({
+      next: () => {
+        this.notifications.success(this.i18n.translate('CHECKER_INBOX.REJECT_SUCCESS'));
+        this.refreshSubject.next();
+      },
+      error: () => {
+        this.notifications.error(this.i18n.translate('CHECKER_INBOX.REJECT_ERROR'));
+      },
+    });
   }
 
   formatDate(dateArray: unknown): string {
